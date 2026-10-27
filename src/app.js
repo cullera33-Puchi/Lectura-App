@@ -206,6 +206,10 @@ async function iniciar() {
   registrar(`Inicio. ${estaInstalada() ? 'App instalada (standalone)' : 'En pestaña del navegador'}`);
   pintarIconos();
   await cargarPreferencias();
+  // Si la app ya estaba configurada al abrirla, al terminar de arrancar se
+  // sincroniza o se pide conectar. En el primer arranque no: la bienvenida ya
+  // ofrece conectar, y el aviso aparecería por sorpresa a mitad de ella.
+  const configuradaAlAbrir = preferencias().dispositivo.bienvenidaCompleta;
   aplicarTema();
 
   prepararHoja();
@@ -273,7 +277,7 @@ async function iniciar() {
 
   // Al abrir la app y al volver a ella tras un rato (en el iPhone la app
   // instalada rara vez se cierra del todo): sincroniza o pide conectar.
-  if (preferencias().dispositivo.bienvenidaCompleta) alEntrarEnLaApp('al abrir la app');
+  if (configuradaAlAbrir) alEntrarEnLaApp('al abrir la app');
   let ocultaDesde = 0;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {

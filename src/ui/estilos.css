@@ -722,10 +722,12 @@ body[data-perfil="tinta"] .icono-app {
 
 /* ---------- Leyendo ahora ---------- */
 
+/* "Leyendo ahora" ajustado para que en el iPhone 17 quepan sin desplazar el
+   libro en curso, los objetivos y la fila "Seguir leyendo" completa. */
 .seccion-titulo {
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 700;
-  margin: 26px 0 12px;
+  margin: 20px 0 10px;
 }
 
 .tarjeta-actual {
@@ -736,10 +738,26 @@ body[data-perfil="tinta"] .icono-app {
   text-align: left;
 }
 
-.tarjeta-actual .portada {
-  width: 42%;
-  max-width: 180px;
+.tarjeta-portada {
   flex: none;
+  width: 34%;
+  max-width: 160px;
+}
+
+.tarjeta-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+}
+
+.tarjeta-datos:active {
+  opacity: 0.6;
+}
+
+body[data-perfil="tinta"] .tarjeta-datos:active {
+  opacity: 1;
 }
 
 .tarjeta-info {
@@ -806,13 +824,18 @@ body[data-perfil="tinta"] .avance span {
 .carrusel {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 112px;
+  /* 100 px en el iPhone; algo mayores en la tablet, que tiene sitio. */
+  grid-auto-columns: clamp(100px, 14vw, 140px);
   gap: 16px;
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding: 4px 16px 12px;
   margin: 0 -16px;
   scrollbar-width: none;
+}
+
+.carrusel.centrado {
+  justify-content: center;
 }
 
 .carrusel::-webkit-scrollbar {
@@ -847,14 +870,22 @@ body[data-perfil="tinta"] .avance span {
   align-items: center;
   gap: 4px;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.miniatura .m-estado .icono {
+  width: 15px;
+  height: 15px;
 }
 
 .miniatura .libro-mas {
   position: static;
   flex: none;
-  width: 36px;
+  width: 30px;
   height: 36px;
-  margin-right: -8px;
+  margin-right: -6px;
+  justify-content: flex-end;
 }
 
 .tarjeta-actual-caja {
@@ -1182,6 +1213,12 @@ body[data-perfil="tinta"] .carrusel {
 body[data-perfil="tinta"] .libro.en-nube .portada,
 body[data-perfil="tinta"] .libro.no-disponible .portada {
   opacity: 1;
+}
+
+.libro-ficha {
+  display: block;
+  width: 100%;
+  text-align: left;
 }
 
 .rejilla .libro-texto {
@@ -2016,8 +2053,8 @@ body[data-perfil="tinta"] .muestra[aria-pressed="true"] .m-caja {
 .resumen-objetivos {
   display: block;
   width: 100%;
-  margin-top: 4px;
-  padding: 16px 16px 0;
+  margin-top: 2px;
+  padding: 12px 16px 0;
   border-radius: 12px;
   background: var(--relleno);
   color: var(--texto);
@@ -2046,7 +2083,7 @@ body[data-perfil="tinta"] .muestra[aria-pressed="true"] .m-caja {
 }
 
 .resumen-celda strong {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
@@ -2068,8 +2105,8 @@ body[data-perfil="tinta"] .muestra[aria-pressed="true"] .m-caja {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 14px;
-  padding: 12px 0;
+  margin-top: 10px;
+  padding: 10px 0;
   border-top: var(--grosor) solid var(--separador);
   color: var(--acento);
   font-size: 15px;

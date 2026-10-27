@@ -136,8 +136,21 @@ async function crearElementoLibro(libro, enLista) {
   texto.append(titulo, autor, estado);
   if (descargando.has(libro.id)) texto.appendChild(barraDescarga(libro.id));
 
-  abrir.append(await crearPortada(libro), texto);
   abrir.addEventListener('click', () => pulsarLibro(libro));
+  let ficha = null;
+  if (enLista) {
+    // En tinta, toda la fila abre el libro (objetivo grande en la tablet).
+    abrir.append(await crearPortada(libro), texto);
+  } else {
+    // En la rejilla, la portada abre el libro y el título abre la ficha.
+    abrir.appendChild(await crearPortada(libro));
+    ficha = document.createElement('button');
+    ficha.type = 'button';
+    ficha.className = 'libro-ficha';
+    ficha.setAttribute('aria-label', `Ficha de ${libro.titulo}`);
+    ficha.appendChild(texto);
+    ficha.addEventListener('click', () => verFicha(libro));
+  }
 
   const mas = document.createElement('button');
   mas.type = 'button';
@@ -146,7 +159,7 @@ async function crearElementoLibro(libro, enLista) {
   mas.setAttribute('aria-label', `Acciones de ${libro.titulo}`);
   mas.addEventListener('click', () => accionesLibro(libro));
 
-  elemento.append(abrir, mas);
+  elemento.append(...[abrir, ficha, mas].filter(Boolean));
   return elemento;
 }
 
@@ -392,6 +405,16 @@ async function importar(archivos) {
   await refrescar();
 }
 
+// Ficha del libro: sinopsis, datos de la edición y lectura.
+export function verFicha(libro) {
+  return mostrarFichaLibro(libro, {
+    abrir: pulsarLibro,
+    editar: async (l) => {
+      if (await editarLibro(l)) await refrescar();
+    },
+  });
+}
+
 export async function accionesLibro(libro) {
   const terminado = estadoDe(libro) === 'terminado';
   const botones = [];
@@ -416,12 +439,7 @@ export async function accionesLibro(libro) {
   });
 
   if (eleccion === 'ficha') {
-    await mostrarFichaLibro(libro, {
-      abrir: pulsarLibro,
-      editar: async (l) => {
-        if (await editarLibro(l)) await refrescar();
-      },
-    });
+    await verFicha(libro);
   } else if (eleccion === 'terminado') {
     const nuevo = terminado ? (libro.progreso?.cfi ? 'leyendo' : 'pendiente') : 'terminado';
     await cambiarEstado(libro.id, nuevo);

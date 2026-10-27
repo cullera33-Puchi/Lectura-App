@@ -60,7 +60,8 @@ export function textoEstado(libro) {
   const pct = porcentajeDe(libro);
   const avance = estado === 'terminado' ? 'Terminado' : (pct != null ? `${pct} %` : 'Leyendo');
   const donde = p.dispositivo ? ` en ${p.dispositivo}` : '';
-  return `${avance}${donde}, ${fechaCorta(p.fecha)}`;
+  // Una posición provisional (abierto sin pasar página) no tiene fecha.
+  return p.fecha ? `${avance}${donde}, ${fechaCorta(p.fecha)}` : `${avance}${donde}`;
 }
 
 // Línea corta bajo la portada, como en Libros de Apple. Devuelve HTML seguro

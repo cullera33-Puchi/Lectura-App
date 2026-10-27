@@ -1,7 +1,9 @@
 // Pestaña "Leyendo ahora": el libro en curso destacado, el resto de lecturas
 // abiertas y los añadidos recientemente, como en Libros de Apple.
 
-import { librosParaMostrar, pulsarLibro, accionesLibro, descargando } from './biblioteca.js';
+import {
+  librosParaMostrar, pulsarLibro, accionesLibro, descargando, verFicha,
+} from './biblioteca.js';
 import {
   crearPortada, estadoDe, porcentajeDe, textoEstado, estadoCorto,
 } from './portadas.js';
@@ -33,15 +35,27 @@ function barraAvance(pct) {
   return barra;
 }
 
+// Libro en curso: la portada y "Seguir leyendo" abren el libro; el título,
+// el autor y el avance abren la ficha (sinopsis y datos).
 async function tarjetaActual(libro) {
-  const tarjeta = document.createElement('button');
-  tarjeta.type = 'button';
+  const tarjeta = document.createElement('div');
   tarjeta.className = 'tarjeta-actual libro';
   tarjeta.dataset.id = libro.id;
-  tarjeta.setAttribute('aria-label', `Seguir leyendo ${libro.titulo}`);
+
+  const portada = document.createElement('button');
+  portada.type = 'button';
+  portada.className = 'tarjeta-portada';
+  portada.setAttribute('aria-label', `Seguir leyendo ${libro.titulo}`);
+  portada.appendChild(await crearPortada(libro));
+  portada.addEventListener('click', () => pulsarLibro(libro));
 
   const info = document.createElement('div');
   info.className = 'tarjeta-info';
+  const datos = document.createElement('button');
+  datos.type = 'button';
+  datos.className = 'tarjeta-datos';
+  datos.setAttribute('aria-label', `Ficha de ${libro.titulo}`);
+  datos.addEventListener('click', () => verFicha(libro));
   const t = document.createElement('div');
   t.className = 't-titulo';
   t.textContent = libro.titulo;
@@ -52,13 +66,15 @@ async function tarjetaActual(libro) {
   const detalle = document.createElement('div');
   detalle.className = 't-detalle';
   detalle.textContent = textoEstado(libro);
-  const boton = document.createElement('span');
+  const boton = document.createElement('button');
+  boton.type = 'button';
   boton.className = 'boton-secundario';
   boton.innerHTML = libro.descargado ? 'Seguir leyendo' : `${svgIcono('nube')} Descargar y leer`;
-  info.append(t, a, barraAvance(pct), detalle, boton);
+  boton.addEventListener('click', () => pulsarLibro(libro));
+  datos.append(t, a, barraAvance(pct), detalle);
+  info.append(datos, boton);
 
-  tarjeta.append(await crearPortada(libro), info);
-  tarjeta.addEventListener('click', () => pulsarLibro(libro));
+  tarjeta.append(portada, info);
   const caja = document.createElement('div');
   caja.className = 'tarjeta-actual-caja';
   caja.append(tarjeta, botonAcciones(libro));
@@ -99,6 +115,16 @@ async function miniatura(libro) {
   caja.append(boton, pie);
   return caja;
 }
+
+// Una fila de portadas que cabe entera se centra en la pantalla; si no cabe,
+// empieza a la izquierda y se desplaza.
+function centrarCarruseles() {
+  document.querySelectorAll('#contenido-inicio .carrusel').forEach((fila) => {
+    fila.classList.remove('centrado');
+    fila.classList.toggle('centrado', fila.scrollWidth <= fila.clientWidth + 1);
+  });
+}
+window.addEventListener('resize', centrarCarruseles);
 
 async function carrusel(libros) {
   const fila = document.createElement('div');
@@ -142,4 +168,5 @@ export async function pintarInicio(datos) {
   }
   if (terminados.length) partes.push(titulo('Terminados'), await carrusel(terminados));
   contenedor.replaceChildren(...partes);
+  centrarCarruseles();
 }
