@@ -135,3 +135,114 @@ export async function actualizarJson(token, archivoId, datos) {
   });
   return r.json();
 }
+
+// Subcarpeta de la app (libros o portadas), localizada por su marca dentro de la raíz.
+export async function localizarSubcarpeta(token, raizId, tipo) {
+  const consulta = [
+    `mimeType = ${literal(TIPO_CARPETA)}`,
+    `${literal(raizId)} in parents`,
+    `appProperties has { key='tipo' and value=${literal(tipo)} }`,
+    'trashed = false',
+  ].join(' and ');
+  const encontradas = await buscar(token, consulta);
+  if (encontradas.length) return encontradas[0];
+  const r = await peticion(token, `${API}/files?fields=id,name,createdTime`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({
+      name: tipo,
+      mimeType: TIPO_CARPETA,
+      parents: [raizId],
+      appProperties: { [MARCA_APP.clave]: MARCA_APP.valor, tipo },
+    }),
+  });
+  return r.json();
+}
+
+export async function existeArchivo(token, archivoId) {
+  try {
+    const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?fields=id,trashed`);
+    return !(await r.json()).trashed;
+  } catch (e) {
+    if (e.estadoHttp === 404) return false;
+    throw e;
+  }
+}
+
+const LIMITE_MULTIPART = 4 * 1024 * 1024;
+
+// Sube un archivo binario. Hasta 4 MB en una petición; por encima, con subida
+// reanudable, que es lo que Drive recomienda para archivos grandes.
+export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propiedades = {}) {
+  const metadatos = { name: nombre, parents: [carpetaId], mimeType: tipo, appProperties: propiedades };
+  const tamano = datos.byteLength ?? datos.size;
+  if (tamano <= LIMITE_MULTIPART) {
+    const separador = `lector-${crypto.getRandomValues(new Uint32Array(2)).join('')}`;
+    const cuerpo = new Blob([
+      `--${separador}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadatos)}\r\n`,
+      `--${separador}\r\nContent-Type: ${tipo}\r\n\r\n`,
+      datos,
+      `\r\n--${separador}--\r\n`,
+    ]);
+    const r = await peticion(token, `${API_SUBIDA}/files?uploadType=multipart&fields=id,name,size`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/related; boundary=${separador}` },
+      body: cuerpo,
+    });
+    return r.json();
+  }
+  const inicio = await peticion(token, `${API_SUBIDA}/files?uploadType=resumable&fields=id,name,size`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': tipo,
+      'X-Upload-Content-Length': String(tamano),
+    },
+    body: JSON.stringify(metadatos),
+  });
+  const destino = inicio.headers.get('Location');
+  if (!destino) throw new ErrorDrive('Drive no ha devuelto la dirección de subida', 0);
+  const r = await peticion(token, destino, {
+    method: 'PUT',
+    headers: { 'Content-Type': tipo },
+    body: datos,
+  });
+  return r.json();
+}
+
+// Descarga un archivo como ArrayBuffer, avisando del avance (0 a 1).
+export async function descargarArchivo(token, archivoId, tamanoEsperado, alAvanzar) {
+  const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?alt=media`);
+  const total = Number(r.headers.get('Content-Length')) || tamanoEsperado || 0;
+  if (!r.body || !total || !alAvanzar) return r.arrayBuffer();
+  const lector = r.body.getReader();
+  const trozos = [];
+  let recibido = 0;
+  for (;;) {
+    const { done, value } = await lector.read();
+    if (done) break;
+    trozos.push(value);
+    recibido += value.byteLength;
+    alAvanzar(Math.min(1, recibido / total));
+  }
+  const resultado = new Uint8Array(recibido);
+  let posicion = 0;
+  for (const t of trozos) {
+    resultado.set(t, posicion);
+    posicion += t.byteLength;
+  }
+  return resultado.buffer;
+}
+
+// Envía a la papelera de Drive. Si ya no existe, no es un error.
+export async function enviarAPapelera(token, archivoId) {
+  try {
+    await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?fields=id`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({ trashed: true }),
+    });
+  } catch (e) {
+    if (e.estadoHttp !== 404) throw e;
+  }
+}
