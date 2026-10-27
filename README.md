@@ -7,14 +7,14 @@ Lector EPUB personal para iPhone y tablet de tinta electrónica, con biblioteca 
 
 ## Estado
 
-Fase 0: prototipo de riesgos (login de Google, carpeta y `prueba.json` en Drive, lector paginado y diagnóstico).
+- Fase 0 (prototipo de riesgos): validada en el iPhone y en la tablet. Queda pendiente la prueba de renovación de la sesión tras más de una hora.
+- Fase 1 (biblioteca y lector local): importar EPUB, biblioteca, lector con gestos, índice, panel "Aa" y temas por perfil. Funciona sin conexión.
 
 ## Configuración
 
-1. Google Cloud: proyecto con la API de Google Drive activada y pantalla de consentimiento con el permiso `drive.file`, publicada en producción.
+1. Google Cloud: proyecto con la API de Google Drive activada y pantalla de consentimiento con el permiso `drive.file`. En modo Prueba, con la cuenta del usuario como usuario de prueba.
 2. ID de cliente OAuth de tipo "Aplicación web":
    - Orígenes de JavaScript autorizados: `https://<usuario>.github.io` y `http://localhost:8080`.
-   - URI de redirección autorizadas (solo para el plan B de la fase 0): `https://<usuario>.github.io/Lectura-App/` y `http://localhost:8080/`. Deben coincidir con la "URI de redirección" que muestra la pantalla de diagnóstico.
 3. Copiar el ID de cliente en `config.js`.
 
 ## Desarrollo local

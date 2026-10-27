@@ -18,80 +18,162 @@
   <script src="vendor/epub-0.3.93.min.js"></script>
   <script type="module" src="src/app.js"></script>
 </head>
-<body data-perfil="movil">
-  <header class="cabecera">
-    <h1>Lector EPUB</h1>
-    <p>Prototipo de la fase 0</p>
-  </header>
+<body data-perfil="movil" data-tema="claro">
 
-  <main>
-    <section id="sec-dispositivo">
-      <h2>Este dispositivo</h2>
-      <fieldset>
-        <legend>Perfil</legend>
-        <label><input type="radio" name="perfil" value="movil"> Móvil</label>
-        <label><input type="radio" name="perfil" value="tinta"> Tinta electrónica</label>
-      </fieldset>
-      <label class="campo">Nombre del dispositivo
-        <input type="text" id="nombre-dispositivo" autocomplete="off" maxlength="40">
-      </label>
-    </section>
-
-    <section id="sec-drive">
-      <h2>Google Drive</h2>
-      <p id="estado-sesion" class="nota"></p>
-      <div class="botones">
-        <button id="btn-conectar" type="button">Conectar con Google</button>
-        <button id="btn-escribir" type="button">Escribir prueba.json</button>
-        <button id="btn-leer" type="button">Leer prueba.json</button>
-      </div>
-      <div id="resultado-drive" class="mensaje" role="status"></div>
-      <div id="tabla-prueba"></div>
-      <details>
-        <summary>Opciones de prueba</summary>
-        <div class="botones">
-          <button id="btn-redireccion" type="button" class="secundario">Conectar por redirección (plan B)</button>
-          <button id="btn-caducar" type="button" class="secundario">Forzar caducidad del token</button>
-          <button id="btn-cerrar-sesion" type="button" class="secundario">Cerrar sesión</button>
+  <!-- Primer uso -->
+  <section id="pantalla-bienvenida" class="pantalla" hidden>
+    <div class="contenido">
+      <div id="bienvenida-paso1">
+        <h1>Lector EPUB</h1>
+        <p class="paso">Paso 1 de 2</p>
+        <h2>¿Qué dispositivo es este?</h2>
+        <div class="opciones-grandes">
+          <button type="button" class="opcion-grande" data-perfil="movil">
+            <strong>Móvil</strong>
+            <span>Para el iPhone. Con animaciones y temas claro, sepia y oscuro.</span>
+          </button>
+          <button type="button" class="opcion-grande" data-perfil="tinta">
+            <strong>Tinta electrónica</strong>
+            <span>Para la tablet. Sin animaciones, en blanco y negro.</span>
+          </button>
         </div>
-      </details>
-    </section>
-
-    <section id="sec-lector">
-      <h2>Lector</h2>
-      <label class="boton" for="archivo-epub">Abrir un EPUB</label>
-      <input type="file" id="archivo-epub" class="oculto-accesible" accept=".epub,application/epub+zip">
-      <div id="resultado-lector" class="mensaje" role="status"></div>
-      <p class="nota">Toca el lado derecho para avanzar, el izquierdo para retroceder y el centro para mostrar los controles. También se puede deslizar a los lados. Deslizar hacia abajo cierra el libro.</p>
-    </section>
-
-    <section id="sec-diagnostico">
-      <h2>Diagnóstico</h2>
-      <dl id="tabla-diagnostico"></dl>
-      <div class="botones">
-        <button id="btn-actualizar-diagnostico" type="button" class="secundario">Actualizar</button>
-        <button id="btn-persistir" type="button" class="secundario">Pedir almacenamiento persistente</button>
-        <button id="btn-copiar" type="button" class="secundario">Copiar diagnóstico y registro</button>
+        <p class="nota">Puedes cambiarlo después en Ajustes.</p>
       </div>
-      <textarea id="texto-copiar" readonly hidden></textarea>
-    </section>
+      <div id="bienvenida-paso2" hidden>
+        <p class="paso">Paso 2 de 2</p>
+        <h2>Nombre y cuenta de Google</h2>
+        <label class="campo">Nombre del dispositivo
+          <input type="text" id="bienvenida-nombre" autocomplete="off" maxlength="40">
+        </label>
+        <p class="nota">Es el nombre que verás en los avisos de sincronización.</p>
+        <p>La biblioteca y el avance de lectura se guardan en la carpeta "Lector EPUB" de tu Google Drive.</p>
+        <div class="botones">
+          <button type="button" id="bienvenida-conectar">Conectar con Google</button>
+        </div>
+        <div id="bienvenida-mensaje" class="mensaje" role="status"></div>
+        <div class="botones">
+          <button type="button" id="bienvenida-atras" class="secundario">Atrás</button>
+          <button type="button" id="bienvenida-omitir" class="secundario">Ahora no</button>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <section id="sec-registro">
-      <h2>Registro</h2>
-      <ol id="lista-registro"></ol>
-    </section>
-  </main>
+  <!-- Biblioteca -->
+  <section id="pantalla-biblioteca" class="pantalla" hidden>
+    <header class="cabecera">
+      <h1>Biblioteca</h1>
+      <div class="acciones-cabecera">
+        <label class="boton" for="archivo-epub">Añadir libro</label>
+        <button type="button" id="btn-ajustes" class="secundario">Ajustes</button>
+      </div>
+    </header>
+    <input type="file" id="archivo-epub" class="oculto-accesible" accept=".epub,application/epub+zip" multiple>
+    <div class="contenido">
+      <div class="filtros">
+        <label>Ordenar
+          <select id="orden-biblioteca">
+            <option value="ultimo">Último leído</option>
+            <option value="titulo">Título</option>
+            <option value="autor">Autor</option>
+          </select>
+        </label>
+        <label>Mostrar
+          <select id="filtro-biblioteca">
+            <option value="todos">Todos</option>
+            <option value="pendiente">Pendientes</option>
+            <option value="leyendo">Leyendo</option>
+            <option value="terminado">Terminados</option>
+          </select>
+        </label>
+      </div>
+      <div id="mensaje-biblioteca" class="mensaje" role="status"></div>
+      <div id="lista-libros"></div>
+      <p id="biblioteca-vacia" class="vacia" hidden></p>
+    </div>
+  </section>
 
+  <!-- Ajustes -->
+  <section id="pantalla-ajustes" class="pantalla" hidden>
+    <header class="cabecera">
+      <h1>Ajustes</h1>
+      <div class="acciones-cabecera">
+        <button type="button" id="btn-volver-ajustes" class="secundario">Volver</button>
+      </div>
+    </header>
+    <div class="contenido">
+      <section class="bloque">
+        <h2>Este dispositivo</h2>
+        <fieldset>
+          <legend>Perfil</legend>
+          <label><input type="radio" name="perfil" value="movil"> Móvil</label>
+          <label><input type="radio" name="perfil" value="tinta"> Tinta electrónica</label>
+        </fieldset>
+        <label class="campo">Nombre del dispositivo
+          <input type="text" id="nombre-dispositivo" autocomplete="off" maxlength="40">
+        </label>
+      </section>
+
+      <section class="bloque">
+        <h2>Cuenta de Google</h2>
+        <p id="estado-sesion"></p>
+        <div class="botones">
+          <button type="button" id="btn-conectar">Conectar con Google</button>
+          <button type="button" id="btn-probar-drive" class="secundario">Probar conexión con Drive</button>
+          <button type="button" id="btn-cerrar-sesion" class="secundario">Cerrar sesión</button>
+        </div>
+        <div id="resultado-drive" class="mensaje" role="status"></div>
+      </section>
+
+      <section class="bloque">
+        <h2>Diagnóstico</h2>
+        <dl id="tabla-diagnostico"></dl>
+        <div class="botones">
+          <button type="button" id="btn-actualizar-diagnostico" class="secundario">Actualizar</button>
+          <button type="button" id="btn-persistir" class="secundario">Pedir almacenamiento persistente</button>
+          <button type="button" id="btn-copiar" class="secundario">Copiar diagnóstico y registro</button>
+        </div>
+        <textarea id="texto-copiar" readonly hidden></textarea>
+      </section>
+
+      <section class="bloque">
+        <h2>Registro</h2>
+        <ol id="lista-registro"></ol>
+      </section>
+    </div>
+  </section>
+
+  <!-- Acciones sobre un libro -->
+  <div id="fondo-hoja" class="fondo" hidden></div>
+  <div id="hoja-acciones" class="hoja" role="dialog" aria-modal="true" hidden>
+    <p id="hoja-titulo" class="hoja-titulo"></p>
+    <div id="hoja-botones" class="hoja-botones"></div>
+  </div>
+
+  <!-- Lector -->
   <div id="lector" hidden>
     <div id="visor"></div>
     <div id="barra-superior" class="barra" hidden>
-      <button id="btn-cerrar-libro" type="button">Cerrar</button>
+      <button type="button" id="btn-cerrar-libro" class="secundario">Cerrar</button>
       <span id="titulo-libro"></span>
+      <button type="button" id="btn-indice" class="secundario">Índice</button>
     </div>
     <div id="barra-inferior" class="barra" hidden>
-      <span id="info-capitulo"></span>
-      <span id="info-cfi" class="cfi"></span>
+      <div class="info-lectura">
+        <span id="info-capitulo"></span>
+        <span id="info-progreso"></span>
+      </div>
+      <button type="button" id="btn-aa" class="secundario" aria-label="Ajustes de lectura">Aa</button>
     </div>
+    <div id="fondo-panel" class="fondo" hidden></div>
+    <div id="panel-indice" class="panel" role="dialog" aria-label="Índice" hidden>
+      <div class="panel-cabecera">
+        <h2>Índice</h2>
+        <button type="button" id="btn-cerrar-indice" class="secundario">Cerrar</button>
+      </div>
+      <ol id="lista-indice"></ol>
+    </div>
+    <div id="panel-aa" class="panel panel-inferior" role="dialog" aria-label="Ajustes de lectura" hidden></div>
   </div>
 </body>
 </html>
