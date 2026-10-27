@@ -6,7 +6,7 @@
 //   para que la app abra igual que sin conexión.
 // Solo gestiona archivos de la propia app; Google y Drive van siempre a la red.
 
-const CACHE = 'lector-epub-v23';
+const CACHE = 'lector-epub-v24';
 const ESPERA_RED_MS = 4000;
 const ARCHIVOS = [
   './',

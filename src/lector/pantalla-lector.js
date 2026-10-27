@@ -12,7 +12,8 @@ import { RegistroSesiones } from '../datos/sesiones.js';
 import { anotacionesDeLibro, crearMarcador, eliminarAnotacion } from '../datos/anotaciones.js';
 import { mostrarAviso } from '../ui/aviso.js';
 import {
-  preferencias, cambiarLectura, nombreDispositivo, idDispositivo, alCambiarPreferencias,
+  preferencias, nombreDispositivo, idDispositivo, alCambiarPreferencias,
+  lecturaDeLibro, tieneAjustesPropios, activarAjustesPropios, cambiarLecturaDeLibro,
 } from '../datos/preferencias.js';
 import {
   TEMAS, TAMANOS, FUENTES, INTERLINEADOS, MARGENES, JUSTIFICACIONES, idTemaElegido, alCambiarModoSistema,
@@ -469,8 +470,18 @@ function filaSegmentada(titulo, opciones, valorActual, alElegir) {
   return fila;
 }
 
+// Ajustes de lectura del libro abierto: los propios si los tiene.
+function lecturaActual() {
+  return actual ? lecturaDeLibro(actual.id) : preferencias().lectura;
+}
+
+function cambiarLectura(cambios) {
+  return cambiarLecturaDeLibro(actual?.id, cambios);
+}
+
 function pintarPanelAa() {
-  const { dispositivo, lectura } = preferencias();
+  const { dispositivo } = preferencias();
+  const lectura = lecturaActual();
   const perfil = dispositivo.perfil;
   const panel = $('panel-aa');
   panel.replaceChildren();
@@ -491,7 +502,7 @@ function pintarPanelAa() {
   const posicion = TAMANOS.indexOf(lectura.tamano);
   // El tamaño se lee al pulsar, no al pintar: dos toques rápidos suman dos pasos.
   const cambiarTamano = (paso) => {
-    const i = TAMANOS.indexOf(preferencias().lectura.tamano);
+    const i = TAMANOS.indexOf(lecturaActual().tamano);
     const nuevo = TAMANOS[Math.min(TAMANOS.length - 1, Math.max(0, i + paso))];
     cambiarLectura({ tamano: nuevo });
   };
@@ -567,6 +578,34 @@ function pintarPanelAa() {
     ], lectura.dosPaginas === false ? 'no' : 'si', (id) => cambiarLectura({ dosPaginas: id === 'si' })));
   }
   panel.appendChild(formato);
+
+  // Ajustes propios de este libro (punto 4)
+  if (actual) {
+    const propio = document.createElement('div');
+    propio.className = 'grupo';
+    const fila = document.createElement('label');
+    fila.className = 'fila fila-interruptor';
+    const texto = document.createElement('span');
+    texto.textContent = 'Solo para este libro';
+    const interruptor = document.createElement('input');
+    interruptor.type = 'checkbox';
+    interruptor.className = 'interruptor';
+    interruptor.setAttribute('role', 'switch');
+    interruptor.id = 'ajustes-propios';
+    interruptor.checked = tieneAjustesPropios(actual.id);
+    interruptor.addEventListener('change', () => {
+      activarAjustesPropios(actual.id, interruptor.checked);
+      registrar(`Ajustes propios de "${actual.titulo}": ${interruptor.checked ? 'activados' : 'desactivados'}`);
+    });
+    fila.append(texto, interruptor);
+    propio.appendChild(fila);
+    const pie = document.createElement('p');
+    pie.className = 'pie-grupo';
+    pie.textContent = interruptor.checked
+      ? 'Tamaño, letra, interlineado, márgenes y justificación se aplican solo a este libro. El tema es común.'
+      : 'Actívalo para que este libro tenga su propio tamaño, letra, interlineado, márgenes y justificación.';
+    panel.append(propio, pie);
+  }
 }
 
 function abrirPanelAa() {
@@ -584,8 +623,7 @@ function aplicarPreferencias() {
   clearTimeout(temporizadorAjustes);
   temporizadorAjustes = setTimeout(() => {
     if (!actual?.motor) return;
-    const { dispositivo, lectura } = preferencias();
-    actual.motor.aplicarAjustes(dispositivo.perfil, lectura);
+    actual.motor.aplicarAjustes(preferencias().dispositivo.perfil, lecturaActual());
   }, ESPERA_AJUSTES_MS);
 }
 
@@ -664,7 +702,8 @@ export async function abrirPantallaLector(id) {
     info: null,
   };
   actual = nuevo;
-  const { dispositivo, lectura } = preferencias();
+  const { dispositivo } = preferencias();
+  const lectura = lecturaDeLibro(id); // con los ajustes propios del libro, si los tiene
   try {
     nuevo.motor = await abrirLibro($('visor'), datos, {
       perfil: dispositivo.perfil,
