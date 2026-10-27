@@ -3,6 +3,7 @@
 // dispositivos con los datos de la última sincronización.
 
 import { obtenerEstadisticas } from './datos.js';
+import { mostrarResumenAnual } from './resumen.js';
 import { formatoDuracion } from './calculo.js';
 import { fijarObjetivo } from '../datos/colecciones.js';
 import { pedirNumero } from '../ui/hoja.js';
@@ -63,6 +64,15 @@ function graficoBarras(datos, { resumen, formato }) {
   });
   grafico.append(detalle, barras, etiquetas);
   return grafico;
+}
+
+function botonResumen(anio) {
+  const boton = el('button', 'fila fila-boton boton-resumen-anio');
+  boton.type = 'button';
+  boton.append(el('span', '', `Resumen de ${anio}`));
+  boton.insertAdjacentHTML('beforeend', svgIcono('avanzar', 'chevron'));
+  boton.addEventListener('click', () => mostrarResumenAnual(anio));
+  return boton;
 }
 
 function cifra(valor, texto) {
@@ -158,6 +168,7 @@ export async function pintarEstadisticas() {
   anio.appendChild(graficoBarras(e.meses.map((m) => ({
     etiqueta: m.etiqueta, valor: m.terminados, futuro: m.futuro, descripcion: m.nombre,
   })), { resumen: 'Toca un mes para ver cuántos.', formato: (n) => plural(n, 'libro', 'libros') }));
+  anio.appendChild(botonResumen(e.anio));
   partes.push(anio);
 
   // Por dispositivo
@@ -179,8 +190,12 @@ export async function pintarEstadisticas() {
     partes.push(cabecera('Años anteriores'));
     const grupo = el('div', 'grupo');
     for (const a of anteriores) {
-      const fila = el('div', 'fila fila-dispositivo');
+      const fila = el('button', 'fila fila-dispositivo');
+      fila.type = 'button';
       fila.append(el('span', '', String(a.anio)), el('span', 'valor', `${plural(a.terminados, 'libro', 'libros')}, ${formatoDuracion(a.ms)}`));
+      fila.insertAdjacentHTML('beforeend', svgIcono('avanzar', 'chevron'));
+      fila.setAttribute('aria-label', `Resumen de ${a.anio}`);
+      fila.addEventListener('click', () => mostrarResumenAnual(a.anio));
       grupo.appendChild(fila);
     }
     partes.push(grupo);

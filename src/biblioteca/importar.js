@@ -179,6 +179,35 @@ async function analizar(datos) {
   return { metadatos, portada };
 }
 
+// La sinopsis puede venir con HTML: se pasa a texto con saltos de párrafo.
+function textoPlano(descripcion) {
+  const doc = new DOMParser().parseFromString(descripcion, 'text/html');
+  doc.querySelectorAll('script, style').forEach((e) => e.remove());
+  doc.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+  doc.querySelectorAll('p, div, li').forEach((e) => e.append('\n\n'));
+  return (doc.body.textContent || '').replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// Datos de la edición para la ficha del libro. Se leen del EPUB al abrir la
+// ficha; no se guardan ni se sincronizan.
+export async function leerDatosEdicion(datos) {
+  const zip = await JSZip.loadAsync(datos);
+  const contenedor = archivoZip(zip, 'META-INF/container.xml');
+  const rutaOpf = contenedor && xml(await contenedor.async('string'))
+    .getElementsByTagNameNS(NS_CONTENEDOR, 'rootfile')[0]?.getAttribute('full-path');
+  const entradaOpf = rutaOpf && archivoZip(zip, rutaOpf);
+  if (!entradaOpf) return {};
+  const opf = xml(await entradaOpf.async('string'));
+  const descripcion = textoDc(opf, 'description')[0];
+  return {
+    sinopsis: descripcion ? textoPlano(descripcion) : null,
+    editorial: textoDc(opf, 'publisher')[0] || null,
+    fecha: textoDc(opf, 'date')[0] || null,
+    idioma: textoDc(opf, 'language')[0] || null,
+    temas: textoDc(opf, 'subject'),
+  };
+}
+
 // Devuelve { resultado: 'importado' | 'duplicado' | 'error', libro?, mensaje? }
 export async function importarArchivo(archivo) {
   const datos = await archivo.arrayBuffer();

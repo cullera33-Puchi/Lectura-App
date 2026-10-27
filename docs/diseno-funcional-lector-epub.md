@@ -390,6 +390,14 @@ Contenido del archivo: `tipo`, `version`, `fecha`, dispositivo de origen, libros
 
 Regla: cada dispositivo solo escribe su propio archivo de sesiones, también al restaurar. Las sesiones de otro dispositivo se recuperan restaurando la misma copia en ese dispositivo. Una sesión restaurada conserva su identificador original, así la fusión la reconoce y no se cuenta dos veces.
 
+### Mejoras adicionales (0.6)
+
+| Mejora | Detalle |
+|---|---|
+| Dos páginas en horizontal | Con la pantalla en horizontal y al menos 700 x 500 px (la tablet girada), el lector muestra doble página. En el iPhone girado no cabe y se mantiene una. Se puede desactivar en "Aa". La posición se sigue guardando como CFI |
+| Ficha del libro | Desde el botón de acciones: portada, serie, avance, fechas de inicio, fin y última lectura, tiempo, sesiones, páginas y reparto por dispositivo, sinopsis y datos de la edición (editorial, publicación, idioma y temas). La sinopsis y la edición se leen del EPUB, así que necesitan el libro descargado; no se guardan ni se sincronizan |
+| Resumen del año | Desde Estadísticas, para el año en curso y los anteriores: libros terminados, tiempo, páginas, días con lectura, racha más larga, media por día, mes y día de la semana con más lectura, franja horaria habitual, libro con más tiempo, sesión más larga, reparto por dispositivo y lista de terminados |
+
 ### v4. Lectura activa
 
 | Mejora | Qué aporta | Esfuerzo |

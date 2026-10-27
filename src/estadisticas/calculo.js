@@ -17,7 +17,7 @@ export function claveDia(fecha) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function duracionMs(s) {
+export function duracionMs(s) {
   const ms = Date.parse(s.fin) - Date.parse(s.inicio);
   return Number.isFinite(ms) ? Math.min(Math.max(ms, 0), MAX_SESION_MS) : 0;
 }
@@ -131,4 +131,107 @@ export function formatoDuracion(ms) {
   const h = Math.floor(minutos / 60);
   const m = minutos % 60;
   return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+// Lectura de un libro: tiempo, páginas, sesiones, primera y última fecha y
+// reparto por dispositivo.
+export function resumenLibro(sesiones) {
+  const porDispositivo = new Map();
+  let ms = 0;
+  let paginas = 0;
+  let n = 0;
+  let primera = null;
+  let ultima = null;
+  for (const s of sesiones) {
+    const d = duracionMs(s);
+    const p = Number(s.paginas) || 0;
+    if (!d && !p) continue;
+    ms += d;
+    paginas += p;
+    n += 1;
+    if (!primera || s.inicio < primera) primera = s.inicio;
+    if (!ultima || (s.fin || s.inicio) > ultima) ultima = s.fin || s.inicio;
+    const nombre = s.dispositivo || 'Otro dispositivo';
+    porDispositivo.set(nombre, (porDispositivo.get(nombre) || 0) + d);
+  }
+  return {
+    ms,
+    paginas,
+    sesiones: n,
+    primera,
+    ultima,
+    dispositivos: [...porDispositivo.entries()].sort((a, b) => b[1] - a[1]).map(([nombre, t]) => ({ nombre, ms: t })),
+  };
+}
+
+const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const FRANJAS = [
+  { nombre: 'de madrugada', desde: 0, hasta: 6 },
+  { nombre: 'por la mañana', desde: 6, hasta: 14 },
+  { nombre: 'por la tarde', desde: 14, hasta: 21 },
+  { nombre: 'por la noche', desde: 21, hasta: 24 },
+];
+
+// Resumen de un año: totales, días con lectura, racha más larga del año, mes y
+// día de la semana con más lectura, franja horaria habitual, sesión más larga,
+// libro con más tiempo, libros terminados y reparto por dispositivo.
+export function resumenAnual({ sesiones, terminados, anio }) {
+  const dias = new Map();
+  const porMes = Array(12).fill(0);
+  const porDiaSemana = Array(7).fill(0);
+  const porFranja = Array(FRANJAS.length).fill(0);
+  const porLibro = new Map();
+  const porDispositivo = new Map();
+  let ms = 0;
+  let paginas = 0;
+  let sesionMasLarga = null;
+
+  for (const s of sesiones) {
+    const fecha = new Date(s.inicio);
+    if (fecha.getFullYear() !== anio) continue;
+    const d = duracionMs(s);
+    const p = Number(s.paginas) || 0;
+    if (!d && !p) continue;
+    ms += d;
+    paginas += p;
+    sumarDia(dias, claveDia(s.inicio), d, p);
+    porMes[fecha.getMonth()] += d;
+    porDiaSemana[fecha.getDay()] += d;
+    const hora = fecha.getHours();
+    porFranja[FRANJAS.findIndex((f) => hora >= f.desde && hora < f.hasta)] += d;
+    porLibro.set(s.libroId, (porLibro.get(s.libroId) || 0) + d);
+    const nombre = s.dispositivo || 'Otro dispositivo';
+    porDispositivo.set(nombre, (porDispositivo.get(nombre) || 0) + d);
+    if (!sesionMasLarga || d > sesionMasLarga.ms) sesionMasLarga = { ms: d, libroId: s.libroId, fecha: s.inicio };
+  }
+
+  const maximo = (lista) => {
+    let i = -1;
+    lista.forEach((v, j) => { if (v > 0 && (i < 0 || v > lista[i])) i = j; });
+    return i;
+  };
+  const diasConLectura = [...dias.entries()].filter(([, v]) => v.ms >= 60 * 1000 || v.paginas > 0).map(([k]) => k);
+  const mes = maximo(porMes);
+  const diaSemana = maximo(porDiaSemana);
+  const franja = maximo(porFranja);
+  const libroTop = [...porLibro.entries()].sort((a, b) => b[1] - a[1])[0];
+  const delAnio = terminados
+    .filter((t) => new Date(t.fecha).getFullYear() === anio)
+    .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+
+  return {
+    anio,
+    ms,
+    paginas,
+    dias: diasConLectura.length,
+    mediaPorDiaMs: diasConLectura.length ? ms / diasConLectura.length : 0,
+    rachaMasLarga: rachas(diasConLectura, `${anio}-01-01`).record,
+    mes: mes >= 0 ? { nombre: NOMBRES_MES[mes], ms: porMes[mes] } : null,
+    diaSemana: diaSemana >= 0 ? { nombre: NOMBRES_DIA[diaSemana], ms: porDiaSemana[diaSemana] } : null,
+    franja: franja >= 0 ? FRANJAS[franja].nombre : null,
+    sesionMasLarga,
+    libroTop: libroTop ? { libroId: libroTop[0], ms: libroTop[1] } : null,
+    terminados: delAnio,
+    dispositivos: [...porDispositivo.entries()].sort((a, b) => b[1] - a[1]).map(([nombre, t]) => ({ nombre, ms: t })),
+  };
 }

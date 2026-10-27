@@ -209,6 +209,17 @@
     <button type="button" class="pestana" data-pestana="estadisticas"><i data-icono="estadisticas"></i><span>Estadísticas</span></button>
   </nav>
 
+  <!-- Ficha: panel de contenido (ficha del libro, resumen del año) -->
+  <div id="fondo-ficha" class="fondo" hidden></div>
+  <div id="panel-ficha" class="hoja hoja-ficha" role="dialog" aria-modal="true" aria-labelledby="ficha-titulo" hidden>
+    <div class="asa"></div>
+    <div class="hoja-cabecera">
+      <h2 id="ficha-titulo"></h2>
+      <button type="button" id="btn-cerrar-ficha" class="boton-redondo pequeno" aria-label="Cerrar"><i data-icono="cerrar"></i></button>
+    </div>
+    <div id="ficha-contenido"></div>
+  </div>
+
   <!-- Hoja de acciones -->
   <div id="fondo-hoja" class="fondo" hidden></div>
   <div id="hoja-acciones" class="hoja hoja-acciones" role="dialog" aria-modal="true" hidden>

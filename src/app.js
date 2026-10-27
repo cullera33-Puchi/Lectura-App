@@ -22,6 +22,7 @@ import { sincronizando } from './sync/sincronizar.js';
 import { mostrarAviso } from './ui/aviso.js';
 import { prepararAjustes, pintarAjustes, pintarDiagnostico } from './ui/ajustes.js';
 import { prepararCopias } from './ui/copias.js';
+import { prepararFicha, fichaAbierta, cerrarFicha } from './ui/ficha.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
 import { prepararHoja, hojaAbierta, cancelarHoja } from './ui/hoja.js';
 import {
@@ -144,7 +145,7 @@ async function comprobarLibroAbierto() {
 
 // Recarga con la versión nueva solo si no hay nada en curso.
 function appOciosa() {
-  return !lectorAbierto() && !abriendo && !sincronizando() && !hojaAbierta() && descargando.size === 0
+  return !lectorAbierto() && !abriendo && !sincronizando() && !hojaAbierta() && !fichaAbierta() && descargando.size === 0
     && $('pantalla-bienvenida').hidden;
 }
 
@@ -183,6 +184,11 @@ window.addEventListener('popstate', async () => {
     }
     return;
   }
+  if (fichaAbierta()) {
+    cerrarFicha();
+    if (pantallaAbierta) history.pushState({ pantalla: pantallaAbierta }, '');
+    return;
+  }
   if (lectorAbierto() && cerrarPanelAbierto()) {
     history.pushState({ pantalla: 'lector' }, '');
     return;
@@ -202,6 +208,7 @@ async function iniciar() {
   aplicarTema();
 
   prepararHoja();
+  prepararFicha();
   prepararAjustes();
   prepararCopias({ restaurado: refrescar });
   prepararBienvenida({ terminado: () => irAPestana('inicio') });

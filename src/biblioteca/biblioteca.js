@@ -18,6 +18,7 @@ import {
   leerColecciones, crearColeccion, renombrarColeccion, eliminarColeccion, alternarLibroEnColeccion,
 } from '../datos/colecciones.js';
 import { editarLibro } from './editar.js';
+import { mostrarFichaLibro } from './ficha.js';
 import { mostrarAviso } from '../ui/aviso.js';
 import { svgIcono } from '../ui/iconos.js';
 import { registrar } from '../ui/registro.js';
@@ -396,6 +397,7 @@ export async function accionesLibro(libro) {
   const botones = [];
   if (libro.descargado) botones.push({ id: 'abrir', texto: 'Abrir' });
   else if (!libro.noDisponible) botones.push({ id: 'abrir', texto: 'Descargar y abrir' });
+  botones.push({ id: 'ficha', texto: 'Ficha del libro' });
   botones.push({ id: 'terminado', texto: terminado ? 'Marcar como no terminado' : 'Marcar como terminado' });
   botones.push({ id: 'colecciones', texto: 'Añadir a una colección' });
   botones.push({ id: 'editar', texto: 'Editar información' });
@@ -413,7 +415,14 @@ export async function accionesLibro(libro) {
     },
   });
 
-  if (eleccion === 'terminado') {
+  if (eleccion === 'ficha') {
+    await mostrarFichaLibro(libro, {
+      abrir: pulsarLibro,
+      editar: async (l) => {
+        if (await editarLibro(l)) await refrescar();
+      },
+    });
+  } else if (eleccion === 'terminado') {
     const nuevo = terminado ? (libro.progreso?.cfi ? 'leyendo' : 'pendiente') : 'terminado';
     await cambiarEstado(libro.id, nuevo);
     registrar(`"${libro.titulo}" marcado como ${nuevo}`);

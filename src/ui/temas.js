@@ -52,6 +52,7 @@ export function ajustesLecturaIniciales() {
     interlineado: 'normal',
     margenes: 'normales',
     justificacion: 'justificado',
+    dosPaginas: true,
   };
 }
 
@@ -100,7 +101,7 @@ export function proporcionMargenes(ajustes) {
 }
 
 // Ajustes que cambian la paginación. El tema solo cambia colores.
-const AJUSTES_QUE_REPAGINAN = ['tamano', 'fuente', 'interlineado', 'margenes', 'justificacion'];
+const AJUSTES_QUE_REPAGINAN = ['tamano', 'fuente', 'interlineado', 'margenes', 'justificacion', 'dosPaginas'];
 
 export function cambioRepagina(antes, despues) {
   return AJUSTES_QUE_REPAGINAN.some((c) => antes?.[c] !== despues?.[c]);

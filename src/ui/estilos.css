@@ -2285,3 +2285,179 @@ body[data-perfil="tinta"] .boton-sincronizar.sesion-caducada .indicador {
   background: var(--texto);
   color: var(--fondo);
 }
+
+/* ---------- Ficha (libro y resumen del año) ---------- */
+
+.hoja-ficha {
+  max-height: 92vh;
+  max-height: 92dvh;
+}
+
+.ficha-principal {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.ficha-principal .portada {
+  flex: none;
+  width: 34%;
+  max-width: 150px;
+}
+
+.ficha-texto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ficha-titulo {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ficha-autor {
+  font-size: 15px;
+  color: var(--texto-2);
+}
+
+.ficha-serie {
+  font-size: 13px;
+  color: var(--acento);
+  font-weight: 600;
+}
+
+.ficha-estado {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.ficha-botones {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 18px 0 4px;
+}
+
+.ficha-botones .boton-principal {
+  flex: 1;
+  margin: 0;
+}
+
+.ficha-botones .boton-secundario {
+  min-height: 50px;
+  border-radius: 12px;
+}
+
+.ficha-botones .boton-secundario .icono {
+  width: 18px;
+  height: 18px;
+}
+
+.fila-dato {
+  align-items: flex-start;
+}
+
+.fila-dato > span:first-child {
+  flex: none;
+  color: var(--texto);
+}
+
+.fila-dato .valor {
+  margin-left: auto;
+  color: var(--texto-2);
+  font-size: 15px;
+  text-align: right;
+}
+
+.ficha-sinopsis {
+  padding: 4px 16px;
+}
+
+.ficha-sinopsis p {
+  margin: 10px 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.ficha-vacio {
+  margin-top: 0;
+}
+
+/* Resumen del año */
+
+.resumen-anio-cifras {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--separador);
+  border-radius: var(--radio-grupo);
+  overflow: hidden;
+}
+
+.resumen-anio-cifras .cifra {
+  padding: 14px 16px;
+  background: var(--celda);
+}
+
+.lista-terminados .fila {
+  gap: 12px;
+}
+
+.lista-terminados .portada {
+  flex: none;
+  width: 40px;
+}
+
+.lista-terminados .portada-sin-imagen .p-autor,
+.lista-terminados .portada-sin-imagen .p-titulo {
+  display: none;
+}
+
+.lista-terminados .t-texto {
+  flex: 1;
+  min-width: 0;
+}
+
+.lista-terminados .t-titulo {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lista-terminados .t-fecha {
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.boton-resumen-anio {
+  justify-content: space-between;
+}
+
+body[data-perfil="tinta"] .ficha-autor,
+body[data-perfil="tinta"] .ficha-serie,
+body[data-perfil="tinta"] .ficha-estado,
+body[data-perfil="tinta"] .fila-dato .valor,
+body[data-perfil="tinta"] .lista-terminados .t-fecha {
+  color: var(--texto);
+}
+
+body[data-perfil="tinta"] .ficha-botones .boton-secundario {
+  border-radius: 0;
+}
+
+body[data-perfil="tinta"] .resumen-anio-cifras {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--texto);
+  gap: 2px;
+}
+
+.resumen-intro {
+  margin: 0 0 14px;
+}

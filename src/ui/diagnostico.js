@@ -6,7 +6,7 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.5.1 (pide conectar al entrar)';
+export const VERSION_APP = '0.6.0 (doble página, ficha y resumen del año)';
 
 let resultadoPersistencia = 'sin pedir';
 

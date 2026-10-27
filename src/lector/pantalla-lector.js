@@ -302,6 +302,12 @@ function pintarPanelAa() {
     filaSegmentada('Márgenes', MARGENES, lectura.margenes, (id) => cambiarLectura({ margenes: id })),
     filaSegmentada('Justificación', JUSTIFICACIONES, lectura.justificacion, (id) => cambiarLectura({ justificacion: id })),
   );
+  // Doble página con la pantalla en horizontal: solo en pantallas grandes.
+  if (Math.min(window.screen.width, window.screen.height) >= 500) {
+    formato.appendChild(filaSegmentada('Dos páginas en horizontal', [
+      { id: 'si', nombre: 'Sí' }, { id: 'no', nombre: 'No' },
+    ], lectura.dosPaginas === false ? 'no' : 'si', (id) => cambiarLectura({ dosPaginas: id === 'si' })));
+  }
   panel.appendChild(formato);
 }
 

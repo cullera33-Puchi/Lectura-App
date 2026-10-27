@@ -13,6 +13,7 @@ Lector EPUB personal para iPhone y tablet de tinta electrónica, con biblioteca 
 - Fase 3 (rediseño): interfaz al estilo de Libros de Apple en el iPhone, más sencilla en la tablet, y revisión general del código.
 - v2 (organización y estadísticas): colecciones, series, pestaña Estadísticas, objetivo anual y sesiones sincronizadas por dispositivo (`sesiones-<id>.json`).
 - v3 (ajustes rápidos): sincronización automática opcional, tiempo restante del capítulo y del libro, búsqueda en la biblioteca y edición de datos y portada.
+- Mejoras 0.6: dos páginas con la tablet en horizontal, ficha del libro y resumen del año.
 - Copia de seguridad: copia diaria en la subcarpeta `copias` de Drive (30 diarias y 12 mensuales), descarga manual y restauración por fusión desde Ajustes. Incluye avances, estadísticas, colecciones y objetivos, no los EPUB.
 
 ## Configuración

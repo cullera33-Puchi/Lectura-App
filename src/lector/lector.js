@@ -159,6 +159,17 @@ export async function abrirLibro(contenedor, datos, opciones) {
     return hueco % 2 ? hueco + 1 : hueco;
   }
 
+  // Doble página: solo en horizontal y en pantallas grandes (la tablet girada).
+  // En el iPhone girado el alto no llega y se mantiene una sola página.
+  const ANCHO_MINIMO_DOBLE = 700;
+  const ALTO_MINIMO_DOBLE = 500;
+  function quiereDosPaginas() {
+    const ancho = contenedor.clientWidth;
+    const alto = contenedor.clientHeight;
+    return ajustes.dosPaginas !== false && ancho > alto && ancho >= ANCHO_MINIMO_DOBLE && alto >= ALTO_MINIMO_DOBLE;
+  }
+  let dosPaginas = quiereDosPaginas();
+
   function pintarFondo() {
     contenedor.style.background = temaEfectivo(perfil, ajustes).fondo;
   }
@@ -168,7 +179,8 @@ export async function abrirLibro(contenedor, datos, opciones) {
     width: '100%',
     height: '100%',
     flow: 'paginated',
-    spread: 'none',
+    spread: dosPaginas ? 'always' : 'none',
+    minSpreadWidth: 1,
     gap: calcularHueco(),
     manager: movil ? 'continuous' : 'default',
     allowScriptedContent: true, // ver nota al principio: necesario en Safari
@@ -197,6 +209,12 @@ export async function abrirLibro(contenedor, datos, opciones) {
   function repaginar() {
     const manager = rendition.manager;
     if (!manager || destruido) return;
+    const quiere = quiereDosPaginas();
+    if (quiere !== dosPaginas) {
+      dosPaginas = quiere;
+      rendition.spread(dosPaginas ? 'always' : 'none', 1);
+      registrar(`Lector: ${dosPaginas ? 'doble página' : 'una página'} (${contenedor.clientWidth} x ${contenedor.clientHeight} px)`);
+    }
     manager.settings.gap = calcularHueco();
     rendition.settings.gap = manager.settings.gap;
     avisos.alRepaginar?.();
@@ -224,7 +242,8 @@ export async function abrirLibro(contenedor, datos, opciones) {
   rendition.on('resized', () => {
     if (destruido) return;
     avisos.alRepaginar?.();
-    if (rendition.manager && rendition.manager.settings.gap !== calcularHueco()) repaginar();
+    if (!rendition.manager) return;
+    if (rendition.manager.settings.gap !== calcularHueco() || quiereDosPaginas() !== dosPaginas) repaginar();
   });
 
   // --- Paso de página ---
