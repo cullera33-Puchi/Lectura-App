@@ -4,6 +4,7 @@
 
 import { leerAjuste, guardarAjuste } from '../datos/almacen.js';
 import { formatoDuracion } from '../estadisticas/calculo.js';
+import { registrar } from '../ui/registro.js';
 
 const PESO = 0.15; // media móvil exponencial
 const MINIMO_MS = 1500; // menos: está pasando páginas sin leer
@@ -40,6 +41,18 @@ export function anotarPagina(info, { contar = true } = {}) {
     muestras: ritmo.muestras + 1,
   };
   guardarAjuste('ritmoLectura', ritmo).catch(() => {});
+  const n = ritmo.muestras;
+  if (n === 1 || n === MUESTRAS_MINIMAS || n % 25 === 0) {
+    registrar(`Ritmo de lectura: ${resumenRitmo()}${n === MUESTRAS_MINIMAS ? '. Ya se muestra el tiempo restante' : ''}`);
+  }
+}
+
+// Texto para el registro y el diagnóstico.
+export function resumenRitmo() {
+  if (!ritmo.msPorPagina) return 'sin datos todavía';
+  const faltan = Math.max(0, MUESTRAS_MINIMAS - ritmo.muestras);
+  return `${Math.round(ritmo.msPorPagina / 1000)} s por página, ${ritmo.ubicacionesPorPagina.toFixed(2)} ubicaciones por página, ${ritmo.muestras} muestras`
+    + (faltan ? ` (faltan ${faltan} para mostrar el tiempo restante)` : '');
 }
 
 function duracion(ms) {

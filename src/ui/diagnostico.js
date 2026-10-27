@@ -2,8 +2,11 @@
 
 import { estadoSesion, tokenVigente } from '../sync/google.js';
 import { CONFIG } from '../../config.js';
+import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
+import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
+import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.4.1 (v2 y v3)';
+export const VERSION_APP = '0.4.2 (v2 y v3, registro ampliado)';
 
 let resultadoPersistencia = 'sin pedir';
 
@@ -78,6 +81,11 @@ export async function datosDiagnostico() {
     persistido = (await navigator.storage.persisted()) ? 'sí' : 'no';
   }
   const sw = navigator.serviceWorker?.controller ? 'activo' : 'no controla esta página';
+  const hora = (f) => (f ? new Date(f).toLocaleString('es-ES') : 'nunca');
+  const [ultima, pendientes] = await Promise.all([leerSincronizacion('ultima'), contarPendientes()]);
+  const automatica = sincronizacionAutomaticaActiva()
+    ? `activada. Última en esta sesión de la app: ${hora(ultimaSincronizacionAutomatica())}`
+    : 'desactivada';
 
   return [
     ['Versión de la app', VERSION_APP],
@@ -94,6 +102,11 @@ export async function datosDiagnostico() {
     ['Service worker', sw],
     ['Conexión', navigator.onLine ? 'en línea' : 'sin conexión'],
     ['Pantalla', `${innerWidth} x ${innerHeight} px, densidad ${devicePixelRatio}`],
+    ['Tema de la interfaz', `${document.body.dataset.tema}. Barra de estado: ${document.querySelector('meta[name="theme-color"]')?.content || 'sin color'}`],
+    ['Última sincronización correcta', hora(ultima)],
+    ['Sincronización automática', automatica],
+    ['Cambios pendientes de sincronizar', String(pendientes)],
+    ['Ritmo de lectura', resumenRitmo()],
   ];
 }
 

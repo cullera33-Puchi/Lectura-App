@@ -1,6 +1,8 @@
 // Temas, perfiles y ajustes de lectura (puntos 8 y 9 del diseño).
 // Los ajustes son por dispositivo y no se sincronizan.
 
+import { registrar } from './registro.js';
+
 export const TEMAS = {
   movil: [
     { id: 'claro', nombre: 'Claro', fondo: '#FFFFFF', texto: '#1A1A1A' },
@@ -82,6 +84,7 @@ function pintarBarraEstado(color) {
   nueva.content = color;
   if (actual) actual.replaceWith(nueva);
   else document.head.appendChild(nueva);
+  registrar(`Barra de estado: ${color}`);
 }
 
 export function aplicarTemaInterfaz(perfil, ajustes) {

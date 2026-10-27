@@ -130,18 +130,16 @@ export async function pintarInicio(datos) {
   const nuevos = libros.filter((l) => estadoDe(l) === 'pendiente').sort((a, b) => (b.fechaAlta || '').localeCompare(a.fechaAlta || ''));
   const terminados = libros.filter((l) => estadoDe(l) === 'terminado').sort((a, b) => fecha(b).localeCompare(fecha(a)));
 
+  // El resumen de objetivos va justo después del libro en curso, para que se
+  // vea entero sin desplazar la pantalla (al final quedaba bajo las pestañas).
   const partes = [];
-  if (leyendo.length) {
-    partes.push(await tarjetaActual(leyendo[0]));
-    if (leyendo.length > 1) partes.push(titulo('Seguir leyendo'), await carrusel(leyendo.slice(1)));
-  } else if (nuevos.length) {
-    partes.push(titulo('Empieza uno nuevo'));
-  }
+  if (leyendo.length) partes.push(await tarjetaActual(leyendo[0]));
+  partes.push(titulo('Objetivos de lectura'), await crearResumenObjetivos(alVerEstadisticas));
+  if (leyendo.length > 1) partes.push(titulo('Seguir leyendo'), await carrusel(leyendo.slice(1)));
   if (nuevos.length) {
-    if (leyendo.length) partes.push(titulo('Añadidos recientemente'));
+    partes.push(titulo(leyendo.length ? 'Añadidos recientemente' : 'Empieza uno nuevo'));
     partes.push(await carrusel(nuevos));
   }
   if (terminados.length) partes.push(titulo('Terminados'), await carrusel(terminados));
-  partes.push(titulo('Objetivos de lectura'), await crearResumenObjetivos(alVerEstadisticas));
   contenedor.replaceChildren(...partes);
 }

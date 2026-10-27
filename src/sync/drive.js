@@ -1,5 +1,7 @@
 // API REST de Drive v3 con fetch. Con drive.file la app solo ve lo que ha creado.
 
+import { registrar } from '../ui/registro.js';
+
 const API = 'https://www.googleapis.com/drive/v3';
 const API_SUBIDA = 'https://www.googleapis.com/upload/drive/v3';
 const TIPO_CARPETA = 'application/vnd.google-apps.folder';
@@ -237,6 +239,12 @@ const LIMITE_MULTIPART = 4 * 1024 * 1024;
 export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propiedades = {}) {
   const metadatos = { name: nombre, parents: [carpetaId], mimeType: tipo, appProperties: propiedades };
   const tamano = datos.byteLength ?? datos.size;
+  const mb = (tamano / 1048576).toFixed(1);
+  const inicioMs = performance.now();
+  const terminar = (respuesta, metodo) => respuesta.json().then((archivo) => {
+    registrar(`Subido ${nombre} (${mb} MB, ${metodo}) en ${Math.round(performance.now() - inicioMs)} ms`);
+    return archivo;
+  });
   if (tamano <= LIMITE_MULTIPART) {
     const separador = `lector-${crypto.getRandomValues(new Uint32Array(2)).join('')}`;
     const cuerpo = new Blob([
@@ -251,8 +259,9 @@ export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propie
       body: cuerpo,
       limite: LIMITE_LARGO_MS,
     });
-    return r.json();
+    return terminar(r, 'subida simple');
   }
+  registrar(`Subiendo ${nombre} (${mb} MB) por partes, con subida reanudable`);
   const inicio = await peticion(token, `${API_SUBIDA}/files?uploadType=resumable&fields=id,name,size`, {
     method: 'POST',
     headers: {
@@ -270,7 +279,7 @@ export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propie
     body: datos,
     limite: LIMITE_LARGO_MS,
   });
-  return r.json();
+  return terminar(r, 'subida reanudable');
 }
 
 // Descarga un archivo como ArrayBuffer, avisando del avance (0 a 1).

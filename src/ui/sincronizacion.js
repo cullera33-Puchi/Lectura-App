@@ -75,12 +75,22 @@ let ultimaAutomatica = 0;
 // cerrar un libro. Solo si está activada, hay conexión y la sesión de Google
 // sigue vigente (renovarla exige un toque). No muestra nada si no hay cambios.
 export async function sincronizarAutomaticamente(motivo) {
-  if (!sincronizacionAutomaticaActiva() || sincronizando() || !navigator.onLine || !tokenVigente()) return null;
+  let motivoNo = null;
+  if (!sincronizacionAutomaticaActiva()) motivoNo = 'está desactivada en Ajustes';
+  else if (sincronizando()) motivoNo = 'ya hay una sincronización en curso';
+  else if (!navigator.onLine) motivoNo = 'no hay conexión';
+  else if (!estadoSesion().token) motivoNo = 'no hay sesión de Google';
+  else if (!tokenVigente()) motivoNo = 'la sesión de Google ha caducado (pulsa Sincronizar para renovarla)';
+  if (motivoNo) {
+    registrar(`Sincronización automática (${motivo}) no lanzada: ${motivoNo}`);
+    return null;
+  }
   ultimaAutomatica = Date.now();
+  registrar(`Sincronización automática (${motivo}): empieza`);
   botonesOcupados(true);
   try {
     const resumen = await sincronizar(await asegurarToken());
-    registrar(`Sincronización automática (${motivo})`);
+    registrar(`Sincronización automática (${motivo}): terminada`);
     if (HAY_CAMBIOS(resumen)) mostrarAviso(textoResumen(resumen));
     await alTerminar(resumen);
     return resumen;
@@ -92,6 +102,10 @@ export async function sincronizarAutomaticamente(motivo) {
     botonesOcupados(false);
     avisarCambioPendientes();
   }
+}
+
+export function ultimaSincronizacionAutomatica() {
+  return ultimaAutomatica ? new Date(ultimaAutomatica) : null;
 }
 
 export function minutosDesdeAutomatica() {
