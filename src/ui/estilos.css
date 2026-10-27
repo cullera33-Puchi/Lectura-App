@@ -320,7 +320,7 @@ body[data-perfil="tinta"] .indicador {
   bottom: 0;
   z-index: 6;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   background: var(--barra);
   -webkit-backdrop-filter: var(--desenfoque);
@@ -827,13 +827,47 @@ body[data-perfil="tinta"] .avance span {
   text-align: left;
 }
 
+.miniatura-abrir {
+  display: block;
+  width: 100%;
+}
+
 .miniatura .m-pie {
-  margin-top: 6px;
+  margin-top: 2px;
   font-size: 13px;
   color: var(--texto-2);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
+}
+
+.miniatura .m-estado {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.miniatura .libro-mas {
+  position: static;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin-right: -8px;
+}
+
+.tarjeta-actual-caja {
+  position: relative;
+}
+
+.tarjeta-actual-caja > .libro-mas {
+  right: -8px;
+  bottom: -2px;
+}
+
+body[data-perfil="tinta"] .libro-mas {
+  color: var(--texto);
 }
 
 .vacio-inicio {
@@ -905,6 +939,153 @@ body[data-perfil="tinta"] .chip {
 body[data-perfil="tinta"] .chip.activo {
   background: var(--texto);
   color: var(--fondo);
+}
+
+.filtros .boton-icono {
+  flex: none;
+  width: 36px;
+}
+
+/* Los filtros que no caben se desvanecen hacia el borde (solo Móvil). */
+body[data-perfil="movil"] .chips {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  padding-right: 16px;
+}
+
+/* En tinta los filtros van en su propia fila, sin desplazamiento lateral. */
+body[data-perfil="tinta"] .filtros {
+  flex-wrap: wrap;
+}
+
+body[data-perfil="tinta"] .chips {
+  display: contents;
+}
+
+body[data-perfil="tinta"] #btn-buscar {
+  margin-left: auto;
+}
+
+.filtros .boton-icono.activo {
+  border-radius: 18px;
+  background: var(--relleno);
+}
+
+/* Búsqueda al estilo del campo de iOS */
+.caja-busqueda {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 14px;
+}
+
+.caja-busqueda > .icono {
+  position: absolute;
+  margin-left: 8px;
+  width: 18px;
+  height: 18px;
+  color: var(--texto-2);
+  pointer-events: none;
+}
+
+.caja-busqueda input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px 0 32px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--relleno);
+  color: var(--texto);
+  font: inherit;
+  font-size: 17px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.caja-busqueda input:focus {
+  outline: none;
+}
+
+.caja-busqueda input::placeholder {
+  color: var(--texto-2);
+}
+
+.enlace {
+  flex: none;
+  color: var(--acento);
+  font-size: 17px;
+}
+
+body[data-perfil="tinta"] .caja-busqueda input {
+  height: 48px;
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+}
+
+body[data-perfil="tinta"] .caja-busqueda input::placeholder,
+body[data-perfil="tinta"] .caja-busqueda > .icono {
+  color: var(--texto);
+}
+
+body[data-perfil="tinta"] .enlace {
+  min-height: 48px;
+  padding: 0 8px;
+  color: var(--texto);
+  text-decoration: underline;
+}
+
+body[data-perfil="tinta"] .filtros .boton-icono {
+  width: 48px;
+  height: 48px;
+}
+
+body[data-perfil="tinta"] .filtros .boton-icono.activo {
+  border-radius: 0;
+  background: var(--texto);
+  color: var(--fondo);
+}
+
+/* Colección o serie elegida */
+.grupo-activo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -6px 0 14px;
+  padding-left: 12px;
+  border-radius: 10px;
+  background: var(--relleno);
+  color: var(--texto);
+}
+
+.grupo-activo > .icono {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--acento);
+}
+
+#grupo-nombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+body[data-perfil="tinta"] .grupo-activo {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+}
+
+body[data-perfil="tinta"] .grupo-activo > .icono,
+body[data-perfil="tinta"] .grupo-activo .boton-icono {
+  color: var(--texto);
 }
 
 #btn-descargar-todos {
@@ -1706,4 +1887,314 @@ body[data-perfil="tinta"] .muestra[aria-pressed="true"] .m-caja {
 
 .hoja-titulo:empty + #hoja-botones .fila-hoja:first-child {
   border-top: 0;
+}
+
+/* ---------- Estadísticas ---------- */
+
+.tarjeta {
+  padding: 14px 16px;
+}
+
+.tarjeta > .fila {
+  margin: 10px -16px -14px;
+  width: calc(100% + 32px);
+}
+
+.tarjeta > .fila::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 0;
+  height: var(--grosor);
+  background: var(--separador);
+}
+
+.tarjeta-cifras {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.cifra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cifra strong {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.cifra span {
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.tarjeta-texto {
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: var(--texto-2);
+}
+
+.tarjeta .avance {
+  margin-top: 12px;
+}
+
+.grafico {
+  margin-top: 12px;
+}
+
+.grafico-titulo {
+  margin: 18px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.grafico-detalle {
+  margin: 0 0 10px;
+  min-height: 1.3em;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.grafico-barras {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 120px;
+  border-bottom: 1px solid var(--separador);
+}
+
+.barra {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 2px;
+}
+
+.barra span {
+  display: block;
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--acento);
+}
+
+.barra.seleccionada span {
+  background: var(--texto);
+}
+
+.barra.futura {
+  opacity: 0.4;
+}
+
+.grafico-etiquetas {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.grafico-etiquetas span {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--texto-2);
+}
+
+.fila-dispositivo .valor {
+  margin-left: auto;
+  color: var(--texto-2);
+  font-size: 15px;
+}
+
+.resumen-objetivos {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+}
+
+.campo-hoja {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 4px 16px 14px;
+  padding: 10px 12px;
+  border: var(--grosor) solid var(--separador);
+  border-radius: 10px;
+  background: var(--celda);
+  color: var(--texto);
+  font: inherit;
+  font-size: 20px;
+  text-align: center;
+}
+
+body[data-perfil="tinta"] .grafico-barras {
+  border-bottom: 2px solid var(--texto);
+  height: 140px;
+}
+
+body[data-perfil="tinta"] .barra span {
+  background: var(--texto);
+  border-radius: 0;
+}
+
+body[data-perfil="tinta"] .barra.seleccionada span {
+  background: var(--fondo);
+  outline: 3px solid var(--texto);
+  outline-offset: -3px;
+}
+
+body[data-perfil="tinta"] .barra.futura {
+  opacity: 1;
+  visibility: hidden;
+}
+
+body[data-perfil="tinta"] .campo-hoja {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+}
+
+/* ---------- Formularios en la hoja ---------- */
+
+.formulario-hoja {
+  padding-bottom: 4px;
+}
+
+.campo-formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 16px 12px;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.campo-formulario input {
+  height: 44px;
+  padding: 0 12px;
+  border: var(--grosor) solid var(--separador);
+  border-radius: 10px;
+  background: var(--celda);
+  color: var(--texto);
+  font: inherit;
+  font-size: 17px;
+}
+
+.campo-portada {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 16px 16px;
+}
+
+.muestra-portada {
+  flex: none;
+  width: 64px;
+}
+
+.muestra-portada .portada {
+  width: 64px;
+  height: 96px;
+  object-fit: cover;
+}
+
+.muestra-portada .portada-sin-imagen .p-autor {
+  display: none;
+}
+
+.campo-portada .boton-secundario {
+  flex: 1;
+  cursor: pointer;
+}
+
+body[data-perfil="tinta"] .campo-formulario {
+  color: var(--texto);
+}
+
+body[data-perfil="tinta"] .campo-formulario input {
+  height: 48px;
+  border: 2px solid var(--texto);
+  border-radius: 0;
+}
+
+/* ---------- Interruptor (como el de iOS) ---------- */
+
+.fila-interruptor {
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.interruptor {
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border-radius: 16px;
+  background: var(--relleno);
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  transition: background var(--transicion);
+}
+
+.interruptor::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: transform var(--transicion);
+}
+
+.interruptor:checked {
+  background: var(--acento);
+}
+
+.interruptor:checked::after {
+  transform: translateX(20px);
+}
+
+body[data-perfil="tinta"] .interruptor {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+}
+
+body[data-perfil="tinta"] .interruptor::after {
+  top: 3px;
+  left: 3px;
+  width: 21px;
+  height: 21px;
+  border-radius: 0;
+  background: var(--texto);
+  box-shadow: none;
+}
+
+body[data-perfil="tinta"] .interruptor:checked {
+  background: var(--texto);
+}
+
+body[data-perfil="tinta"] .interruptor:checked::after {
+  background: var(--fondo);
+}
+
+/* Sesión de Google caducada: el indicador del botón Sincronizar muestra "!" */
+.boton-sincronizar.sesion-caducada .indicador {
+  background: var(--acento);
+  color: var(--texto-acento);
+}
+
+body[data-perfil="tinta"] .boton-sincronizar.sesion-caducada .indicador {
+  background: var(--texto);
+  color: var(--fondo);
 }

@@ -95,11 +95,39 @@
           <button type="button" class="chip" data-filtro="pendiente">Pendientes</button>
           <button type="button" class="chip" data-filtro="terminado">Terminados</button>
         </div>
+        <button type="button" id="btn-buscar" class="boton-icono" aria-label="Buscar" aria-expanded="false" aria-controls="caja-busqueda"><i data-icono="buscar"></i></button>
+        <button type="button" id="btn-colecciones" class="boton-icono" aria-label="Colecciones y series"><i data-icono="coleccion"></i></button>
         <button type="button" id="btn-ordenar" class="boton-icono" aria-label="Ordenar"><i data-icono="ordenar"></i></button>
+      </div>
+      <div id="caja-busqueda" class="caja-busqueda" hidden>
+        <i data-icono="buscar"></i>
+        <input type="search" id="buscar-biblioteca" placeholder="Título, autor o serie" aria-label="Buscar en la biblioteca" autocomplete="off" enterkeyhint="search">
+        <button type="button" id="btn-cerrar-busqueda" class="enlace">Cancelar</button>
+      </div>
+      <div id="grupo-activo" class="grupo-activo" hidden>
+        <i data-icono="coleccion"></i>
+        <span id="grupo-nombre"></span>
+        <button type="button" id="btn-gestionar-grupo" class="boton-icono" aria-label="Gestionar la colección"><i data-icono="mas_opciones"></i></button>
+        <button type="button" id="btn-quitar-grupo" class="boton-icono" aria-label="Ver todos los libros"><i data-icono="cerrar"></i></button>
       </div>
       <button type="button" id="btn-descargar-todos" class="boton-secundario" hidden>Descargar todos</button>
       <div id="lista-libros"></div>
       <p id="biblioteca-vacia" class="vacia" hidden></p>
+    </div>
+  </section>
+
+  <!-- Estadísticas -->
+  <section id="pantalla-estadisticas" class="pantalla pantalla-agrupada con-pestanas" hidden>
+    <header class="barra-nav">
+      <span class="titulo-compacto">Estadísticas</span>
+      <div class="acciones-nav">
+        <button type="button" class="boton-icono boton-sincronizar" aria-label="Sincronizar"><i data-icono="sincronizar"></i><span class="indicador" hidden></span></button>
+        <button type="button" class="boton-icono boton-ajustes" aria-label="Ajustes"><i data-icono="ajustes"></i></button>
+      </div>
+    </header>
+    <div class="contenido">
+      <h1 class="titulo-grande">Estadísticas</h1>
+      <div id="contenido-estadisticas"></div>
     </div>
   </section>
 
@@ -126,6 +154,15 @@
           <input type="text" id="nombre-dispositivo" autocomplete="off" maxlength="40">
         </label>
       </div>
+
+      <h2 class="cabecera-grupo">Sincronización</h2>
+      <div class="grupo">
+        <label class="fila fila-interruptor">
+          <span>Sincronizar automáticamente</span>
+          <input type="checkbox" id="sincronizacion-automatica" class="interruptor" role="switch">
+        </label>
+      </div>
+      <p class="pie-grupo">Al abrir la app, al volver a ella y al cerrar un libro, si hay conexión y la sesión de Google está activa. La sesión dura una hora: cuando caduca, el botón Sincronizar muestra "!" y al pulsarlo se renueva.</p>
 
       <h2 class="cabecera-grupo">Cuenta de Google</h2>
       <div class="grupo">
@@ -161,6 +198,7 @@
   <nav id="barra-pestanas" class="barra-pestanas" hidden>
     <button type="button" class="pestana" data-pestana="inicio"><i data-icono="leyendo"></i><span>Leyendo ahora</span></button>
     <button type="button" class="pestana" data-pestana="biblioteca"><i data-icono="biblioteca"></i><span>Biblioteca</span></button>
+    <button type="button" class="pestana" data-pestana="estadisticas"><i data-icono="estadisticas"></i><span>Estadísticas</span></button>
   </nav>
 
   <!-- Hoja de acciones -->

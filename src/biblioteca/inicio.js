@@ -6,6 +6,13 @@ import {
   crearPortada, estadoDe, porcentajeDe, textoEstado, estadoCorto,
 } from './portadas.js';
 import { svgIcono } from '../ui/iconos.js';
+import { crearResumenObjetivos } from '../estadisticas/pantalla.js';
+
+let alVerEstadisticas = () => {};
+
+export function configurarInicio({ verEstadisticas }) {
+  alVerEstadisticas = verEstadisticas;
+}
 
 const $ = (id) => document.getElementById(id);
 const MAX_CARRUSEL = 12;
@@ -52,25 +59,45 @@ async function tarjetaActual(libro) {
 
   tarjeta.append(await crearPortada(libro), info);
   tarjeta.addEventListener('click', () => pulsarLibro(libro));
-  return tarjeta;
+  const caja = document.createElement('div');
+  caja.className = 'tarjeta-actual-caja';
+  caja.append(tarjeta, botonAcciones(libro));
+  return caja;
+}
+
+// Botón "⋯" con las acciones del libro, como en la biblioteca.
+function botonAcciones(libro) {
+  const mas = document.createElement('button');
+  mas.type = 'button';
+  mas.className = 'libro-mas';
+  mas.innerHTML = svgIcono('mas_opciones');
+  mas.setAttribute('aria-label', `Acciones de ${libro.titulo}`);
+  mas.addEventListener('click', () => accionesLibro(libro));
+  return mas;
 }
 
 async function miniatura(libro) {
+  const caja = document.createElement('div');
+  caja.className = 'miniatura libro';
+  caja.dataset.id = libro.id;
   const boton = document.createElement('button');
   boton.type = 'button';
-  boton.className = 'miniatura libro';
-  boton.dataset.id = libro.id;
+  boton.className = 'miniatura-abrir';
   boton.setAttribute('aria-label', `Abrir ${libro.titulo}`);
-  const pie = document.createElement('div');
-  pie.className = 'm-pie';
-  pie.innerHTML = estadoCorto(libro, { descargando: descargando.has(libro.id) }).html;
-  boton.append(await crearPortada(libro), pie);
+  boton.appendChild(await crearPortada(libro));
   boton.addEventListener('click', () => pulsarLibro(libro));
   boton.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     accionesLibro(libro);
   });
-  return boton;
+  const pie = document.createElement('div');
+  pie.className = 'm-pie';
+  const estado = document.createElement('span');
+  estado.className = 'm-estado';
+  estado.innerHTML = estadoCorto(libro, { descargando: descargando.has(libro.id) }).html;
+  pie.append(estado, botonAcciones(libro));
+  caja.append(boton, pie);
+  return caja;
 }
 
 async function carrusel(libros) {
@@ -115,5 +142,6 @@ export async function pintarInicio(datos) {
     partes.push(await carrusel(nuevos));
   }
   if (terminados.length) partes.push(titulo('Terminados'), await carrusel(terminados));
+  partes.push(titulo('Objetivos de lectura'), await crearResumenObjetivos(alVerEstadisticas));
   contenedor.replaceChildren(...partes);
 }
