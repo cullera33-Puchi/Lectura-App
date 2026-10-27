@@ -5,12 +5,12 @@
 // flotantes (cerrar arriba y menú abajo). El menú abre Contenido, Temas y
 // ajustes, y Sincronizar.
 
-import { abrirLibro, MENSAJE_LIBRO_ILEGIBLE } from './lector.js';
+import { abrirLibro, AperturaCancelada, MENSAJE_LIBRO_ILEGIBLE } from './lector.js';
 import { leerLibro, leerArchivo, leerUbicaciones, guardarUbicaciones } from '../datos/libros.js';
 import { leerProgreso, guardarProgreso } from '../datos/progreso.js';
 import { RegistroSesiones } from '../datos/sesiones.js';
 import {
-  preferencias, cambiarLectura, nombreDispositivo, alCambiarPreferencias,
+  preferencias, cambiarLectura, nombreDispositivo, idDispositivo, alCambiarPreferencias,
 } from '../datos/preferencias.js';
 import {
   TEMAS, TAMANOS, FUENTES, INTERLINEADOS, MARGENES, JUSTIFICACIONES, idTemaElegido, alCambiarModoSistema,
@@ -23,9 +23,13 @@ import { svgIcono } from '../ui/iconos.js';
 
 const $ = (id) => document.getElementById(id);
 const MARGEN_REPAGINADO_MS = 2000;
+const ESPERA_AJUSTES_MS = 250;
 
 let actual = null; // { id, motor, sesiones, progreso, ultimoCfi, repaginandoHasta }
 let alCerrar = () => {};
+// Cada apertura o cierre incrementa el turno. Una apertura que termina cuando
+// ya no es el turno vigente (otro toque, o se cerró mientras se abría) se descarta.
+let turno = 0;
 
 const PANELES = ['panel-menu', 'panel-indice', 'panel-aa'];
 
@@ -35,7 +39,14 @@ function controlesVisibles(visibles) {
 }
 
 function hayPanelAbierto() {
-  return PANELES.some((id) => !$(id).hidden);
+  return PANELES.some((id) => capaAbierta($(id)));
+}
+
+// Para el botón Atrás de Android: cierra el panel abierto, si lo hay.
+export function cerrarPanelAbierto() {
+  if (!actual || !hayPanelAbierto()) return false;
+  cerrarPaneles();
+  return true;
 }
 
 function cerrarPaneles() {
@@ -70,7 +81,7 @@ async function alCambiarPosicion(info) {
   const p = a.progreso;
   const porcentaje = info.porcentaje ?? p?.porcentaje ?? null;
   const datos = (cfi, estado) => ({
-    cfi, porcentaje, capitulo: info.capitulo, estado, dispositivo: nombreDispositivo(),
+    cfi, porcentaje, capitulo: info.capitulo, estado, dispositivo: nombreDispositivo(), dispositivoId: idDispositivo(),
   });
 
   // Al abrir y al repaginar por un cambio de ajustes, el punto de lectura no
@@ -79,10 +90,12 @@ async function alCambiarPosicion(info) {
   const mismaPosicion = Date.now() < a.repaginandoHasta || info.cfi === a.ultimoCfi;
   if (mismaPosicion) {
     a.ultimoCfi = info.cfi; // referencia para detectar el siguiente paso de página
+    // Abrir sin pasar página no es un avance: se guarda sin fecha (provisional)
+    // para no pisar en Drive la posición del otro dispositivo.
     if (!p) {
-      a.progreso = await guardarProgreso(a.id, datos(info.cfi, 'leyendo'));
+      a.progreso = await guardarProgreso(a.id, datos(info.cfi, 'leyendo'), { provisional: true });
     } else if (p.estado === 'pendiente') {
-      a.progreso = await guardarProgreso(a.id, { ...p, ...datos(p.cfi || info.cfi, 'leyendo') });
+      a.progreso = await guardarProgreso(a.id, { ...p, ...datos(p.cfi || info.cfi, 'leyendo') }, { provisional: !p.fecha });
     } else if (porcentaje !== p.porcentaje) {
       a.progreso = await guardarProgreso(a.id, { ...p, porcentaje }, { mantenerFecha: true });
     }
@@ -92,7 +105,7 @@ async function alCambiarPosicion(info) {
   a.ultimoCfi = info.cfi;
   const estado = p?.estado === 'terminado' ? 'terminado' : 'leyendo';
   a.progreso = await guardarProgreso(a.id, datos(info.cfi, estado));
-  a.sesiones.paginaPasada();
+  if (actual === a) a.sesiones.paginaPasada(); // si se ha cerrado, la sesión ya terminó
 }
 
 // --- Índice ---
@@ -193,15 +206,21 @@ function pintarPanelAa() {
 
   // Tamaño de letra
   const posicion = TAMANOS.indexOf(lectura.tamano);
+  // El tamaño se lee al pulsar, no al pintar: dos toques rápidos suman dos pasos.
+  const cambiarTamano = (paso) => {
+    const i = TAMANOS.indexOf(preferencias().lectura.tamano);
+    const nuevo = TAMANOS[Math.min(TAMANOS.length - 1, Math.max(0, i + paso))];
+    cambiarLectura({ tamano: nuevo });
+  };
   const filaTamano = document.createElement('div');
   filaTamano.className = 'aa-tamano';
   const pastilla = document.createElement('div');
   pastilla.className = 'pastilla';
-  const menor = boton('', '', () => cambiarLectura({ tamano: TAMANOS[Math.max(0, posicion - 1)] }));
+  const menor = boton('', '', () => cambiarTamano(-1));
   menor.innerHTML = '<span style="font-size:15px">A</span>';
   menor.setAttribute('aria-label', 'Letra más pequeña');
   menor.disabled = posicion <= 0;
-  const mayor = boton('', '', () => cambiarLectura({ tamano: TAMANOS[Math.min(TAMANOS.length - 1, posicion + 1)] }));
+  const mayor = boton('', '', () => cambiarTamano(1));
   mayor.innerHTML = '<span style="font-size:24px">A</span>';
   mayor.setAttribute('aria-label', 'Letra más grande');
   mayor.disabled = posicion >= TAMANOS.length - 1;
@@ -266,12 +285,19 @@ function abrirPanelAa() {
   abrirPanel('panel-aa');
 }
 
+// Los cambios de ajustes se agrupan: varios toques seguidos en A+ provocan un
+// solo repaginado. El panel se repinta al momento.
+let temporizadorAjustes = null;
+
 function aplicarPreferencias() {
   if (!actual) return;
-  const { dispositivo, lectura } = preferencias();
-  actual.repaginandoHasta = Date.now() + MARGEN_REPAGINADO_MS;
-  actual.motor.aplicarAjustes(dispositivo.perfil, lectura);
   if (capaAbierta($('panel-aa'))) pintarPanelAa();
+  clearTimeout(temporizadorAjustes);
+  temporizadorAjustes = setTimeout(() => {
+    if (!actual?.motor) return;
+    const { dispositivo, lectura } = preferencias();
+    actual.motor.aplicarAjustes(dispositivo.perfil, lectura);
+  }, ESPERA_AJUSTES_MS);
 }
 
 // --- Abrir y cerrar ---
@@ -281,7 +307,11 @@ function aplicarPreferencias() {
 // que abrir el libro.
 async function decidirPosicion(id, local) {
   const remota = (await leerSincronizacion('progresoRemoto'))?.progreso?.[id];
-  const esDeOtro = remota?.cfi && remota.dispositivo && remota.dispositivo !== nombreDispositivo();
+  // Se compara por identificador de dispositivo; las entradas antiguas, sin
+  // identificador, por nombre.
+  const esDeOtro = remota?.cfi && (remota.dispositivoId
+    ? remota.dispositivoId !== idDispositivo()
+    : remota.dispositivo && remota.dispositivo !== nombreDispositivo());
   const masReciente = remota && (remota.fecha || '') > (local?.fecha || '');
   if (!esDeOtro || !masReciente || remota.cfi === local?.cfi) return local;
 
@@ -292,7 +322,7 @@ async function decidirPosicion(id, local) {
     `Leíste ${donde}${porcentaje} en el ${remota.dispositivo} el ${fecha}. ¿Continuar allí?`,
     [
       { id: 'ir', texto: 'Ir allí' },
-      { id: 'quedarme', texto: 'Quedarme aquí', secundario: true },
+      { id: 'quedarme', texto: 'Quedarme aquí' },
     ],
   );
   if (eleccion === 'ir') {
@@ -300,21 +330,24 @@ async function decidirPosicion(id, local) {
     // Se conserva la fecha remota: es la misma lectura, no un avance nuevo.
     return guardarProgreso(id, { ...remota }, { mantenerFecha: true });
   }
-  if (local) {
+  if (eleccion === 'quedarme' && local) {
     // La posición local pasa a ser la más reciente para que gane al sincronizar.
     registrar('Se mantiene la posición de este dispositivo');
-    return guardarProgreso(id, { ...local, dispositivo: nombreDispositivo() });
+    return guardarProgreso(id, { ...local, dispositivo: nombreDispositivo(), dispositivoId: idDispositivo() });
   }
-  return null;
+  return local; // cancelar no cambia nada
 }
 
 export async function abrirPantallaLector(id) {
   if (actual) await cerrarPantallaLector();
+  const miTurno = ++turno;
+  const cancelado = () => miTurno !== turno;
   const [libro, datos, progresoLocal, ubicaciones] = await Promise.all([
     leerLibro(id), leerArchivo(id), leerProgreso(id), leerUbicaciones(id),
   ]);
   if (!libro || !datos) throw new Error('El archivo de este libro no está en el dispositivo.');
   const progreso = await decidirPosicion(id, progresoLocal);
+  if (cancelado()) throw new AperturaCancelada();
 
   document.body.classList.add('leyendo');
   $('lector').hidden = false;
@@ -327,7 +360,7 @@ export async function abrirPantallaLector(id) {
   $('info-progreso').textContent = '';
 
   const sesiones = new RegistroSesiones(id, nombreDispositivo());
-  actual = {
+  const nuevo = {
     id,
     titulo: libro.titulo,
     motor: null,
@@ -337,35 +370,52 @@ export async function abrirPantallaLector(id) {
     repaginandoHasta: Infinity, // hasta que termine la apertura
     info: null,
   };
+  actual = nuevo;
   const { dispositivo, lectura } = preferencias();
   try {
-    actual.motor = await abrirLibro($('visor'), datos, {
+    nuevo.motor = await abrirLibro($('visor'), datos, {
       perfil: dispositivo.perfil,
       ajustes: lectura,
       cfiInicial: progreso?.cfi || null,
       ubicaciones: ubicaciones || null,
+      cancelado,
       avisos: {
         alCambiarPosicion,
         alTocarCentro: () => {
           if (hayPanelAbierto()) cerrarPaneles();
-          else controlesVisibles($('controles-lector').hidden);
+          else controlesVisibles(!capaAbierta($('controles-lector')));
         },
         alDeslizarAbajo: () => alCerrar(),
         alGenerarUbicaciones: (json) => guardarUbicaciones(id, json),
+        // Repaginar (ajustes o giro de pantalla) no es pasar página.
+        alRepaginar: () => {
+          if (actual === nuevo && nuevo.repaginandoHasta !== Infinity) {
+            nuevo.repaginandoHasta = Date.now() + MARGEN_REPAGINADO_MS;
+          }
+        },
       },
     });
   } catch (e) {
-    actual = null;
-    $('visor').replaceChildren();
-    $('lector').hidden = true;
-    document.body.classList.remove('leyendo');
+    if (actual === nuevo) {
+      actual = null;
+      $('visor').replaceChildren();
+      $('lector').hidden = true;
+      document.body.classList.remove('leyendo');
+    }
+    if (e instanceof AperturaCancelada) throw e;
     throw new Error(e.message || MENSAJE_LIBRO_ILEGIBLE);
   }
-  actual.repaginandoHasta = Date.now() + 500;
+  nuevo.repaginandoHasta = Date.now() + 500;
   sesiones.iniciar();
 }
 
+export function idLibroAbierto() {
+  return actual?.id || null;
+}
+
 export async function cerrarPantallaLector() {
+  turno += 1; // cancela una apertura en curso
+  clearTimeout(temporizadorAjustes);
   if (!actual) return;
   const cerrado = actual;
   actual = null;
@@ -396,6 +446,7 @@ export function prepararPantallaLector({ cerrar }) {
     if (tipo === 'lectura') aplicarPreferencias();
   });
   alCambiarModoSistema(() => {
-    if (preferencias().lectura.temaMovil === 'automatico') aplicarPreferencias();
+    const { dispositivo, lectura } = preferencias();
+    if (dispositivo.perfil === 'movil' && lectura.temaMovil === 'automatico') aplicarPreferencias();
   });
 }

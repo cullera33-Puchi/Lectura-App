@@ -84,6 +84,13 @@ export function proporcionMargenes(ajustes) {
   return (MARGENES.find((m) => m.id === ajustes.margenes) || MARGENES[1]).proporcion;
 }
 
+// Ajustes que cambian la paginación. El tema solo cambia colores.
+const AJUSTES_QUE_REPAGINAN = ['tamano', 'fuente', 'interlineado', 'margenes', 'justificacion'];
+
+export function cambioRepagina(antes, despues) {
+  return AJUSTES_QUE_REPAGINAN.some((c) => antes?.[c] !== despues?.[c]);
+}
+
 // Hoja de estilos que se inyecta en cada capítulo del libro.
 export function cssLibro(perfil, ajustes) {
   const tema = temaEfectivo(perfil, ajustes);
@@ -101,6 +108,10 @@ body {
   font-size: ${ajustes.tamano}% !important;
   -webkit-text-size-adjust: none;
   -webkit-tap-highlight-color: transparent;
+  /* La pulsación larga no tiene acción en la v1 (reservada para subrayados). */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 body *:not(img):not(svg):not(image) {
   color: inherit !important;
@@ -122,5 +133,6 @@ ${fuente.familia ? `body, body *${sinCodigo} { font-family: ${fuente.familia} !i
 img, svg {
   max-width: 100% !important;
 }
+${perfil === 'tinta' ? '*, *::before, *::after { animation: none !important; transition: none !important; }' : ''}
 `;
 }

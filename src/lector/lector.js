@@ -16,7 +16,8 @@
 // pintarlo: se eliminan y, además, una política CSP impide ejecutarlos.
 
 import { registrar } from '../ui/registro.js';
-import { cssLibro, temaEfectivo, proporcionMargenes } from '../ui/temas.js';
+import { cssLibro, temaEfectivo, proporcionMargenes, cambioRepagina } from '../ui/temas.js';
+import { MENSAJE_ILEGIBLE } from '../biblioteca/importar.js';
 
 const DURACION_ANIMACION_MS = 260;
 const UMBRAL_DESLIZAR_PX = 40;
@@ -25,23 +26,51 @@ const MAX_DURACION_TOQUE_MS = 600;
 const VENTANA_CLIC_TRAS_TOQUE_MS = 800;
 const CARACTERES_POR_UBICACION = 1600;
 const ESPERA_COMPROBACION_MS = 400;
+const LIMITE_APERTURA_MS = 20000;
+const LIMITE_PINTADO_MS = 15000;
 const URL_FUENTES = new URL('../../fonts/fuentes.css', import.meta.url).href;
 
-export const MENSAJE_LIBRO_ILEGIBLE = 'Este libro no se puede abrir. Puede tener protección DRM.';
+export const MENSAJE_LIBRO_ILEGIBLE = MENSAJE_ILEGIBLE;
+
+// La apertura se ha cancelado (por ejemplo, el usuario cerró el libro mientras
+// se abría). No es un error que haya que mostrar.
+export class AperturaCancelada extends Error {}
 
 function conTiempoLimite(promesa, ms, mensaje) {
-  return Promise.race([
-    promesa,
-    new Promise((_, rechazar) => setTimeout(() => rechazar(new Error(mensaje)), ms)),
-  ]);
+  let temporizador;
+  const limite = new Promise((_, rechazar) => {
+    temporizador = setTimeout(() => rechazar(new Error(mensaje)), ms);
+  });
+  return Promise.race([promesa, limite]).finally(() => clearTimeout(temporizador));
+}
+
+function directorio(ruta) {
+  return ruta && ruta.includes('/') ? ruta.slice(0, ruta.lastIndexOf('/') + 1) : '';
+}
+
+function unirRuta(base, relativa) {
+  const partes = `${base}${relativa}`.split('/');
+  const resultado = [];
+  for (const p of partes) {
+    if (p === '..') resultado.pop();
+    else if (p !== '.') resultado.push(p);
+  }
+  return resultado.join('/');
 }
 
 const NS_XHTML = 'http://www.w3.org/1999/xhtml';
 const POLITICA_SIN_SCRIPTS = "script-src 'none'; object-src 'none'; frame-src 'none'";
 
+// Los elementos peligrosos se sustituyen por un <span> vacío en lugar de
+// quitarlos, para no alterar la numeración de elementos en la que se basan los
+// CFI de las posiciones guardadas.
 function neutralizarScripts(doc) {
   for (const nombre of ['script', 'iframe', 'object', 'embed']) {
-    Array.from(doc.getElementsByTagNameNS('*', nombre)).forEach((e) => e.remove());
+    Array.from(doc.getElementsByTagNameNS('*', nombre)).forEach((e) => {
+      const vacio = doc.createElementNS(NS_XHTML, 'span');
+      vacio.setAttribute('hidden', '');
+      e.replaceWith(vacio);
+    });
   }
   for (const elemento of Array.from(doc.getElementsByTagName('*'))) {
     for (const atributo of Array.from(elemento.attributes)) {
@@ -72,31 +101,46 @@ function aplanarIndice(elementos, nivel = 0, lista = []) {
   return lista;
 }
 
-// opciones: { perfil, ajustes, cfiInicial, ubicaciones, avisos }
-// avisos: { alCambiarPosicion(info), alTocarCentro(), alDeslizarAbajo(), alGenerarUbicaciones(json) }
+// opciones: { perfil, ajustes, cfiInicial, ubicaciones, avisos, cancelado }
+// avisos: { alCambiarPosicion(info), alTocarCentro(), alDeslizarAbajo(),
+//           alGenerarUbicaciones(json), alRepaginar() }
+// cancelado(): devuelve true si la apertura ya no interesa. Se comprueba tras
+// cada espera; en ese caso se libera todo y se lanza AperturaCancelada.
 export async function abrirLibro(contenedor, datos, opciones) {
   let { perfil, ajustes } = opciones;
   const avisos = opciones.avisos || {};
+  const cancelado = opciones.cancelado || (() => false);
   const movil = perfil === 'movil';
   const inicio = performance.now();
   const libro = ePub(datos);
   libro.spine.hooks.content.register(neutralizarScripts);
 
   try {
-    await conTiempoLimite(libro.ready, 20000, 'tiempo de apertura agotado');
+    await conTiempoLimite(libro.ready, LIMITE_APERTURA_MS, 'tiempo de apertura agotado');
   } catch (e) {
     libro.destroy();
     registrar(`No se pudo abrir el EPUB: ${e.message}`, 'error');
     throw new Error(MENSAJE_LIBRO_ILEGIBLE);
   }
+  if (cancelado()) {
+    libro.destroy();
+    throw new AperturaCancelada();
+  }
 
   const metadatos = libro.packaging.metadata;
 
-  // Índice y etiqueta de capítulo por sección del spine.
-  const indice = aplanarIndice(libro.navigation?.toc).map((e) => ({
-    ...e,
-    seccion: libro.spine.get(e.href)?.index ?? null,
-  }));
+  // Índice y etiqueta de capítulo por sección del spine. Los enlaces del índice
+  // son relativos al archivo del índice, que puede estar en una subcarpeta.
+  const baseIndice = directorio(libro.packaging.navPath || libro.packaging.ncxPath);
+  const indice = aplanarIndice(libro.navigation?.toc).map((e) => {
+    let href = e.href;
+    let seccion = libro.spine.get(href);
+    if (!seccion && baseIndice && href) {
+      href = unirRuta(baseIndice, e.href);
+      seccion = libro.spine.get(href);
+    }
+    return { ...e, href, seccion: seccion?.index ?? null };
+  });
   const etiquetaPorSeccion = new Map();
   for (const e of indice) {
     if (e.seccion !== null && !etiquetaPorSeccion.has(e.seccion)) etiquetaPorSeccion.set(e.seccion, e.etiqueta);
@@ -131,7 +175,6 @@ export async function abrirLibro(contenedor, datos, opciones) {
   });
 
   let ultimoToque = 0;
-  let animando = false;
   let destruido = false;
   let ultimaPosicion = null;
 
@@ -149,8 +192,22 @@ export async function abrirLibro(contenedor, datos, opciones) {
     doc.head.appendChild(estilo);
   }
 
-  // Aplica los ajustes "Aa" y vuelve a paginar manteniendo la posición.
+  // Fuerza el repaginado aunque el tamaño del visor no cambie. epub.js vuelve
+  // a pintar la posición actual al terminar.
+  function repaginar() {
+    const manager = rendition.manager;
+    if (!manager || destruido) return;
+    manager.settings.gap = calcularHueco();
+    rendition.settings.gap = manager.settings.gap;
+    avisos.alRepaginar?.();
+    manager._stageSize = undefined;
+    rendition.resize();
+  }
+
+  // Aplica los ajustes "Aa". El tema solo cambia colores; el tamaño, la
+  // fuente, el interlineado, los márgenes y la justificación repaginan.
   function aplicarAjustes(nuevoPerfil, nuevosAjustes) {
+    const repagina = cambioRepagina(ajustes, nuevosAjustes);
     perfil = nuevoPerfil;
     ajustes = nuevosAjustes;
     css = cssLibro(perfil, ajustes);
@@ -159,15 +216,16 @@ export async function abrirLibro(contenedor, datos, opciones) {
       const estilo = c.document.getElementById('lector-ajustes');
       if (estilo) estilo.textContent = css;
     }
-    const manager = rendition.manager;
-    if (!manager) return;
-    manager.settings.gap = calcularHueco();
-    rendition.settings.gap = manager.settings.gap;
-    // Forzar el repaginado aunque el tamaño del visor no cambie. epub.js
-    // vuelve a pintar la posición actual al terminar.
-    manager._stageSize = undefined;
-    rendition.resize();
+    if (repagina) repaginar();
   }
+
+  // Al girar la pantalla epub.js repagina solo, pero los márgenes dependen del
+  // ancho: si no coinciden, se repagina otra vez con el hueco correcto.
+  rendition.on('resized', () => {
+    if (destruido) return;
+    avisos.alRepaginar?.();
+    if (rendition.manager && rendition.manager.settings.gap !== calcularHueco()) repaginar();
+  });
 
   // --- Paso de página ---
 
@@ -194,14 +252,21 @@ export async function abrirLibro(contenedor, datos, opciones) {
     for (const v of vistas()) v.style.transform = transformacion;
   }
 
+  // Termina al instante la animación en curso (un toque nuevo no espera).
+  let terminarAnimacion = null;
+
+  function acabarAnimacionYa() {
+    terminarAnimacion?.();
+  }
+
   function animarVistas(desde, hasta) {
+    acabarAnimacionYa();
     const d = contenedorDesplazable();
     if (!d || desde === hasta) {
       moverVistas(0);
       if (d && hasta) d.scrollLeft += hasta;
       return Promise.resolve();
     }
-    animando = true;
     const proporcion = Math.min(1, Math.abs(hasta - desde) / anchoPagina());
     const duracion = Math.max(120, DURACION_ANIMACION_MS * proporcion);
     const animaciones = vistas().map((v) => v.animate(
@@ -209,14 +274,20 @@ export async function abrirLibro(contenedor, datos, opciones) {
       { duration: duracion, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'forwards' },
     ));
     return new Promise((resolver) => {
+      let terminada = false;
       const terminar = () => {
-        // En el mismo fotograma: posición definitiva y fuera transformaciones.
-        if (hasta) d.scrollLeft += hasta;
-        moverVistas(0);
+        if (terminada) return;
+        terminada = true;
+        terminarAnimacion = null;
+        // En el mismo fotograma: primero se quitan las transformaciones (si no,
+        // cuentan en el área desplazable y limitan scrollLeft) y después se fija
+        // la posición definitiva.
         animaciones.forEach((a) => a.cancel());
-        animando = false;
+        moverVistas(0);
+        if (hasta) d.scrollLeft += hasta;
         resolver();
       };
+      terminarAnimacion = terminar;
       if (animaciones.length) animaciones[0].onfinish = terminar;
       else terminar();
     });
@@ -266,31 +337,37 @@ export async function abrirLibro(contenedor, datos, opciones) {
   }
 
   // Pasa de página y comprueba que se ha movido. Si no, prueba con
-  // rendition.next() o prev() y, si tampoco, salta de capítulo.
+  // rendition.next() o prev() y, si tampoco, salta de capítulo. Cada paso
+  // lleva un número: si el usuario ha pasado otra página mientras tanto, la
+  // comprobación de este paso ya no vale y se descarta.
+  let ultimoPaso = 0;
+
   function pasar(direccion, arrastre = 0) {
+    const miPaso = ++ultimoPaso;
+    const vigente = () => !destruido && miPaso === ultimoPaso;
     const antes = huellaPosicion();
     const despues = (promesa, accion) => Promise.resolve(promesa)
       .catch((e) => traza(`error al pasar página: ${e.message}`))
       .then(() => new Promise((r) => setTimeout(r, ESPERA_COMPROBACION_MS)))
-      .then(accion);
+      .then(() => { if (vigente()) accion(); });
     despues(completarPaso(direccion, arrastre), () => {
-      if (destruido || huellaPosicion() !== antes) return;
+      if (huellaPosicion() !== antes) return;
       traza('la página no se ha movido. Se usa el paso de respaldo');
       const antesRespaldo = huellaPosicion();
       despues(direccion > 0 ? rendition.next() : rendition.prev(), () => {
-        if (destruido || huellaPosicion() !== antesRespaldo) return;
+        if (huellaPosicion() !== antesRespaldo) return;
         saltarCapitulo(direccion);
       });
     });
   }
 
   function siguiente() {
-    if (animando) return;
+    acabarAnimacionYa();
     pasar(1);
   }
 
   function anterior() {
-    if (animando) return;
+    acabarAnimacionYa();
     pasar(-1);
   }
 
@@ -314,16 +391,22 @@ export async function abrirLibro(contenedor, datos, opciones) {
     const doc = contents.document;
     let gesto = null;
 
+    // Anula el gesto en curso y, si se estaba arrastrando, recoloca la página.
+    function anularGesto() {
+      if (gesto?.arrastrando && movil) completarPaso(0, gesto.arrastre || 0);
+      gesto = null;
+    }
+
     doc.addEventListener('touchstart', (e) => {
-      if (e.touches.length !== 1 || animando) {
-        gesto = null;
+      if (e.touches.length !== 1) {
+        anularGesto();
         return;
       }
+      acabarAnimacionYa(); // un toque durante la animación no espera a que acabe
       const t = e.touches[0];
       gesto = {
         x0: t.screenX,
         y0: t.screenY,
-        ultimoX: t.screenX,
         t0: performance.now(),
         xVisor: xEnVisor(t, contents),
         arrastrando: false,
@@ -347,8 +430,10 @@ export async function abrirLibro(contenedor, datos, opciones) {
         gesto.arrastre = hayMasContenido(direccion) ? -dx : -dx / 4;
         moverVistas(gesto.arrastre);
       }
-      gesto.ultimoX = t.screenX;
     }, { passive: false });
+
+    // El sistema puede cancelar el gesto (llamada, gesto de iOS).
+    doc.addEventListener('touchcancel', anularGesto);
 
     doc.addEventListener('touchend', (e) => {
       if (!gesto) return;
@@ -409,7 +494,6 @@ export async function abrirLibro(contenedor, datos, opciones) {
       capitulo: etiquetaCapitulo(inicioPos.index),
       porcentaje: conUbicaciones ? libro.locations.percentageFromCfi(inicioPos.cfi) : null,
       paginasRestantesCapitulo: pagina && total ? Math.max(0, total - pagina) : null,
-      final: Boolean(posicion.atEnd),
     };
   }
 
@@ -418,20 +502,40 @@ export async function abrirLibro(contenedor, datos, opciones) {
     avisos.alCambiarPosicion?.(infoPosicion(posicion));
   });
 
-  rendition.on('resized', () => registrar('Libro repaginado'));
-
-  let visualizado = false;
-  try {
-    await rendition.display(opciones.cfiInicial || undefined);
-    visualizado = true;
-  } catch (e) {
-    registrar(`No se pudo ir a la posición guardada (${e.message}). Se abre al principio.`, 'error');
+  function liberar() {
+    destruido = true;
+    clearTimeout(generando);
+    document.removeEventListener('keydown', alPulsarTecla);
+    rendition.destroy();
+    libro.destroy();
   }
-  if (!visualizado) await rendition.display();
+
+  // epub.js no rechaza la promesa de display() si falla un capítulo (emite
+  // displayError y se queda esperando), así que se le pone tiempo límite.
+  let generando = null;
+  const pintar = (destino) => conTiempoLimite(rendition.display(destino), LIMITE_PINTADO_MS, 'el libro no responde');
+  try {
+    try {
+      await pintar(opciones.cfiInicial || undefined);
+    } catch (e) {
+      if (cancelado()) throw e;
+      registrar(`No se pudo ir a la posición guardada (${e.message}). Se abre al principio.`, 'error');
+      await pintar(undefined);
+    }
+  } catch (e) {
+    liberar();
+    if (cancelado()) throw new AperturaCancelada();
+    registrar(`No se pudo pintar el libro: ${e.message}`, 'error');
+    throw new Error(MENSAJE_LIBRO_ILEGIBLE);
+  }
+  if (cancelado()) {
+    liberar();
+    throw new AperturaCancelada();
+  }
   registrar(`"${metadatos.title}" abierto en ${Math.round(performance.now() - inicio)} ms (gestor ${movil ? 'continuous' : 'default'})`);
 
-  // Ubicaciones para el porcentaje: de la caché o generadas en segundo plano.
-  let generando = null;
+  // Ubicaciones para el porcentaje: de la caché o generadas en segundo plano,
+  // unos segundos después de abrir para no frenar las primeras páginas.
   if (opciones.ubicaciones) {
     libro.locations.load(opciones.ubicaciones);
     if (ultimaPosicion) avisos.alCambiarPosicion?.(infoPosicion(ultimaPosicion));
@@ -447,7 +551,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
       } catch (e) {
         if (!destruido) registrar(`No se pudieron generar las ubicaciones: ${e.message}`, 'error');
       }
-    }, 800);
+    }, 2500);
   }
 
   return {
@@ -459,12 +563,6 @@ export async function abrirLibro(contenedor, datos, opciones) {
     irA(destino) {
       return rendition.display(destino);
     },
-    destruir() {
-      destruido = true;
-      clearTimeout(generando);
-      document.removeEventListener('keydown', alPulsarTecla);
-      rendition.destroy();
-      libro.destroy();
-    },
+    destruir: liberar,
   };
 }
