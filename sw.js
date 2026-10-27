@@ -4,7 +4,7 @@
 // podría seguir usando una versión anterior. Sin conexión, se usa la caché.
 // Solo gestiona archivos de la propia app; Google y Drive van siempre a la red.
 
-const CACHE = 'lector-epub-v4';
+const CACHE = 'lector-epub-v5';
 const ARCHIVOS = [
   './',
   'index.html',

@@ -36,10 +36,6 @@ function conTiempoLimite(promesa, ms, mensaje) {
   ]);
 }
 
-function suavizado(t) {
-  return 1 - Math.pow(1 - t, 3);
-}
-
 const NS_XHTML = 'http://www.w3.org/1999/xhtml';
 const POLITICA_SIN_SCRIPTS = "script-src 'none'; object-src 'none'; frame-src 'none'";
 
@@ -183,30 +179,46 @@ export async function abrirLibro(contenedor, datos, opciones) {
     return rendition.manager?.layout?.delta || contenedor.clientWidth;
   }
 
-  // Anima el desplazamiento de forma incremental, para respetar los ajustes de
-  // posición que hace epub.js al añadir capítulos por delante.
-  function animarDesplazamiento(distancia) {
-    const desplazable = contenedorDesplazable();
-    if (!desplazable || distancia === 0) return Promise.resolve();
+  // Animación del perfil Móvil. En Safari, mover scrollLeft en cada fotograma
+  // obliga a repintar el texto, porque el contenedor no tiene aceleración
+  // gráfica. Por eso se mueven las vistas con una transformación CSS (la hace
+  // la tarjeta gráfica) y, al terminar, se fija scrollLeft en un solo paso.
+  // "desplazamiento" es lo que se ha avanzado visualmente respecto a scrollLeft.
+
+  function vistas() {
+    return Array.from(contenedorDesplazable()?.children || []);
+  }
+
+  function moverVistas(desplazamiento) {
+    const transformacion = desplazamiento ? `translateX(${-desplazamiento}px)` : '';
+    for (const v of vistas()) v.style.transform = transformacion;
+  }
+
+  function animarVistas(desde, hasta) {
+    const d = contenedorDesplazable();
+    if (!d || desde === hasta) {
+      moverVistas(0);
+      if (d && hasta) d.scrollLeft += hasta;
+      return Promise.resolve();
+    }
     animando = true;
+    const proporcion = Math.min(1, Math.abs(hasta - desde) / anchoPagina());
+    const duracion = Math.max(120, DURACION_ANIMACION_MS * proporcion);
+    const animaciones = vistas().map((v) => v.animate(
+      [{ transform: `translateX(${-desde}px)` }, { transform: `translateX(${-hasta}px)` }],
+      { duration: duracion, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'forwards' },
+    ));
     return new Promise((resolver) => {
-      const t0 = performance.now();
-      let avanzado = 0;
-      function paso(ahora) {
-        const t = Math.min(1, (ahora - t0) / DURACION_ANIMACION_MS);
-        const objetivo = distancia * suavizado(t);
-        desplazable.scrollLeft += objetivo - avanzado;
-        avanzado = objetivo;
-        if (t < 1) {
-          requestAnimationFrame(paso);
-        } else {
-          const ancho = anchoPagina();
-          desplazable.scrollLeft = Math.round(desplazable.scrollLeft / ancho) * ancho;
-          animando = false;
-          resolver();
-        }
-      }
-      requestAnimationFrame(paso);
+      const terminar = () => {
+        // En el mismo fotograma: posición definitiva y fuera transformaciones.
+        if (hasta) d.scrollLeft += hasta;
+        moverVistas(0);
+        animaciones.forEach((a) => a.cancel());
+        animando = false;
+        resolver();
+      };
+      if (animaciones.length) animaciones[0].onfinish = terminar;
+      else terminar();
     });
   }
 
@@ -217,26 +229,19 @@ export async function abrirLibro(contenedor, datos, opciones) {
     return d.scrollLeft - anchoPagina() >= -1;
   }
 
-  // Lleva la página hasta la posición alineada en la dirección indicada.
-  function completarPaso(direccion) {
+  // Lleva la página a la siguiente (1), la anterior (-1) o la de partida (0).
+  // arrastre: lo que el dedo ya ha desplazado la página (perfil Móvil).
+  function completarPaso(direccion, arrastre = 0) {
     if (!movil) {
       if (direccion === 0) return Promise.resolve();
       return direccion > 0 ? rendition.next() : rendition.prev();
     }
-    const d = contenedorDesplazable();
-    const ancho = anchoPagina();
-    const base = Math.round(d.scrollLeft / ancho) * ancho;
-    // Si se ha arrastrado, la página destino es la siguiente a la de partida.
-    let destino = base;
-    if (direccion > 0 && d.scrollLeft >= base - 1) destino = base + ancho;
-    if (direccion < 0 && d.scrollLeft <= base + 1) destino = base - ancho;
-    if (direccion !== 0 && !hayMasContenido(direccion) && Math.abs(d.scrollLeft - base) < 1) {
-      // Capítulo siguiente o anterior aún sin cargar: paso sin animación.
-      return direccion > 0 ? rendition.next() : rendition.prev();
+    if (direccion !== 0 && !hayMasContenido(direccion)) {
+      // Capítulo siguiente o anterior aún sin cargar: se recoloca la página y
+      // se pasa sin animación.
+      return animarVistas(arrastre, 0).then(() => (direccion > 0 ? rendition.next() : rendition.prev()));
     }
-    const maximo = d.scrollWidth - d.clientWidth;
-    destino = Math.max(0, Math.min(maximo, destino));
-    return animarDesplazamiento(destino - d.scrollLeft);
+    return animarVistas(arrastre, direccion * anchoPagina());
   }
 
   function traza(texto) {
@@ -262,15 +267,13 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   // Pasa de página y comprueba que se ha movido. Si no, prueba con
   // rendition.next() o prev() y, si tampoco, salta de capítulo.
-  function pasar(direccion) {
+  function pasar(direccion, arrastre = 0) {
     const antes = huellaPosicion();
-    const d = contenedorDesplazable();
-    traza(`paso ${direccion > 0 ? 'adelante' : 'atrás'} (desplazamiento ${Math.round(d?.scrollLeft ?? -1)} de ${d?.scrollWidth}, página ${Math.round(anchoPagina())})`);
     const despues = (promesa, accion) => Promise.resolve(promesa)
       .catch((e) => traza(`error al pasar página: ${e.message}`))
       .then(() => new Promise((r) => setTimeout(r, ESPERA_COMPROBACION_MS)))
       .then(accion);
-    despues(completarPaso(direccion), () => {
+    despues(completarPaso(direccion, arrastre), () => {
       if (destruido || huellaPosicion() !== antes) return;
       traza('la página no se ha movido. Se usa el paso de respaldo');
       const antesRespaldo = huellaPosicion();
@@ -302,8 +305,6 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   function actuarPorZona(x) {
     const ancho = contenedor.clientWidth;
-    const zona = x < ancho / 3 ? 'izquierda' : (x > (ancho * 2) / 3 ? 'derecha' : 'centro');
-    traza(`toque en x=${Math.round(x)} de ${ancho} (${zona})`);
     if (x < ancho / 3) anterior();
     else if (x > (ancho * 2) / 3) siguiente();
     else avisos.alTocarCentro?.();
@@ -341,8 +342,10 @@ export async function abrirLibro(contenedor, datos, opciones) {
       }
       if (gesto.movido) e.preventDefault();
       if (gesto.arrastrando && movil) {
-        const d = contenedorDesplazable();
-        if (d) d.scrollLeft -= t.screenX - gesto.ultimoX;
+        // Sin más contenido en esa dirección, el arrastre se frena.
+        const direccion = dx < 0 ? 1 : -1;
+        gesto.arrastre = hayMasContenido(direccion) ? -dx : -dx / 4;
+        moverVistas(gesto.arrastre);
       }
       gesto.ultimoX = t.screenX;
     }, { passive: false });
@@ -360,21 +363,16 @@ export async function abrirLibro(contenedor, datos, opciones) {
       if (g.arrastrando) {
         const velocidad = Math.abs(dx) / Math.max(duracion, 1);
         const pasa = Math.abs(dx) > UMBRAL_DESLIZAR_PX || velocidad > 0.3;
-        traza(`deslizamiento horizontal de ${Math.round(dx)} px`);
-        if (!pasa) completarPaso(0);
-        else pasar(dx < 0 ? 1 : -1);
+        if (!pasa) completarPaso(0, g.arrastre || 0);
+        else pasar(dx < 0 ? 1 : -1, g.arrastre || 0);
         return;
       }
       if (!g.movido && duracion < MAX_DURACION_TOQUE_MS) {
-        if (e.target.closest?.('a[href]')) {
-          traza('toque sobre un enlace del libro');
-          return; // los enlaces del libro funcionan
-        }
+        if (e.target.closest?.('a[href]')) return; // los enlaces del libro funcionan
         e.preventDefault(); // evita el clic sintético y el zoom por doble toque
         actuarPorZona(g.xVisor);
         return;
       }
-      traza(`gesto sin acción (dx ${Math.round(dx)}, dy ${Math.round(dy)}, ${Math.round(duracion)} ms)`);
       if (dy > 80 && Math.abs(dy) > Math.abs(dx) * 1.5) avisos.alDeslizarAbajo?.();
     }, { passive: false });
 
@@ -417,8 +415,6 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   rendition.on('relocated', (posicion) => {
     ultimaPosicion = posicion;
-    const mostrada = posicion.start.displayed;
-    traza(`posición: sección ${posicion.start.index}, página ${mostrada?.page} de ${mostrada?.total}`);
     avisos.alCambiarPosicion?.(infoPosicion(posicion));
   });
 
@@ -432,8 +428,6 @@ export async function abrirLibro(contenedor, datos, opciones) {
     registrar(`No se pudo ir a la posición guardada (${e.message}). Se abre al principio.`, 'error');
   }
   if (!visualizado) await rendition.display();
-  const d0 = contenedorDesplazable();
-  traza(`visor ${contenedor.clientWidth}x${contenedor.clientHeight}, página ${Math.round(anchoPagina())}, contenido ${d0?.scrollWidth}`);
   registrar(`"${metadatos.title}" abierto en ${Math.round(performance.now() - inicio)} ms (gestor ${movil ? 'continuous' : 'default'})`);
 
   // Ubicaciones para el porcentaje: de la caché o generadas en segundo plano.
