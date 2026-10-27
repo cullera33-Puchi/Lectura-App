@@ -12,7 +12,8 @@
 //   6. Escribir los JSON en Drive solo si han cambiado. Justo antes se
 //      comprueba que nadie los ha cambiado mientras tanto; si es así, se
 //      vuelven a leer y fusionar.
-//   7. Actualizar los datos locales y descargar las portadas que falten.
+//   7. Actualizar los datos locales, guardar la copia de seguridad del día y
+//      descargar las portadas que falten.
 //
 // Si algo falla a mitad, lo no subido sigue en la cola de pendientes.
 
@@ -31,7 +32,7 @@ import {
   guardarPortadaDescargada, guardarArchivoDescargado, idsConPortada, idsDescargados, volverASubir,
 } from '../datos/libros.js';
 import { listarProgresos } from '../datos/progreso.js';
-import { listarSesiones } from '../datos/sesiones.js';
+import { sesionesParaExportar } from '../datos/sesiones.js';
 import {
   leerColecciones, leerObjetivos, guardarColeccionesFusionadas, guardarObjetivosFusionados,
 } from '../datos/colecciones.js';
@@ -41,6 +42,7 @@ import {
 } from '../datos/pendientes.js';
 import { leer } from '../datos/almacen.js';
 import { huella } from '../biblioteca/importar.js';
+import { copiaDiaria } from './copias.js';
 import { registrar } from '../ui/registro.js';
 
 export const NOMBRE_BIBLIOTECA = 'biblioteca.json';
@@ -214,9 +216,7 @@ async function sincronizarSesiones(token, raiz, avisos) {
   const archivos = await buscarPorPrefijo(token, raiz, PREFIJO_SESIONES);
 
   // Este dispositivo: todo su histórico local, desde la v1.
-  const locales = (await listarSesiones()).map((s) => ({
-    id: `${propio}:${s.clave}`, libroId: s.libroId, inicio: s.inicio, fin: s.fin, paginas: s.paginas || 0,
-  }));
+  const locales = await sesionesParaExportar();
   const propios = archivos.filter((a) => a.name === nombrePropio);
   const legibles = [];
   let remoto = normalizarSesiones(null);
@@ -395,6 +395,13 @@ async function ejecutar(token, alEstado) {
   estado('Sincronizando las estadísticas...');
   await sincronizarSesiones(token, carpetas.raiz, resumen.avisos);
   await guardarSincronizacion('ultima', new Date().toISOString());
+
+  // Copia de seguridad del día (solo en la primera sincronización de cada día).
+  try {
+    await copiaDiaria(token, carpetas.raiz);
+  } catch (e) {
+    registrar(`No se pudo guardar la copia de seguridad del día: ${e.message}`, 'error');
+  }
 
   // Portadas que este dispositivo no tiene o que han cambiado en el otro.
   // Para los libros que ya tenían portada antes de existir portadasLocales, se

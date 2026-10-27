@@ -14,6 +14,11 @@ export async function leerColecciones({ incluirEliminadas = false } = {}) {
   return incluirEliminadas ? todas : todas.filter((c) => !c.eliminado);
 }
 
+// Deja colecciones y objetivos pendientes de enviar (tras restaurar una copia).
+export async function marcarExtrasPendientes() {
+  await escribirVarios([pendiente(new Date().toISOString())]);
+}
+
 export async function guardarColeccionesFusionadas(colecciones) {
   await escribirVarios([{ almacen: 'ajustes', valor: colecciones, clave: 'colecciones' }]);
 }

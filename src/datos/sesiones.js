@@ -80,3 +80,28 @@ export class RegistroSesiones {
 export function listarSesiones() {
   return leerTodos('sesiones');
 }
+
+// Sesiones de este dispositivo en el formato de Drive y de las copias de
+// seguridad. Una sesión restaurada conserva su id original para que la fusión
+// la reconozca y no se cuente dos veces.
+export async function sesionesParaExportar() {
+  const propio = idDispositivo();
+  return (await listarSesiones()).map((s) => ({
+    id: s.idOriginal || `${propio}:${s.clave}`, libroId: s.libroId, inicio: s.inicio, fin: s.fin, paginas: s.paginas || 0,
+  }));
+}
+
+// Añade sesiones de una copia de seguridad que no estén ya en este dispositivo.
+export async function restaurarSesiones(sesiones, nombre) {
+  const existentes = new Set((await sesionesParaExportar()).map((s) => s.id));
+  let n = 0;
+  for (const s of sesiones) {
+    if (!s?.id || !s.inicio || existentes.has(s.id)) continue;
+    await guardar('sesiones', {
+      idOriginal: s.id, libroId: s.libroId, inicio: s.inicio, fin: s.fin || s.inicio,
+      paginas: s.paginas || 0, dispositivo: nombre, dispositivoId: idDispositivo(),
+    });
+    n += 1;
+  }
+  return n;
+}
