@@ -573,6 +573,10 @@ export async function abrirLibro(contenedor, datos, opciones) {
   }
 
   function alPulsarTecla(e) {
+    // No en un campo de texto o en la barra del libro (las flechas mueven el
+    // cursor o la barra) ni con un panel u hoja abiertos.
+    if (e.target?.closest?.('input, textarea, select')) return;
+    if (document.querySelector('[role="dialog"]:not([hidden])')) return;
     if (e.key === 'ArrowRight') siguiente();
     else if (e.key === 'ArrowLeft') anterior();
   }

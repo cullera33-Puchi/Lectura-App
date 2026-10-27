@@ -2,6 +2,7 @@
 // o null si se cancela.
 
 import { abrirCapa, cerrarCapa, cerrarDeslizando } from './paneles.js';
+import { entrarEnCapa, salirDeCapa } from './historial.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,6 +13,7 @@ function cerrar(valor) {
   cerrarCapa($('fondo-hoja'));
   const resolver = resolverActual;
   resolverActual = null;
+  salirDeCapa('hoja');
   resolver?.(valor);
 }
 
@@ -35,6 +37,7 @@ export function mostrarHoja(titulo, botones, { alPulsar } = {}) {
     });
     contenedor.appendChild(boton);
   }
+  entrarEnCapa('hoja');
   abrirCapa($('fondo-hoja'));
   abrirCapa($('hoja-acciones'));
   return new Promise((resolver) => {

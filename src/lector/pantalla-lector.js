@@ -104,9 +104,20 @@ function pintarBotonMarcador() {
   boton.setAttribute('aria-label', hay ? 'Quitar el marcador de esta página' : 'Añadir marcador');
 }
 
+let marcadorOcupado = false;
+
 async function alternarMarcador() {
   const a = actual;
-  if (!a?.motor) return;
+  if (!a?.motor || marcadorOcupado) return; // doble toque (habitual en tinta)
+  marcadorOcupado = true;
+  try {
+    await alternarMarcadorAhora(a);
+  } finally {
+    marcadorOcupado = false;
+  }
+}
+
+async function alternarMarcadorAhora(a) {
   const enPagina = marcadoresDePagina();
   if (enPagina.length) {
     for (const m of enPagina) await eliminarAnotacion(m.id);
@@ -197,8 +208,16 @@ function anotarSalto(a, cfi, info) {
 async function saltar(destino) {
   const a = actual;
   if (!a?.motor) return;
+  const volverAntes = a.volver;
   if (a.info?.cfi) anotarSalto(a, a.info.cfi, a.info);
-  await a.motor.irA(destino);
+  try {
+    await a.motor.irA(destino);
+  } catch (e) {
+    // El salto no se ha hecho: el botón de volver no debe apuntar a él.
+    a.volver = volverAntes;
+    pintarVolver();
+    registrar(`Lector: no se pudo ir al destino (${e.message})`, 'error');
+  }
 }
 
 async function volver() {
@@ -245,6 +264,18 @@ function previsualizarBarra() {
   $('info-progreso').textContent = `Ir al ${Math.round(proporcion * 100)} %`;
 }
 
+function pintarInfo(a, info) {
+  $('info-capitulo').textContent = info.capitulo || a.titulo;
+  $('info-progreso').textContent = textoProgreso(info);
+}
+
+function terminarArrastreBarra() {
+  if (!arrastrandoBarra || !actual?.info) return;
+  arrastrandoBarra = false;
+  pintarInfo(actual, actual.info);
+  pintarBarra(actual.info);
+}
+
 async function saltarConBarra() {
   const a = actual;
   if (!a) return;
@@ -259,10 +290,7 @@ async function alCambiarPosicion(info) {
   const a = actual; // la pantalla puede cerrarse durante una escritura
   if (!a) return;
   a.info = info;
-  if (!arrastrandoBarra) {
-    $('info-capitulo').textContent = info.capitulo || a.titulo;
-    $('info-progreso').textContent = textoProgreso(info);
-  }
+  if (!arrastrandoBarra) pintarInfo(a, info);
   pintarBarra(info);
   pintarBotonMarcador();
   if (!$('panel-indice').hidden) pintarIndice();
@@ -374,7 +402,7 @@ function abrirIndice() {
 
 // --- Buscar en el libro (v4) ---
 
-const busqueda = { texto: '', numero: 0, libro: null };
+const busqueda = { texto: '', numero: 0, libro: null, completa: false };
 let temporizadorBusqueda = null;
 
 function fragmento(r) {
@@ -406,15 +434,18 @@ async function lanzarBusqueda() {
   const a = actual;
   if (!a) return;
   const texto = $('buscar-en-libro').value.trim();
-  if (texto === busqueda.texto && busqueda.libro === a.id) return;
+  // La misma búsqueda no se repite si terminó (sí si se cortó al cerrar el libro).
+  if (texto === busqueda.texto && busqueda.libro === a.id && busqueda.completa) return;
   const numero = ++busqueda.numero;
   busqueda.texto = texto;
   busqueda.libro = a.id;
+  busqueda.completa = false;
   const lista = $('lista-busqueda');
   const estado = $('estado-busqueda');
   lista.replaceChildren();
   if (texto.length < 2) {
     estado.textContent = texto ? 'Escribe al menos dos letras.' : '';
+    busqueda.completa = true;
     return;
   }
   const vigente = () => numero === busqueda.numero && actual === a;
@@ -431,6 +462,7 @@ async function lanzarBusqueda() {
     },
   });
   if (!vigente()) return;
+  busqueda.completa = true;
   estado.textContent = total
     ? (total >= 300 ? 'Más de 300 resultados: se muestran los 300 primeros.' : `${total === 1 ? '1 resultado' : `${total} resultados`}`)
     : `No se ha encontrado "${texto}".`;
@@ -439,7 +471,7 @@ async function lanzarBusqueda() {
 
 function abrirBuscar() {
   // Al cambiar de libro, la búsqueda anterior no vale.
-  if (busqueda.libro !== actual?.id) {
+  if (busqueda.libro !== actual?.id || !busqueda.completa) {
     $('buscar-en-libro').value = '';
     $('lista-busqueda').replaceChildren();
     $('estado-busqueda').textContent = '';
@@ -762,6 +794,7 @@ export function idLibroAbierto() {
 export async function cerrarPantallaLector() {
   turno += 1; // cancela una apertura en curso
   clearTimeout(temporizadorAjustes);
+  clearTimeout(temporizadorBusqueda);
   if (!actual) return;
   const cerrado = actual;
   actual = null;
@@ -794,6 +827,11 @@ export function prepararPantallaLector({ cerrar }) {
   $('btn-marcadores').addEventListener('click', abrirMarcadores);
   $('btn-cerrar-marcadores').addEventListener('click', cerrarPaneles);
   $('barra-libro').addEventListener('change', saltarConBarra);
+  // Si se suelta en el mismo valor no hay 'change': se sale del arrastre. Con
+  // margen, para no adelantarse al 'change' de una suelta normal.
+  for (const tipo of ['pointerup', 'touchend', 'blur']) {
+    $('barra-libro').addEventListener(tipo, () => setTimeout(terminarArrastreBarra, 300));
+  }
   $('btn-cerrar-buscar').addEventListener('click', cerrarPaneles);
   $('buscar-en-libro').addEventListener('input', () => {
     clearTimeout(temporizadorBusqueda);

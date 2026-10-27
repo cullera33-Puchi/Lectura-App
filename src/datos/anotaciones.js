@@ -2,7 +2,7 @@
 // como un mapa por id y viajan a Drive en anotaciones.json. Una baja se marca
 // con eliminado: true para que llegue al otro dispositivo.
 
-import { leerAjuste, escribirVarios } from './almacen.js';
+import { leerAjuste, escribirVarios, leerYEscribir } from './almacen.js';
 
 const CLAVE = 'anotaciones';
 const PENDIENTE = { clave: 'anotaciones:todas', tipo: 'anotaciones' };
@@ -27,16 +27,28 @@ export function guardarAnotacionesFusionadas(anotaciones) {
   return guardarTodas(anotaciones, false);
 }
 
+// Cambia una anotación leyendo y escribiendo en la misma transacción, para que
+// dos cambios seguidos (o uno durante una sincronización) no se pisen.
+function cambiarUna(id, cambiar) {
+  return leerYEscribir(['ajustes', 'pendientes'], 'ajustes', CLAVE, (todas) => {
+    const nueva = cambiar((todas || {})[id]);
+    if (!nueva) return null;
+    const fecha = new Date().toISOString();
+    return {
+      resultado: nueva,
+      operaciones: [
+        { almacen: 'ajustes', valor: { ...(todas || {}), [id]: nueva }, clave: CLAVE },
+        { almacen: 'pendientes', valor: { ...PENDIENTE, fecha } },
+      ],
+    };
+  });
+}
+
 export async function crearMarcador(libroId, datos) {
-  const todas = await todasLasAnotaciones();
   const id = crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const marcador = { id, libroId, tipo: 'marcador', ...datos, fecha: new Date().toISOString(), eliminado: false };
-  await guardarTodas({ ...todas, [id]: marcador });
-  return marcador;
+  return cambiarUna(id, () => ({ id, libroId, tipo: 'marcador', ...datos, fecha: new Date().toISOString(), eliminado: false }));
 }
 
 export async function eliminarAnotacion(id) {
-  const todas = await todasLasAnotaciones();
-  if (!todas[id]) return;
-  await guardarTodas({ ...todas, [id]: { ...todas[id], eliminado: true, fecha: new Date().toISOString() } });
+  await cambiarUna(id, (actual) => (actual ? { ...actual, eliminado: true, fecha: new Date().toISOString() } : null));
 }

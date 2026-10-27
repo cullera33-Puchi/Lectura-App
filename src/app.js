@@ -27,6 +27,7 @@ import { prepararFicha, fichaAbierta, cerrarFicha } from './ui/ficha.js';
 import { prepararDeslizarPestanas } from './ui/deslizar-pestanas.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
 import { prepararHoja, hojaAbierta, cancelarHoja } from './ui/hoja.js';
+import { esRetiradaPropia } from './ui/historial.js';
 import {
   prepararSincronizacion, sincronizarAutomaticamente, alEntrarEnLaApp,
 } from './ui/sincronizacion.js';
@@ -96,6 +97,7 @@ async function irAPestana(nombre) {
 }
 
 function abrirAjustes() {
+  if (!$('pantalla-ajustes').hidden) return; // doble toque: una sola entrada
   history.pushState({ pantalla: 'ajustes' }, '');
   mostrarPantalla('ajustes');
   pintarAjustes();
@@ -177,6 +179,7 @@ window.addEventListener('unhandledrejection', (e) => registrar(`Error: ${e.reaso
 // Botón Atrás (Android): primero cierra la hoja o el panel abiertos; después,
 // el lector o Ajustes.
 window.addEventListener('popstate', async () => {
+  if (esRetiradaPropia()) return;
   const pantallaAbierta = lectorAbierto() ? 'lector' : (!$('pantalla-ajustes').hidden ? 'ajustes' : null);
   if (hojaAbierta()) {
     cancelarHoja();
@@ -293,8 +296,13 @@ async function iniciar() {
       return;
     }
     const minutosFuera = ocultaDesde ? (Date.now() - ocultaDesde) / 60000 : 0;
-    if (minutosFuera >= MINUTOS_FUERA && !lectorAbierto() && $('pantalla-bienvenida').hidden) {
-      alEntrarEnLaApp('al volver a la app');
+    // Tras un rato fuera, o si ha cambiado el día, se repinta aunque no se
+    // sincronice (sin conexión, sesión caducada): "Hoy", la racha y la semana
+    // no deben quedarse en el día anterior.
+    const otroDia = ocultaDesde && new Date(ocultaDesde).toDateString() !== new Date().toDateString();
+    if ((minutosFuera >= MINUTOS_FUERA || otroDia) && !lectorAbierto() && $('pantalla-bienvenida').hidden) {
+      refrescar().catch((e) => registrar(`Repintado al volver: ${e.message}`, 'error'));
+      if (minutosFuera >= MINUTOS_FUERA) alEntrarEnLaApp('al volver a la app');
     }
   });
 }

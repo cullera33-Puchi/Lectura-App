@@ -22,3 +22,7 @@ ok(pf && Math.round(pf.msRestante / 60000) === 180 && pf.dias === 6 && pf.fecha 
 ok(c.previsionFin({ msLibro: 120 * 60000, fraccion: 0.02, sesiones: reciente, ahora }) === null, 'sin previsión con menos del 5 % leído');
 ok(c.previsionFin({ msLibro: 120 * 60000, fraccion: 0.4, sesiones: [s('2026-09-01', 60, 20)], ahora }) === null, 'sin previsión si no se ha leído en los últimos 14 días');
 ok(c.previsionFin({ msLibro: 5 * 60000, fraccion: 0.4, sesiones: reciente, ahora }) === null, 'sin previsión con menos de 10 min en el libro');
+
+// Una sesión de 23:40 a 00:40 cuenta 20 min el primer día y 40 min el segundo.
+const noche = c.calcularEstadisticas({ sesiones: [{ libroId: 'a', inicio: '2026-10-26T23:40:00', fin: '2026-10-27T00:40:00', paginas: 30 }], terminados: [], objetivo: null, ahora });
+ok(Math.round(noche.hoy.ms / 60000) === 40 && Math.round(noche.semana[0].ms / 60000) === 20, `sesión que pasa la medianoche: ${Math.round(noche.semana[0].ms / 60000)} y ${Math.round(noche.hoy.ms / 60000)} min`);

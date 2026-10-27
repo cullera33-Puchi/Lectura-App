@@ -28,20 +28,29 @@ function fecha(iso) {
 }
 
 // La fecha de publicación del EPUB puede ser un año, un año y mes o una fecha.
+// Calibre escribe 0101-01-01 cuando no hay fecha: un año anterior a 1000 se
+// trata como sin fecha. Con hora, se toma solo el día (a medianoche UTC,
+// en España saldría el día anterior).
 function fechaPublicacion(texto) {
   if (!texto) return null;
+  const anio = Number(texto.slice(0, 4));
+  if (!(anio >= 1000)) return null;
   if (/^\d{4}$/.test(texto)) return texto;
   if (/^\d{4}-\d{2}$/.test(texto)) {
     return new Date(`${texto}-15T12:00:00`).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
   }
-  return fecha(texto.length === 10 ? `${texto}T12:00:00` : texto) || texto;
+  const dia = /^\d{4}-\d{2}-\d{2}/.exec(texto)?.[0];
+  return fecha(dia ? `${dia}T12:00:00` : texto) || texto;
 }
 
 const NOMBRES_IDIOMA = { es: 'Español', en: 'Inglés', fr: 'Francés', it: 'Italiano', pt: 'Portugués', de: 'Alemán', ca: 'Catalán', pl: 'Polaco' };
+// Códigos de tres letras (ISO 639-2) que usan algunos EPUB.
+const TRES_LETRAS = { spa: 'es', eng: 'en', fre: 'fr', fra: 'fr', ita: 'it', por: 'pt', ger: 'de', deu: 'de', cat: 'ca', pol: 'pl' };
 
 function idioma(codigo) {
   if (!codigo) return null;
-  return NOMBRES_IDIOMA[codigo.slice(0, 2).toLowerCase()] || codigo;
+  const c = codigo.toLowerCase().split(/[-_]/)[0];
+  return NOMBRES_IDIOMA[TRES_LETRAS[c] || c] || codigo;
 }
 
 function filas(lista) {

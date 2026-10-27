@@ -29,6 +29,22 @@ function sumarDia(dias, clave, ms, paginas) {
   dias.set(clave, d);
 }
 
+// Una sesión que pasa la medianoche reparte su tiempo entre los dos días
+// (las páginas se quedan en el día en que empezó).
+function sumarSesionPorDias(dias, s, ms, paginas) {
+  let inicio = Date.parse(s.inicio);
+  const fin = inicio + ms;
+  let primera = true;
+  while (inicio < fin || primera) {
+    const medianoche = new Date(inicio);
+    medianoche.setHours(24, 0, 0, 0);
+    const tramo = Math.min(fin, medianoche.getTime()) - inicio;
+    sumarDia(dias, claveDia(inicio), tramo, primera ? paginas : 0);
+    primera = false;
+    inicio += tramo;
+  }
+}
+
 // Racha: días seguidos con lectura que terminan hoy (o ayer, si hoy aún no se
 // ha leído). Récord: la racha más larga del histórico.
 function rachas(diasConLectura, hoy) {
@@ -72,7 +88,7 @@ export function calcularEstadisticas({ sesiones, terminados, objetivo, metaDiari
     const ms = duracionMs(s);
     const paginas = Number(s.paginas) || 0;
     if (!ms && !paginas) continue;
-    sumarDia(dias, claveDia(s.inicio), ms, paginas);
+    sumarSesionPorDias(dias, s, ms, paginas);
     const fecha = new Date(s.inicio);
     const a = fecha.getFullYear();
     const totalAnio = porAnio.get(a) || { ms: 0, paginas: 0, terminados: 0 };

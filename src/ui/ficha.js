@@ -3,20 +3,26 @@
 import {
   abrirCapa, cerrarCapa, capaAbierta, cerrarDeslizando,
 } from './paneles.js';
+import { entrarEnCapa, salirDeCapa } from './historial.js';
 
 const $ = (id) => document.getElementById(id);
 
 export function abrirFicha(titulo, elementos) {
   $('ficha-titulo').textContent = titulo;
   $('ficha-contenido').replaceChildren(...elementos);
-  $('panel-ficha').scrollTop = 0;
+  // Si ya estaba abierta (ordenar Quiero leer, revisar duplicados), se
+  // conserva el punto de desplazamiento.
+  if (!fichaAbierta()) $('panel-ficha').scrollTop = 0;
+  entrarEnCapa('ficha');
   abrirCapa($('fondo-ficha'));
   abrirCapa($('panel-ficha'));
 }
 
 export function cerrarFicha() {
+  if (!fichaAbierta()) return;
   cerrarCapa($('panel-ficha'));
   cerrarCapa($('fondo-ficha'));
+  salirDeCapa('ficha');
 }
 
 export function fichaAbierta() {
