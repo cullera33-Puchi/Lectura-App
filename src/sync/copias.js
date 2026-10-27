@@ -1,6 +1,6 @@
 // Copias de seguridad de avances y estadísticas (no de los EPUB).
 //
-// Una copia es un JSON con los datos de libros, colecciones, objetivos,
+// Una copia es un JSON con los datos de libros, colecciones, objetivos, Quiero leer,
 // posiciones y sesiones de todos los dispositivos, tal como los conoce este
 // dispositivo tras la última sincronización.
 // - Automática: cada día, en la primera sincronización, se crea en la
@@ -15,8 +15,9 @@ import {
   localizarSubcarpeta, buscarPorPrefijo, crearJson, leerJson, enviarAPapelera,
 } from './drive.js';
 import {
-  libroRemoto, normalizarProgreso, fusionarProgreso, fusionarColecciones, fusionarObjetivos,
+  libroRemoto, normalizarProgreso, fusionarProgreso, fusionarColecciones, fusionarObjetivos, fusionarQuieroLeer,
 } from './fusion.js';
+import { leerQuieroLeer, guardarQuieroLeerFusionado } from '../datos/quiero-leer.js';
 import { todosLosLibros, leerLibro, aplicarLibroRemoto } from '../datos/libros.js';
 import { listarProgresos, progresoMasReciente, guardarProgreso } from '../datos/progreso.js';
 import { sesionesParaExportar, restaurarSesiones } from '../datos/sesiones.js';
@@ -84,7 +85,7 @@ export function copiasABorrar(archivos, hoy = diaLocal()) {
 // Copia con lo que sabe este dispositivo: sus datos locales y la última copia
 // de Drive del otro dispositivo.
 export async function construirCopia() {
-  const [libros, colecciones, objetivos, progresos, progresoRemoto, propias, remotas, anotaciones] = await Promise.all([
+  const [libros, colecciones, objetivos, progresos, progresoRemoto, propias, remotas, anotaciones, quieroLeer] = await Promise.all([
     todosLosLibros(),
     leerColecciones({ incluirEliminadas: true }),
     leerObjetivos(),
@@ -93,6 +94,7 @@ export async function construirCopia() {
     sesionesParaExportar(),
     leerSincronizacion('sesionesRemotas'),
     todasLasAnotaciones(),
+    leerQuieroLeer(),
   ]);
   const progreso = fusionarProgreso(progresos, normalizarProgreso(progresoRemoto)).progreso.progreso;
   const propio = idDispositivo();
@@ -108,6 +110,7 @@ export async function construirCopia() {
     libros: libros.filter((l) => !l.eliminado).map(libroRemoto),
     colecciones,
     objetivos,
+    quieroLeer,
     progreso,
     sesiones,
     anotaciones,
@@ -164,10 +167,14 @@ export async function restaurarCopia(datos) {
   const objetivos = await leerObjetivos();
   const nuevasColecciones = fusionarColecciones(colecciones, copia.colecciones);
   const nuevosObjetivos = fusionarObjetivos(objetivos, copia.objetivos);
+  const quieroLeer = await leerQuieroLeer();
+  const nuevaQuieroLeer = fusionarQuieroLeer(quieroLeer, copia.quieroLeer);
   const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  if (!igual(nuevasColecciones, fusionarColecciones(colecciones, [])) || !igual(nuevosObjetivos, fusionarObjetivos(objetivos, {}))) {
+  if (!igual(nuevasColecciones, fusionarColecciones(colecciones, [])) || !igual(nuevosObjetivos, fusionarObjetivos(objetivos, {}))
+    || !igual(nuevaQuieroLeer, quieroLeer)) {
     await guardarColeccionesFusionadas(nuevasColecciones);
     await guardarObjetivosFusionados(nuevosObjetivos);
+    await guardarQuieroLeerFusionado(nuevaQuieroLeer);
     await marcarExtrasPendientes();
     r.extras = true;
   }
@@ -194,7 +201,7 @@ export async function restaurarCopia(datos) {
     if (id === propio) r.sesiones += await restaurarSesiones(d.sesiones, nombreDispositivo());
     else if (d.sesiones.length) r.otrosDispositivos.push(d.dispositivo);
   }
-  registrar(`Copia restaurada: ${r.libros} libros, ${r.posiciones} posiciones, ${r.sesiones} sesiones${r.extras ? ', colecciones u objetivos' : ''}`);
+  registrar(`Copia restaurada: ${r.libros} libros, ${r.posiciones} posiciones, ${r.sesiones} sesiones${r.extras ? ', colecciones, objetivos o Quiero leer' : ''}`);
   return r;
 }
 
@@ -203,7 +210,7 @@ export function textoRestauracion(r) {
   if (r.libros) partes.push(`${r.libros} ${r.libros === 1 ? 'libro' : 'libros'}`);
   if (r.posiciones) partes.push(`${r.posiciones} ${r.posiciones === 1 ? 'posición' : 'posiciones'}`);
   if (r.sesiones) partes.push(`${r.sesiones} ${r.sesiones === 1 ? 'sesión de lectura' : 'sesiones de lectura'}`);
-  if (r.extras) partes.push('colecciones u objetivos');
+  if (r.extras) partes.push('colecciones, objetivos o Quiero leer');
   if (r.marcadores) partes.push('marcadores');
   const lineas = [partes.length
     ? `Recuperado: ${partes.join(', ')}. Sincroniza para enviarlo a Drive.`

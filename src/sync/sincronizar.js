@@ -327,11 +327,6 @@ async function ejecutar(token, alEstado) {
     }
   }
 
-  for (const p of pendientes.filter((x) => x.tipo === 'bajaLibro')) {
-    await darDeBaja(token, p, remotoPorId);
-    await borrarPendiente(p.clave);
-  }
-
   // id de Drive de la portada que tiene cada libro en este dispositivo.
   const portadasLocales = (await leerSincronizacion('portadasLocales')) || {};
   const portadasViejas = [];
@@ -388,6 +383,14 @@ async function ejecutar(token, alEstado) {
   }
   // Las copias duplicadas ya están fusionadas en el archivo principal.
   for (const d of duplicados) await enviarAPapelera(token, d.id);
+  // Libros eliminados: sus archivos van a la papelera solo cuando la baja ya
+  // consta en biblioteca.json. Si se borraran antes y la sincronización se
+  // cortara, el otro dispositivo vería el libro vivo sin archivo, lo volvería
+  // a subir y el libro reaparecería.
+  for (const p of pendientes.filter((x) => x.tipo === 'bajaLibro')) {
+    await darDeBaja(token, p, remotoPorId);
+    await borrarPendiente(p.clave);
+  }
   // Portadas sustituidas, salvo que la fusión haya mantenido alguna.
   const enUso = new Set(fusionBiblioteca.biblioteca.libros.map((l) => l.portadaDriveId));
   for (const id of new Set(portadasViejas)) {

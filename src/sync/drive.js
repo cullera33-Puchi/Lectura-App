@@ -47,7 +47,7 @@ function esTemporal(estadoHttp, detalle) {
 }
 
 async function peticion(token, url, opciones = {}) {
-  const { limite = LIMITE_CORTO_MS, ...resto } = opciones;
+  const { limite = LIMITE_CORTO_MS, reintentar = true, ...resto } = opciones;
   for (let intento = 1; ; intento += 1) {
     let respuesta;
     try {
@@ -70,9 +70,9 @@ async function peticion(token, url, opciones = {}) {
     } catch {
       // cuerpo vacío o no JSON
     }
-    // Un cuerpo de subida ya consumido no se puede reenviar: solo se reintentan
-    // las peticiones sin cuerpo o con cuerpo de texto.
-    const reintentable = !resto.body || typeof resto.body === 'string';
+    // Texto, Blob y ArrayBuffer se pueden reenviar tal cual. La subida
+    // reanudable no (reintentar: false): se reinicia entera en subirArchivo.
+    const reintentable = reintentar && !(resto.body instanceof ReadableStream);
     if (intento < REINTENTOS && reintentable && esTemporal(respuesta.status, detalle)) {
       await esperar(ESPERA_BASE_MS * 2 ** (intento - 1));
       continue;
@@ -262,24 +262,36 @@ export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propie
     return terminar(r, 'subida simple');
   }
   registrar(`Subiendo ${nombre} (${mb} MB) por partes, con subida reanudable`);
-  const inicio = await peticion(token, `${API_SUBIDA}/files?uploadType=resumable&fields=id,name,size`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=UTF-8',
-      'X-Upload-Content-Type': tipo,
-      'X-Upload-Content-Length': String(tamano),
-    },
-    body: JSON.stringify(metadatos),
-  });
-  const destino = inicio.headers.get('Location');
-  if (!destino) throw new ErrorDrive('Drive no ha devuelto la dirección de subida', 0);
-  const r = await peticion(token, destino, {
-    method: 'PUT',
-    headers: { 'Content-Type': tipo },
-    body: datos,
-    limite: LIMITE_LARGO_MS,
-  });
-  return terminar(r, 'subida reanudable');
+  // Si Drive falla de forma temporal a mitad de subida, se empieza una sesión
+  // nueva (una vez). Un archivo duplicado por ello no hace daño: se usa el
+  // más antiguo.
+  for (let intento = 1; ; intento += 1) {
+    const inicio = await peticion(token, `${API_SUBIDA}/files?uploadType=resumable&fields=id,name,size`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': tipo,
+        'X-Upload-Content-Length': String(tamano),
+      },
+      body: JSON.stringify(metadatos),
+    });
+    const destino = inicio.headers.get('Location');
+    if (!destino) throw new ErrorDrive('Drive no ha devuelto la dirección de subida', 0);
+    try {
+      const r = await peticion(token, destino, {
+        method: 'PUT',
+        headers: { 'Content-Type': tipo },
+        body: datos,
+        limite: LIMITE_LARGO_MS,
+        reintentar: false,
+      });
+      return terminar(r, 'subida reanudable');
+    } catch (e) {
+      if (intento >= 2 || !(e instanceof ErrorDrive) || !esTemporal(e.estadoHttp, e.detalle)) throw e;
+      registrar(`Subida de ${nombre} interrumpida (${e.message}). Se reintenta.`);
+      await esperar(ESPERA_BASE_MS);
+    }
+  }
 }
 
 // Descarga un archivo como ArrayBuffer, avisando del avance (0 a 1).

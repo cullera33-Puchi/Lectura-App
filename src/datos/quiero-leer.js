@@ -2,7 +2,8 @@
 // el usuario. Viaja en biblioteca.json (campo quieroLeer) y, como la lista se
 // ordena a mano, gana entera la versión más reciente.
 
-import { leerAjuste, escribirVarios } from './almacen.js';
+import { leerAjuste, escribirVarios, leerYEscribir } from './almacen.js';
+import { fusionarQuieroLeer } from '../sync/fusion.js';
 import { marcarExtrasPendientes } from './colecciones.js';
 
 const CLAVE = 'quieroLeer';
@@ -11,8 +12,12 @@ export async function leerQuieroLeer() {
   return (await leerAjuste(CLAVE)) || { ids: [], fecha: null };
 }
 
+// Lo fusionado en una sincronización se vuelve a fusionar con lo actual, por
+// si la lista ha cambiado mientras se sincronizaba.
 export async function guardarQuieroLeerFusionado(lista) {
-  await escribirVarios([{ almacen: 'ajustes', valor: lista, clave: CLAVE }]);
+  await leerYEscribir(['ajustes'], 'ajustes', CLAVE, (actual) => ({
+    operaciones: [{ almacen: 'ajustes', valor: fusionarQuieroLeer(actual, lista), clave: CLAVE }],
+  }));
 }
 
 async function guardar(ids) {

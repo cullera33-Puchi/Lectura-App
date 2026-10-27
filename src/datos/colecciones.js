@@ -2,6 +2,7 @@
 // viajan en biblioteca.json; cada cambio queda pendiente de sincronizar.
 
 import { leerAjuste, escribirVarios, leerYEscribir } from './almacen.js';
+import { fusionarColecciones, fusionarObjetivos } from '../sync/fusion.js';
 
 const PENDIENTE_EXTRAS = { clave: 'biblioteca:extras', tipo: 'extras' };
 
@@ -19,8 +20,13 @@ export async function marcarExtrasPendientes() {
   await escribirVarios([pendiente(new Date().toISOString())]);
 }
 
+// Guarda lo fusionado en una sincronización. Se vuelve a fusionar con lo que
+// haya ahora, en la misma transacción: un cambio hecho mientras se
+// sincronizaba no se pierde (gana la fecha más reciente).
 export async function guardarColeccionesFusionadas(colecciones) {
-  await escribirVarios([{ almacen: 'ajustes', valor: colecciones, clave: 'colecciones' }]);
+  await leerYEscribir(['ajustes'], 'ajustes', 'colecciones', (actuales) => ({
+    operaciones: [{ almacen: 'ajustes', valor: fusionarColecciones(actuales || [], colecciones), clave: 'colecciones' }],
+  }));
 }
 
 export async function crearColeccion(nombre) {
@@ -79,7 +85,9 @@ export async function leerObjetivos() {
 }
 
 export async function guardarObjetivosFusionados(objetivos) {
-  await escribirVarios([{ almacen: 'ajustes', valor: objetivos, clave: 'objetivos' }]);
+  await leerYEscribir(['ajustes'], 'ajustes', 'objetivos', (actuales) => ({
+    operaciones: [{ almacen: 'ajustes', valor: fusionarObjetivos(actuales || {}, objetivos), clave: 'objetivos' }],
+  }));
 }
 
 export async function fijarObjetivo(anio, libros) {
