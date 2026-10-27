@@ -17,6 +17,7 @@ Lector EPUB personal para iPhone y tablet de tinta electrónica, con biblioteca 
 - Copia de seguridad: copia diaria en la subcarpeta `copias` de Drive (30 diarias y 12 mensuales), descarga manual y restauración por fusión desde Ajustes. Incluye avances, estadísticas, colecciones, objetivos y marcadores, no los EPUB.
 - v4, parte hecha: búsqueda dentro del libro y marcadores (`anotaciones.json`). Quedan subrayados y notas, exportar a Markdown y diccionario.
 - Mejoras 0.7: barra para recorrer el libro, volver a donde estabas, ajustes de lectura por libro, valoración y nota, lista Quiero leer, aviso de duplicados, meta diaria de minutos y fin previsto.
+- Repaso 0.8: corrección de errores (0.8.0), rendimiento (0.8.1) y usabilidad (0.8.2). Lo pendiente está en el punto 16 del diseño.
 
 ## Pruebas
 
