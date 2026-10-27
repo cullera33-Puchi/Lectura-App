@@ -161,8 +161,11 @@ function alFallarGis(error) {
 
 // Abre la ventana de Google. Llamar sin ningún await previo dentro del gesto.
 export function conectarConVentana() {
+  if (!CONFIG.clientId) {
+    return Promise.reject(new Error('Falta el ID de cliente de Google en config.js. La conexión con Drive no funcionará hasta configurarlo.'));
+  }
   if (!clienteToken) {
-    return Promise.reject(new Error('Google Identity Services no está cargado'));
+    return Promise.reject(new Error('No se ha podido cargar el login de Google. Comprueba la conexión y recarga la página.'));
   }
   if (peticionEnCurso) peticionEnCurso.rechazar(new Error('Sustituida por una nueva petición'));
   const promesa = new Promise((resolver, rechazar) => {
