@@ -210,6 +210,57 @@ export function previsionFin({ msLibro, fraccion, sesiones, ahora = new Date() }
   return { msRestante, dias, fecha: claveDia(fecha), mediaDiaria };
 }
 
+// Detalle de un mes (mejora 21): libros leídos con su tiempo y páginas, días
+// con lectura, reparto por dispositivo y libros terminados. Una sesión cuenta
+// en el mes en que empieza, como en el gráfico de meses. mes: 0 a 11.
+export function detalleMes({ sesiones, terminados, anio, mes }) {
+  const porLibro = new Map();
+  const porDispositivo = new Map();
+  const dias = new Set();
+  let ms = 0;
+  let paginas = 0;
+  for (const s of sesiones) {
+    const duracion = duracionMs(s);
+    const p = Number(s.paginas) || 0;
+    if (!duracion && !p) continue;
+    const fecha = new Date(s.inicio);
+    if (fecha.getFullYear() !== anio || fecha.getMonth() !== mes) continue;
+    ms += duracion;
+    paginas += p;
+    dias.add(claveDia(fecha));
+    const libro = porLibro.get(s.libroId) || { libroId: s.libroId, ms: 0, paginas: 0 };
+    libro.ms += duracion;
+    libro.paginas += p;
+    porLibro.set(s.libroId, libro);
+    const nombre = s.dispositivo || 'Otro dispositivo';
+    porDispositivo.set(nombre, (porDispositivo.get(nombre) || 0) + duracion);
+  }
+  const terminadosMes = terminados
+    .filter((t) => {
+      const f = new Date(t.fecha);
+      return f.getFullYear() === anio && f.getMonth() === mes;
+    })
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const fin = new Map(terminadosMes.map((t) => [t.libroId, t.fecha]));
+  const libros = [...porLibro.values()].map((l) => ({ ...l, terminado: fin.get(l.libroId) || null }));
+  // Terminado ese mes sin sesiones en él (por ejemplo, marcado a mano).
+  for (const t of terminadosMes) {
+    if (!porLibro.has(t.libroId)) libros.push({ libroId: t.libroId, ms: 0, paginas: 0, terminado: t.fecha });
+  }
+  libros.sort((a, b) => b.ms - a.ms || (a.terminado || '').localeCompare(b.terminado || ''));
+  return {
+    anio,
+    mes,
+    nombre: NOMBRES_MES[mes],
+    ms,
+    paginas,
+    dias: dias.size,
+    terminados: terminadosMes.length,
+    libros,
+    dispositivos: [...porDispositivo.entries()].sort((a, b) => b[1] - a[1]).map(([nombre, t]) => ({ nombre, ms: t })),
+  };
+}
+
 const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const FRANJAS = [
   { nombre: 'de madrugada', desde: 0, hasta: 6 },

@@ -2601,6 +2601,16 @@ body[data-perfil="tinta"] .boton-sincronizar.sesion-caducada .indicador {
   gap: 12px;
 }
 
+/* Detalle de un mes: cada libro abre su ficha. */
+.fila-libro-mes .chevron {
+  flex: none;
+  color: var(--texto-3);
+}
+
+body[data-perfil="tinta"] .fila-libro-mes .chevron {
+  color: var(--texto);
+}
+
 .lista-terminados .portada {
   flex: none;
   width: 40px;

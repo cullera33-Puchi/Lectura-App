@@ -438,6 +438,7 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.8.1 | Rendimiento: portadas en paralelo, motor de lectura cargado al abrir el primer libro, menos escrituras al pasar página, búsqueda más rápida, sesiones en memoria y panel "Aa" sin redibujar |
 | 0.8.2 | Usabilidad: controles ocultos al pasar página, teclas y mandos para pasar página, avisos de fallos de sincronización, resumen de sincronización completo, zonas de toque de 44 px, búsqueda vacía con el filtro activo, previsión del objetivo anual y accesibilidad |
 | 0.8.3 | Sincronización sin cambios con 3 peticiones a Drive a la vez (antes, unas 12 una tras otra): la carpeta se recuerda, se lista una sola vez y los JSON que no han cambiado no se descargan. Antes de escribir se sigue leyendo y fusionando |
+| 0.8.4 | Detalle de un mes en Estadísticas (mejora 21): al tocar la barra de un mes, hoja con el tiempo, los días y las páginas del mes, los libros leídos con el tiempo de cada uno, los terminados y el reparto por dispositivo. Cada libro abre su ficha |
 
 ### Mejoras pendientes (numeradas)
 
@@ -450,7 +451,6 @@ Del repaso de la app y nuevas funciones. La numeración se mantiene para poder e
 | 18 | Reloj atrasado en un dispositivo: la posición leída en él puede perder frente a una anterior del otro | Bajo |
 | 19 | Capítulo dañado que bloquea el lector y libros muy ilustrados que superan el tiempo de apertura en la tablet | Medio |
 | 20 | iPhone en horizontal: rebote al deslizar en la penúltima página de un capítulo (pendiente de reproducir) | Bajo |
-| 21 | Detalle de un mes en Estadísticas: al tocar la barra de un mes, una hoja con los libros leídos ese mes, el tiempo dedicado a cada uno y los terminados, sumando los dos dispositivos. Los datos ya existen (sesiones por libro y fechas de fin) | Bajo |
 | 22 | Notas al pie emergentes: al tocar la llamada de una nota, se muestra su texto en una hoja sin salir de la página. Hay que reconocer las notas en los distintos formatos de EPUB (EPUB 3 con `epub:type="noteref"`, Calibre y conversiones de Kindle, notas en otro archivo del libro) y dejar el salto normal cuando no se reconozca | Medio |
 
 ### Ideas a valorar (sin fecha)

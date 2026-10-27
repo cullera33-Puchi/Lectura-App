@@ -26,3 +26,14 @@ ok(c.previsionFin({ msLibro: 5 * 60000, fraccion: 0.4, sesiones: reciente, ahora
 // Una sesión de 23:40 a 00:40 cuenta 20 min el primer día y 40 min el segundo.
 const noche = c.calcularEstadisticas({ sesiones: [{ libroId: 'a', inicio: '2026-10-26T23:40:00', fin: '2026-10-27T00:40:00', paginas: 30 }], terminados: [], objetivo: null, ahora });
 ok(Math.round(noche.hoy.ms / 60000) === 40 && Math.round(noche.semana[0].ms / 60000) === 20, `sesión que pasa la medianoche: ${Math.round(noche.semana[0].ms / 60000)} y ${Math.round(noche.hoy.ms / 60000)} min`);
+
+// Detalle de un mes: libros con su tiempo, días y terminados del mes.
+const dm = c.detalleMes({
+  sesiones: [s('2026-10-01', 30, 10), s('2026-10-02', 20, 8, 'Note Air 4C'), { ...s('2026-10-03', 15, 5), libroId: 'b' }, s('2026-09-30', 40, 12)],
+  terminados: [{ libroId: 'b', fecha: '2026-10-05T20:00:00' }, { libroId: 'c', fecha: '2026-10-20T20:00:00' }, { libroId: 'a', fecha: '2026-11-02T10:00:00' }],
+  anio: 2026,
+  mes: 9,
+});
+ok(Math.round(dm.ms / 60000) === 65 && dm.dias === 3 && dm.paginas === 23, `detalle del mes: totales (${Math.round(dm.ms / 60000)} min, ${dm.dias} días)`);
+ok(dm.libros.map((l) => l.libroId).join() === 'a,b,c' && Math.round(dm.libros[0].ms / 60000) === 50 && dm.libros[1].terminado && !dm.libros[0].terminado, 'detalle del mes: libros por tiempo y terminados');
+ok(dm.terminados === 2 && dm.dispositivos.length === 2 && dm.nombre === 'octubre', 'detalle del mes: terminados, dispositivos y nombre');

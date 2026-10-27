@@ -4,6 +4,7 @@
 
 import { obtenerEstadisticas } from './datos.js';
 import { mostrarResumenAnual } from './resumen.js';
+import { mostrarDetalleMes } from './mes.js';
 import { formatoDuracion } from './calculo.js';
 import { fijarObjetivo, fijarMetaDiaria } from '../datos/colecciones.js';
 import { pedirNumero } from '../ui/hoja.js';
@@ -31,8 +32,9 @@ function cabecera(texto) {
 }
 
 // Gráfico de barras de una serie. Tocar una barra muestra su valor en la línea
-// de detalle; sin tocar, la línea muestra el resumen.
-function graficoBarras(datos, { resumen, formato }) {
+// de detalle; sin tocar, la línea muestra el resumen. alPulsar(d): además,
+// abre el detalle de esa barra (los meses).
+function graficoBarras(datos, { resumen, formato, alPulsar }) {
   const grafico = el('div', 'grafico');
   const detalle = el('p', 'grafico-detalle', resumen);
   const barras = el('div', 'grafico-barras');
@@ -58,6 +60,7 @@ function graficoBarras(datos, { resumen, formato }) {
       seleccionada = barra;
       barra.classList.add('seleccionada');
       detalle.textContent = `${d.descripcion}: ${formato(d.valor)}`;
+      if (alPulsar && !d.futuro) alPulsar(d);
     });
     barras.appendChild(barra);
     etiquetas.appendChild(el('span', '', d.etiqueta));
@@ -200,13 +203,14 @@ export async function pintarEstadisticas() {
     cifra(String(e.delAnio.terminados), e.delAnio.terminados === 1 ? 'libro terminado' : 'libros terminados'),
   );
   anio.appendChild(el('p', 'grafico-titulo', 'Tiempo de lectura por mes'));
-  anio.appendChild(graficoBarras(e.meses.map((m) => ({
-    etiqueta: m.etiqueta, valor: m.ms, futuro: m.futuro, descripcion: m.nombre,
-  })), { resumen: 'Toca un mes para ver su tiempo.', formato: formatoDuracion }));
+  const verMes = (d) => mostrarDetalleMes(e.anio, d.mes).catch((error) => registrar(`Detalle del mes: ${error.message}`, 'error'));
+  anio.appendChild(graficoBarras(e.meses.map((m, i) => ({
+    etiqueta: m.etiqueta, valor: m.ms, futuro: m.futuro, descripcion: m.nombre, mes: i,
+  })), { resumen: 'Toca un mes para ver sus libros y tiempos.', formato: formatoDuracion, alPulsar: verMes }));
   anio.appendChild(el('p', 'grafico-titulo', 'Libros terminados por mes'));
-  anio.appendChild(graficoBarras(e.meses.map((m) => ({
-    etiqueta: m.etiqueta, valor: m.terminados, futuro: m.futuro, descripcion: m.nombre,
-  })), { resumen: 'Toca un mes para ver cuántos.', formato: (n) => plural(n, 'libro', 'libros') }));
+  anio.appendChild(graficoBarras(e.meses.map((m, i) => ({
+    etiqueta: m.etiqueta, valor: m.terminados, futuro: m.futuro, descripcion: m.nombre, mes: i,
+  })), { resumen: 'Toca un mes para ver sus libros.', formato: (n) => plural(n, 'libro', 'libros'), alPulsar: verMes }));
   anio.appendChild(botonResumen(e.anio));
   partes.push(anio);
 
