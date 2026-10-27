@@ -1,50 +1,65 @@
 // Fusión de los JSON de Drive con los datos locales (punto 10 del diseño).
 // Funciones puras: no leen ni escriben nada.
+//
+// Los campos que esta versión no conoce se conservan, para no borrar lo que
+// escriba una versión posterior de la app.
 
 export const VERSION_BIBLIOTECA = 1;
 export const VERSION_PROGRESO = 1;
 
-// Campos de un libro que viajan en biblioteca.json. Los demás son locales.
+// Campos locales de un libro que no viajan a biblioteca.json.
+const CAMPOS_SOLO_LOCALES = ['noDisponible', 'progreso', 'descargado', 'pendienteSubir'];
+// Campos de un libro que se completan si una de las dos versiones los tiene vacíos.
 const CAMPOS_LIBRO = [
   'id', 'titulo', 'autor', 'idioma', 'identificadorEpub', 'serie', 'numeroSerie',
   'archivoDriveId', 'portadaDriveId', 'tamanoBytes', 'fechaAlta', 'eliminado', 'fechaModificacion',
 ];
-const CAMPOS_PROGRESO = ['cfi', 'porcentaje', 'capitulo', 'estado', 'dispositivo', 'fecha'];
+const CAMPOS_PROGRESO = ['cfi', 'porcentaje', 'capitulo', 'estado', 'dispositivo', 'dispositivoId', 'fecha'];
 
-function elegir(objeto, campos) {
-  const r = {};
-  for (const c of campos) r[c] = objeto[c] ?? null;
-  r.eliminado = Boolean(objeto.eliminado);
-  return r;
-}
+const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 
-export function libroRemoto(libro) {
-  return elegir(libro, CAMPOS_LIBRO);
-}
-
-function progresoRemoto(p) {
-  const r = {};
-  for (const c of CAMPOS_PROGRESO) r[c] = p[c] ?? null;
-  return r;
+function ordenarClaves(objeto) {
+  return Object.fromEntries(Object.keys(objeto).sort().map((k) => [k, objeto[k]]));
 }
 
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-// Prepara los JSON remotos y aplica migraciones de esquema si las hubiera.
+export function libroRemoto(libro) {
+  const r = { ...libro };
+  for (const c of CAMPOS_SOLO_LOCALES) delete r[c];
+  for (const c of CAMPOS_LIBRO) r[c] = r[c] ?? null;
+  r.eliminado = Boolean(r.eliminado);
+  return ordenarClaves(r);
+}
+
+function progresoRemoto(p) {
+  const r = { ...p };
+  delete r.id;
+  for (const c of CAMPOS_PROGRESO) r[c] = r[c] ?? null;
+  return ordenarClaves(r);
+}
+
+function versionNoSoportada(nombre) {
+  return new Error(`${nombre} es de una versión más nueva de la app. Actualiza la app en este dispositivo.`);
+}
+
+// Prepara los JSON remotos. Las entradas mal formadas se descartan.
 export function normalizarBiblioteca(datos) {
-  if (!datos || typeof datos !== 'object') return { version: VERSION_BIBLIOTECA, libros: [] };
-  if ((datos.version ?? 1) > VERSION_BIBLIOTECA) {
-    throw new Error('biblioteca.json es de una versión más nueva de la app. Actualiza la app en este dispositivo.');
-  }
-  return { version: VERSION_BIBLIOTECA, libros: Array.isArray(datos.libros) ? datos.libros : [] };
+  if (!esObjeto(datos)) return { version: VERSION_BIBLIOTECA, libros: [] };
+  if ((Number(datos.version) || 1) > VERSION_BIBLIOTECA) throw versionNoSoportada('biblioteca.json');
+  const libros = (Array.isArray(datos.libros) ? datos.libros : [])
+    .filter((l) => esObjeto(l) && typeof l.id === 'string' && l.id);
+  return { ...datos, version: VERSION_BIBLIOTECA, libros };
 }
 
 export function normalizarProgreso(datos) {
-  if (!datos || typeof datos !== 'object') return { version: VERSION_PROGRESO, progreso: {} };
-  if ((datos.version ?? 1) > VERSION_PROGRESO) {
-    throw new Error('progreso.json es de una versión más nueva de la app. Actualiza la app en este dispositivo.');
+  if (!esObjeto(datos)) return { version: VERSION_PROGRESO, progreso: {} };
+  if ((Number(datos.version) || 1) > VERSION_PROGRESO) throw versionNoSoportada('progreso.json');
+  const progreso = {};
+  for (const [id, entrada] of Object.entries(esObjeto(datos.progreso) ? datos.progreso : {})) {
+    if (esObjeto(entrada)) progreso[id] = entrada;
   }
-  return { version: VERSION_PROGRESO, progreso: { ...(datos.progreso || {}) } };
+  return { ...datos, version: VERSION_PROGRESO, progreso };
 }
 
 // Une dos versiones del mismo libro. Gana la fechaModificacion más reciente;
@@ -53,17 +68,18 @@ export function normalizarProgreso(datos) {
 function unirLibro(local, remoto) {
   const fl = local.fechaModificacion || '';
   const fr = remoto.fechaModificacion || '';
-  const [gana, pierde] = fl > fr ? [local, remoto] : (fr > fl ? [remoto, local] : [local, remoto]);
-  const r = { ...gana };
-  if (fl === fr) {
-    for (const c of CAMPOS_LIBRO) if (r[c] == null && pierde[c] != null) r[c] = pierde[c];
-    r.eliminado = Boolean(local.eliminado || remoto.eliminado);
-  }
-  return r;
+  if (fl > fr) return { ...remoto, ...local };
+  if (fr > fl) return { ...local, ...remoto };
+  const r = { ...remoto, ...local };
+  for (const c of Object.keys(r)) if (r[c] == null && remoto[c] != null) r[c] = remoto[c];
+  r.eliminado = Boolean(local.eliminado || remoto.eliminado);
+  return ordenarClaves(r);
 }
 
-// local: registros de libros locales (incluidos los eliminados).
-// remoto: biblioteca.json normalizado.
+const porFechaAlta = (a, b) => (a.fechaAlta || '').localeCompare(b.fechaAlta || '') || a.id.localeCompare(b.id);
+
+// local: registros de libros locales que deben estar en Drive (incluidos los
+// eliminados). remoto: biblioteca.json normalizado.
 // Devuelve la biblioteca fusionada, los cambios a aplicar en local y si hay
 // que escribir el archivo remoto.
 export function fusionarBiblioteca(local, remoto) {
@@ -72,46 +88,54 @@ export function fusionarBiblioteca(local, remoto) {
   const ids = new Set([...porIdLocal.keys(), ...porIdRemoto.keys()]);
 
   const libros = [];
-  const cambiosLocales = []; // { libro, tipo: 'nuevo' | 'baja' | 'actualizado' }
+  const cambiosLocales = []; // { libro, tipo: 'nuevo' | 'baja' | 'baja-desconocida' | 'recuperado' | 'actualizado' }
   for (const id of ids) {
     const l = porIdLocal.get(id);
     const r = porIdRemoto.get(id);
-    const resultado = l && r ? unirLibro(l, r) : (l || r);
+    const resultado = ordenarClaves(l && r ? unirLibro(l, r) : (l || r));
     libros.push(resultado);
     if (!l) {
       cambiosLocales.push({ libro: resultado, tipo: resultado.eliminado ? 'baja-desconocida' : 'nuevo' });
     } else if (!igual(l, resultado)) {
-      const tipo = resultado.eliminado && !l.eliminado ? 'baja' : (!resultado.eliminado && l.eliminado ? 'recuperado' : 'actualizado');
+      let tipo = 'actualizado';
+      if (resultado.eliminado && !l.eliminado) tipo = 'baja';
+      else if (!resultado.eliminado && l.eliminado) tipo = 'recuperado';
       cambiosLocales.push({ libro: resultado, tipo });
     }
   }
-  libros.sort((a, b) => (a.fechaAlta || '').localeCompare(b.fechaAlta || '') || a.id.localeCompare(b.id));
-  const resultado = { version: VERSION_BIBLIOTECA, libros };
-  const remotoOrdenado = [...porIdRemoto.values()]
-    .sort((a, b) => (a.fechaAlta || '').localeCompare(b.fechaAlta || '') || a.id.localeCompare(b.id));
+  libros.sort(porFechaAlta);
+  const remotoOrdenado = [...porIdRemoto.values()].sort(porFechaAlta);
   return {
-    biblioteca: resultado,
+    biblioteca: { ...remoto, version: VERSION_BIBLIOTECA, libros },
     cambiosLocales,
     escribirRemoto: !igual(remotoOrdenado, libros),
   };
 }
 
 // local: registros de progreso locales. remoto: progreso.json normalizado.
-// Libro a libro gana la entrada con la fecha más reciente.
+// Libro a libro gana la entrada con la fecha más reciente. Con la misma fecha,
+// se completan los campos vacíos (por ejemplo, el porcentaje calculado después).
+// Las entradas locales sin fecha (provisionales) no se envían.
 export function fusionarProgreso(local, remoto) {
   const progreso = {};
   for (const [id, entrada] of Object.entries(remoto.progreso)) progreso[id] = progresoRemoto(entrada);
   const remotoOriginal = JSON.parse(JSON.stringify(progreso));
   for (const p of local) {
     if (!p.fecha) continue;
+    const propia = progresoRemoto(p);
     const actual = progreso[p.id];
-    if (!actual || p.fecha > (actual.fecha || '')) progreso[p.id] = progresoRemoto(p);
+    if (!actual || p.fecha > (actual.fecha || '')) {
+      progreso[p.id] = propia;
+    } else if (p.fecha === actual.fecha) {
+      const unida = { ...actual };
+      for (const c of Object.keys(propia)) if (unida[c] == null && propia[c] != null) unida[c] = propia[c];
+      progreso[p.id] = unida;
+    }
   }
-  const ordenado = Object.fromEntries(Object.keys(progreso).sort().map((k) => [k, progreso[k]]));
-  const remotoOrdenado = Object.fromEntries(Object.keys(remotoOriginal).sort().map((k) => [k, remotoOriginal[k]]));
+  const ordenado = ordenarClaves(progreso);
   return {
-    progreso: { version: VERSION_PROGRESO, progreso: ordenado },
-    escribirRemoto: !igual(ordenado, remotoOrdenado),
+    progreso: { ...remoto, version: VERSION_PROGRESO, progreso: ordenado },
+    escribirRemoto: !igual(ordenado, ordenarClaves(remotoOriginal)),
   };
 }
 
@@ -125,4 +149,18 @@ export function posicionesNuevas(progresoFusionado, local, copiaAnterior) {
     if ((e.fecha || '') > conocida) n += 1;
   }
   return n;
+}
+
+// Une varios biblioteca.json (por ejemplo, si los dos dispositivos crearon el
+// archivo a la vez y hay dos con el mismo nombre).
+export function unirBibliotecas(lista) {
+  return lista.reduce((acumulada, otra) => fusionarBiblioteca(acumulada.libros, otra).biblioteca,
+    normalizarBiblioteca(null));
+}
+
+export function unirProgresos(lista) {
+  return lista.reduce((acumulado, otro) => {
+    const locales = Object.entries(acumulado.progreso).map(([id, p]) => ({ ...p, id }));
+    return fusionarProgreso(locales, otro).progreso;
+  }, normalizarProgreso(null));
 }
