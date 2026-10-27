@@ -19,6 +19,7 @@ import {
 } from '../datos/colecciones.js';
 import { editarLibro } from './editar.js';
 import { mostrarFichaLibro } from './ficha.js';
+import { gruposDuplicados, leerIgnorados, revisarDuplicados } from './duplicados.js';
 import { leerQuieroLeer, alternarQuieroLeer, estaEnQuieroLeer } from '../datos/quiero-leer.js';
 import { mostrarAviso } from '../ui/aviso.js';
 import { svgIcono } from '../ui/iconos.js';
@@ -225,7 +226,18 @@ export async function pintarBiblioteca(libros) {
 
   const enNube = todos.filter((l) => !l.descargado && !l.noDisponible && l.archivoDriveId);
   $('btn-descargar-todos').hidden = !enLista || enNube.length === 0;
+  await pintarAvisoDuplicados(todos);
 }
+
+// Aviso de libros que parecen el mismo importado dos veces. No se muestra
+// mientras se busca o se mira una colección.
+async function pintarAvisoDuplicados(todos) {
+  const n = gruposDuplicados(todos, await leerIgnorados()).length;
+  const aviso = $('aviso-duplicados');
+  aviso.hidden = n === 0 || Boolean(busqueda) || Boolean(vista.grupo);
+  $('texto-duplicados').textContent = n === 1 ? 'Un libro parece estar dos veces' : `${n} libros parecen estar repetidos`;
+}
+
 
 // --- Series y colecciones ---
 
@@ -382,7 +394,7 @@ export function pulsarLibro(libro) {
 }
 
 async function importar(archivos) {
-  const resumen = { importados: 0, duplicados: [], errores: [] };
+  const resumen = { importados: 0, nuevos: [], duplicados: [], errores: [] };
   let n = 0;
   for (const archivo of archivos) {
     n += 1;
@@ -391,6 +403,7 @@ async function importar(archivos) {
       const r = await importarArchivo(archivo);
       if (r.resultado === 'importado') {
         resumen.importados += 1;
+        resumen.nuevos.push(r.libro.id);
         registrar(`Importado "${r.libro.titulo}" (${r.libro.id.slice(0, 12)})`);
       } else if (r.resultado === 'duplicado') {
         resumen.duplicados.push(r.libro.titulo);
@@ -409,6 +422,15 @@ async function importar(archivos) {
     lineas.push(`${resumen.importados === 1 ? '1 libro añadido' : `${resumen.importados} libros añadidos`}. Se subirá a Drive al sincronizar.`);
   }
   for (const t of resumen.duplicados) lineas.push(`"${t}" ya está en la biblioteca. No se ha duplicado.`);
+  if (resumen.importados) {
+    const grupos = gruposDuplicados(await librosParaMostrar(), await leerIgnorados());
+    const nuevos = resumen.nuevos.filter((id) => grupos.some((g) => g.libros.some((l) => l.id === id)));
+    if (nuevos.length) {
+      lineas.push(nuevos.length === 1
+        ? 'El libro añadido parece otra copia de uno que ya tenías. Revísalo en el aviso de la biblioteca.'
+        : `${nuevos.length} de los libros añadidos parecen copias de otros que ya tenías. Revísalos en el aviso de la biblioteca.`);
+    }
+  }
   lineas.push(...resumen.errores);
   mostrarMensaje(lineas.join('\n'), resumen.errores.length > 0);
   await refrescar();
@@ -510,6 +532,7 @@ export async function prepararBiblioteca(opciones) {
   $('btn-ordenar').addEventListener('click', elegirOrden);
   $('btn-colecciones').addEventListener('click', elegirGrupo);
   $('btn-gestionar-grupo').addEventListener('click', gestionarColeccion);
+  $('aviso-duplicados').addEventListener('click', () => revisarDuplicados(librosParaMostrar, () => refrescar()));
   $('btn-quitar-grupo').addEventListener('click', async () => {
     vista.grupo = null;
     await guardarAjuste('vistaBiblioteca', { ...vista });
