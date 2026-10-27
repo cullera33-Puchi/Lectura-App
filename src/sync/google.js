@@ -12,7 +12,12 @@ import { registrar } from '../ui/registro.js';
 
 export const PERMISO_DRIVE = 'https://www.googleapis.com/auth/drive.file';
 const URL_GIS = 'https://accounts.google.com/gsi/client';
-const MARGEN_CADUCIDAD_MS = 60 * 1000;
+// Se renueva el token si le quedan menos de 10 minutos, para que no caduque a
+// mitad de una sincronización larga (la renovación necesita el gesto del usuario).
+const MARGEN_CADUCIDAD_MS = 10 * 60 * 1000;
+// Si la ventana de Google se cierra sin avisar (puede pasar en iOS), la espera
+// del token se corta pasado este tiempo.
+const ESPERA_MAXIMA_VENTANA_MS = 3 * 60 * 1000;
 
 const estado = {
   token: null,
@@ -85,20 +90,37 @@ export async function iniciarSesionGoogle() {
     registrar('Falta el ID de cliente OAuth en config.js', 'error');
     return;
   }
-  try {
-    await cargarGis();
-    clienteToken = google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.clientId,
-      scope: PERMISO_DRIVE,
-      callback: alRecibirRespuestaGis,
-      error_callback: alFallarGis,
+  await prepararClienteGis();
+  // Si se arrancó sin conexión, se vuelve a intentar al recuperarla o al
+  // volver a la app (en modo instalado no hay botón de recargar).
+  window.addEventListener('online', prepararClienteGis);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') prepararClienteGis();
+  });
+}
+
+let preparando = null;
+
+function prepararClienteGis() {
+  if (clienteToken || !CONFIG.clientId || !navigator.onLine) return Promise.resolve();
+  if (preparando) return preparando;
+  preparando = cargarGis()
+    .then(() => {
+      clienteToken = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.clientId,
+        scope: PERMISO_DRIVE,
+        callback: alRecibirRespuestaGis,
+        error_callback: alFallarGis,
+      });
+      estado.gisCargada = true;
+      registrar('Google Identity Services cargado');
+    })
+    .catch((e) => registrar(`No se pudo cargar Google Identity Services: ${e.message}`, 'error'))
+    .finally(() => {
+      preparando = null;
+      avisar();
     });
-    estado.gisCargada = true;
-    registrar('Google Identity Services cargado');
-  } catch (e) {
-    registrar(`No se pudo cargar Google Identity Services: ${e.message}`, 'error');
-  }
-  avisar();
+  return preparando;
 }
 
 function cargarGis() {
@@ -108,7 +130,10 @@ function cargarGis() {
     script.src = URL_GIS;
     script.async = true;
     script.onload = () => resolver();
-    script.onerror = () => rechazar(new Error('sin conexión o bloqueado'));
+    script.onerror = () => {
+      script.remove(); // permite reintentarlo más tarde
+      rechazar(new Error('sin conexión o bloqueado'));
+    };
     document.head.appendChild(script);
   });
 }
@@ -150,11 +175,25 @@ export function conectarConVentana() {
     return Promise.reject(new Error('Falta el ID de cliente de Google en config.js. La conexión con Drive no funcionará hasta configurarlo.'));
   }
   if (!clienteToken) {
-    return Promise.reject(new Error('No se ha podido cargar el login de Google. Comprueba la conexión y recarga la página.'));
+    prepararClienteGis();
+    return Promise.reject(new Error(navigator.onLine
+      ? 'El login de Google todavía se está cargando. Inténtalo de nuevo en unos segundos.'
+      : 'Sin conexión. Se sincronizará cuando vuelvas a pulsar con conexión.'));
   }
   if (peticionEnCurso) peticionEnCurso.rechazar(new Error('Sustituida por una nueva petición'));
   const promesa = new Promise((resolver, rechazar) => {
-    peticionEnCurso = { resolver, rechazar };
+    const temporizador = setTimeout(() => {
+      if (peticionEnCurso?.temporizador !== temporizador) return;
+      peticionEnCurso = null;
+      anotarIntento('sin respuesta de la ventana');
+      rechazar(new Error('La ventana de Google no ha respondido. Inténtalo de nuevo.'));
+      avisar();
+    }, ESPERA_MAXIMA_VENTANA_MS);
+    peticionEnCurso = {
+      temporizador,
+      resolver: (v) => { clearTimeout(temporizador); resolver(v); },
+      rechazar: (e) => { clearTimeout(temporizador); rechazar(e); },
+    };
   });
   registrar(estado.token ? 'Renovando el token con la ventana de Google' : 'Abriendo la ventana de Google');
   const opciones = { prompt: '' };

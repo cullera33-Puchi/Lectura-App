@@ -7,44 +7,76 @@ const TIPO_CARPETA = 'application/vnd.google-apps.folder';
 export const NOMBRE_CARPETA = 'Lector EPUB';
 const MARCA_APP = { clave: 'app', valor: 'lector-epub' };
 
+// Tiempo máximo de una petición: corto para metadatos y JSON, largo para
+// subir o descargar libros (hasta unos 10 MB por red móvil).
+const LIMITE_CORTO_MS = 30 * 1000;
+const LIMITE_LARGO_MS = 5 * 60 * 1000;
+// Reintentos ante errores temporales de Google (429 y 5xx), con espera creciente.
+const REINTENTOS = 3;
+const ESPERA_BASE_MS = 1000;
+
 export class ErrorDrive extends Error {
   constructor(mensaje, estadoHttp, detalle) {
     super(mensaje);
     this.estadoHttp = estadoHttp;
     this.detalle = detalle;
   }
+
+  get motivo() {
+    return this.detalle?.error?.errors?.[0]?.reason || '';
+  }
 }
 
 function mensajeError(estadoHttp, detalle) {
   const motivo = detalle?.error?.errors?.[0]?.reason || '';
-  if (estadoHttp === 401) return 'La sesión de Google ha caducado o no es válida';
+  if (estadoHttp === 401) return 'La sesión de Google ha caducado o no es válida. Pulsa de nuevo para renovarla.';
   if (motivo === 'storageQuotaExceeded') return 'La cuota de Google Drive está llena';
   if (estadoHttp === 403) return `Drive ha denegado la operación (${motivo || 'sin motivo'})`;
   if (estadoHttp === 404) return 'El archivo ya no existe en Drive';
+  if (estadoHttp === 429 || estadoHttp >= 500) return 'Google Drive no responde ahora mismo. Inténtalo dentro de un momento.';
   return `Error de Drive ${estadoHttp}${detalle?.error?.message ? `: ${detalle.error.message}` : ''}`;
 }
 
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function esTemporal(estadoHttp, detalle) {
+  const motivo = detalle?.error?.errors?.[0]?.reason || '';
+  return estadoHttp === 429 || estadoHttp >= 500 || motivo === 'rateLimitExceeded' || motivo === 'userRateLimitExceeded';
+}
+
 async function peticion(token, url, opciones = {}) {
-  let respuesta;
-  try {
-    respuesta = await fetch(url, {
-      ...opciones,
-      cache: 'no-store',
-      headers: { Authorization: `Bearer ${token}`, ...opciones.headers },
-    });
-  } catch (e) {
-    throw new ErrorDrive(navigator.onLine ? `No se pudo contactar con Drive (${e.message})` : 'Sin conexión', 0);
-  }
-  if (!respuesta.ok) {
+  const { limite = LIMITE_CORTO_MS, ...resto } = opciones;
+  for (let intento = 1; ; intento += 1) {
+    let respuesta;
+    try {
+      respuesta = await fetch(url, {
+        ...resto,
+        cache: 'no-store',
+        signal: AbortSignal.timeout ? AbortSignal.timeout(limite) : undefined,
+        headers: { Authorization: `Bearer ${token}`, ...resto.headers },
+      });
+    } catch (e) {
+      if (!navigator.onLine) throw new ErrorDrive('Sin conexión', 0);
+      const agotado = e.name === 'TimeoutError' || e.name === 'AbortError';
+      throw new ErrorDrive(agotado ? 'Google Drive tarda demasiado en responder. Inténtalo de nuevo.'
+        : `No se pudo contactar con Drive (${e.message})`, 0);
+    }
+    if (respuesta.ok) return respuesta;
     let detalle = null;
     try {
       detalle = await respuesta.json();
     } catch {
       // cuerpo vacío o no JSON
     }
+    // Un cuerpo de subida ya consumido no se puede reenviar: solo se reintentan
+    // las peticiones sin cuerpo o con cuerpo de texto.
+    const reintentable = !resto.body || typeof resto.body === 'string';
+    if (intento < REINTENTOS && reintentable && esTemporal(respuesta.status, detalle)) {
+      await esperar(ESPERA_BASE_MS * 2 ** (intento - 1));
+      continue;
+    }
     throw new ErrorDrive(mensajeError(respuesta.status, detalle), respuesta.status, detalle);
   }
-  return respuesta;
 }
 
 function literal(texto) {
@@ -52,15 +84,23 @@ function literal(texto) {
 }
 
 async function buscar(token, consulta, campos = 'id,name,createdTime,modifiedTime') {
-  const parametros = new URLSearchParams({
-    q: consulta,
-    fields: `files(${campos})`,
-    orderBy: 'createdTime',
-    spaces: 'drive',
-    pageSize: '10',
-  });
-  const r = await peticion(token, `${API}/files?${parametros}`);
-  return (await r.json()).files || [];
+  const resultados = [];
+  let pagina = null;
+  do {
+    const parametros = new URLSearchParams({
+      q: consulta,
+      fields: `nextPageToken,files(${campos})`,
+      orderBy: 'createdTime',
+      spaces: 'drive',
+      pageSize: '1000',
+    });
+    if (pagina) parametros.set('pageToken', pagina);
+    const r = await peticion(token, `${API}/files?${parametros}`);
+    const datos = await r.json();
+    resultados.push(...(datos.files || []));
+    pagina = datos.nextPageToken;
+  } while (pagina);
+  return resultados;
 }
 
 export async function obtenerUsuario(token) {
@@ -92,15 +132,69 @@ export async function localizarCarpeta(token) {
   return { carpeta: await r.json(), creada: true, total: 1 };
 }
 
-export async function buscarArchivo(token, carpetaId, nombre) {
-  const consulta = `name = ${literal(nombre)} and ${literal(carpetaId)} in parents and trashed = false`;
-  const encontrados = await buscar(token, consulta);
-  return encontrados[0] || null;
+// Subcarpeta de la app (libros o portadas), localizada por su marca dentro de la raíz.
+export async function localizarSubcarpeta(token, raizId, tipo) {
+  const consulta = [
+    `mimeType = ${literal(TIPO_CARPETA)}`,
+    `${literal(raizId)} in parents`,
+    `appProperties has { key='tipo' and value=${literal(tipo)} }`,
+    'trashed = false',
+  ].join(' and ');
+  const encontradas = await buscar(token, consulta);
+  if (encontradas.length) return encontradas[0];
+  const r = await peticion(token, `${API}/files?fields=id,name,createdTime`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({
+      name: tipo,
+      mimeType: TIPO_CARPETA,
+      parents: [raizId],
+      appProperties: { [MARCA_APP.clave]: MARCA_APP.valor, tipo },
+    }),
+  });
+  return r.json();
 }
 
+// Todos los archivos con ese nombre, del más antiguo al más reciente.
+export function buscarArchivos(token, carpetaId, nombre) {
+  const consulta = `name = ${literal(nombre)} and ${literal(carpetaId)} in parents and trashed = false`;
+  return buscar(token, consulta);
+}
+
+export async function buscarArchivo(token, carpetaId, nombre) {
+  return (await buscarArchivos(token, carpetaId, nombre))[0] || null;
+}
+
+// Nombres de los archivos (no en la papelera) de una carpeta.
+export async function nombresEnCarpeta(token, carpetaId) {
+  const consulta = `${literal(carpetaId)} in parents and trashed = false`;
+  return new Set((await buscar(token, consulta, 'id,name')).map((a) => a.name));
+}
+
+export async function obtenerMetadatos(token, archivoId) {
+  const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?fields=id,name,modifiedTime,trashed`);
+  return r.json();
+}
+
+export class ErrorJsonIlegible extends Error {}
+
+// Lee un JSON de Drive. Si el contenido no es JSON válido, lanza ErrorJsonIlegible.
 export async function leerJson(token, archivoId) {
   const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?alt=media`);
-  return r.json();
+  const texto = await r.text();
+  try {
+    return JSON.parse(texto);
+  } catch {
+    throw new ErrorJsonIlegible('El archivo de Drive está dañado');
+  }
+}
+
+export async function renombrar(token, archivoId, nombre) {
+  await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?fields=id`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({ name: nombre }),
+  });
 }
 
 export async function crearJson(token, carpetaId, nombre, datos) {
@@ -136,39 +230,6 @@ export async function actualizarJson(token, archivoId, datos) {
   return r.json();
 }
 
-// Subcarpeta de la app (libros o portadas), localizada por su marca dentro de la raíz.
-export async function localizarSubcarpeta(token, raizId, tipo) {
-  const consulta = [
-    `mimeType = ${literal(TIPO_CARPETA)}`,
-    `${literal(raizId)} in parents`,
-    `appProperties has { key='tipo' and value=${literal(tipo)} }`,
-    'trashed = false',
-  ].join(' and ');
-  const encontradas = await buscar(token, consulta);
-  if (encontradas.length) return encontradas[0];
-  const r = await peticion(token, `${API}/files?fields=id,name,createdTime`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-    body: JSON.stringify({
-      name: tipo,
-      mimeType: TIPO_CARPETA,
-      parents: [raizId],
-      appProperties: { [MARCA_APP.clave]: MARCA_APP.valor, tipo },
-    }),
-  });
-  return r.json();
-}
-
-export async function existeArchivo(token, archivoId) {
-  try {
-    const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?fields=id,trashed`);
-    return !(await r.json()).trashed;
-  } catch (e) {
-    if (e.estadoHttp === 404) return false;
-    throw e;
-  }
-}
-
 const LIMITE_MULTIPART = 4 * 1024 * 1024;
 
 // Sube un archivo binario. Hasta 4 MB en una petición; por encima, con subida
@@ -188,6 +249,7 @@ export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propie
       method: 'POST',
       headers: { 'Content-Type': `multipart/related; boundary=${separador}` },
       body: cuerpo,
+      limite: LIMITE_LARGO_MS,
     });
     return r.json();
   }
@@ -206,13 +268,14 @@ export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propie
     method: 'PUT',
     headers: { 'Content-Type': tipo },
     body: datos,
+    limite: LIMITE_LARGO_MS,
   });
   return r.json();
 }
 
 // Descarga un archivo como ArrayBuffer, avisando del avance (0 a 1).
 export async function descargarArchivo(token, archivoId, tamanoEsperado, alAvanzar) {
-  const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?alt=media`);
+  const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?alt=media`, { limite: LIMITE_LARGO_MS });
   const total = Number(r.headers.get('Content-Length')) || tamanoEsperado || 0;
   if (!r.body || !total || !alAvanzar) return r.arrayBuffer();
   const lector = r.body.getReader();
@@ -225,13 +288,7 @@ export async function descargarArchivo(token, archivoId, tamanoEsperado, alAvanz
     recibido += value.byteLength;
     alAvanzar(Math.min(1, recibido / total));
   }
-  const resultado = new Uint8Array(recibido);
-  let posicion = 0;
-  for (const t of trozos) {
-    resultado.set(t, posicion);
-    posicion += t.byteLength;
-  }
-  return resultado.buffer;
+  return new Blob(trozos).arrayBuffer();
 }
 
 // Envía a la papelera de Drive. Si ya no existe, no es un error.
