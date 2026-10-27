@@ -228,3 +228,21 @@ export function guardarEdicion(id, edicion) {
     };
   });
 }
+
+// Valoración personal (punto 5): estrellas de 1 a 5 y una nota breve. Viaja
+// en biblioteca.json con el resto de datos del libro.
+export function valorarLibro(id, cambios) {
+  const fecha = new Date().toISOString();
+  return leerYEscribir(['libros', 'pendientes'], 'libros', id, (libro) => {
+    if (!libro) return null;
+    const valoracion = { ...(libro.valoracion || {}), ...cambios, fecha };
+    const nuevo = { ...libro, valoracion, fechaModificacion: fecha };
+    return {
+      operaciones: [
+        { almacen: 'libros', valor: nuevo },
+        { almacen: 'pendientes', valor: { clave: `metadatos:${id}`, tipo: 'metadatos', id, fecha } },
+      ],
+      resultado: nuevo,
+    };
+  });
+}

@@ -87,7 +87,8 @@ export async function mostrarResumenAnual(anio) {
       const libro = porId.get(t.libroId) || { id: t.libroId, titulo: titulo(t.libroId) };
       const fila = el('div', 'fila');
       const texto = el('div', 't-texto');
-      texto.append(el('div', 't-titulo', libro.titulo), el('div', 't-fecha', fechaCorta(t.fecha)));
+      const estrellas = libro.valoracion?.estrellas;
+      texto.append(el('div', 't-titulo', libro.titulo), el('div', 't-fecha', `${fechaCorta(t.fecha)}${estrellas ? `. ${'★'.repeat(estrellas)}` : ''}`));
       fila.append(await crearPortada(libro), texto);
       lista.appendChild(fila);
     }

@@ -4,6 +4,8 @@
 // del EPUB al importarlo y viajan en biblioteca.json.
 
 import { leerColecciones } from '../datos/colecciones.js';
+import { valorarLibro } from '../datos/libros.js';
+import { mostrarFormulario } from '../ui/hoja.js';
 import { todasLasSesiones } from '../estadisticas/datos.js';
 import { resumenLibro, formatoDuracion } from '../estadisticas/calculo.js';
 import { completarEdicion } from './importar.js';
@@ -57,7 +59,63 @@ function cabecera(texto) {
   return el('h3', 'cabecera-grupo', texto);
 }
 
-// acciones: { abrir(libro), editar(libro) }, que se ejecutan dentro del toque.
+// --- Valoración y nota personal (punto 5) ---
+
+const TEXTO_ESTRELLAS = ['', 'No me ha gustado', 'Regular', 'Está bien', 'Me ha gustado', 'Me ha encantado'];
+
+function seccionValoracion(libro, acciones) {
+  const grupo = el('div', 'grupo valoracion');
+  let actual = libro.valoracion || {};
+
+  const fila = el('div', 'fila estrellas');
+  const etiqueta = el('span', 'estrellas-texto');
+  const pintarEstrellas = () => {
+    fila.querySelectorAll('.estrella').forEach((b, i) => b.setAttribute('aria-pressed', String(i < (actual.estrellas || 0))));
+    etiqueta.textContent = actual.estrellas ? TEXTO_ESTRELLAS[actual.estrellas] : 'Sin valorar';
+  };
+  for (let n = 1; n <= 5; n++) {
+    const b = el('button', 'estrella');
+    b.type = 'button';
+    b.innerHTML = svgIcono('estrella');
+    b.setAttribute('aria-label', `${n} ${n === 1 ? 'estrella' : 'estrellas'}`);
+    b.addEventListener('click', async () => {
+      // Tocar la misma estrella otra vez quita la valoración.
+      const estrellas = actual.estrellas === n ? null : n;
+      const nuevo = await valorarLibro(libro.id, { estrellas });
+      actual = nuevo?.valoracion || actual;
+      pintarEstrellas();
+      acciones.cambiado?.();
+    });
+    fila.appendChild(b);
+  }
+  fila.appendChild(etiqueta);
+
+  const nota = el('button', 'fila fila-boton nota-personal');
+  nota.type = 'button';
+  const pintarNota = () => {
+    nota.textContent = actual.nota ? actual.nota : 'Escribir una nota';
+    nota.classList.toggle('con-nota', Boolean(actual.nota));
+  };
+  nota.addEventListener('click', async () => {
+    const campo = document.createElement('textarea');
+    campo.className = 'campo-nota';
+    campo.rows = 5;
+    campo.maxLength = 1000;
+    campo.value = actual.nota || '';
+    campo.placeholder = 'Qué te ha parecido, a quién se lo recomendarías...';
+    if (!(await mostrarFormulario('Tu nota sobre el libro', [campo], { enfocar: campo }))) return;
+    const nuevo = await valorarLibro(libro.id, { nota: campo.value.trim() || null });
+    actual = nuevo?.valoracion || actual;
+    pintarNota();
+    acciones.cambiado?.();
+  });
+  pintarEstrellas();
+  pintarNota();
+  grupo.append(fila, nota);
+  return grupo;
+}
+
+// acciones: { abrir(libro), editar(libro), cambiado() }, que se ejecutan dentro del toque.
 export async function mostrarFichaLibro(libro, acciones) {
   const [sesiones, colecciones] = await Promise.all([todasLasSesiones(), leerColecciones()]);
   const lectura = resumenLibro(sesiones.filter((s) => s.libroId === libro.id));
@@ -130,6 +188,8 @@ export async function mostrarFichaLibro(libro, acciones) {
   ]);
   partes.push(cabecera('Tu lectura'));
   partes.push(tuLectura || el('p', 'pie-grupo ficha-vacio', 'Todavía no hay sesiones de lectura de este libro.'));
+
+  partes.push(cabecera('Tu valoración'), seccionValoracion(libro, acciones));
 
   // Sinopsis
   if (edicion.sinopsis) {

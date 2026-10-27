@@ -412,6 +412,7 @@ export function verFicha(libro) {
     editar: async (l) => {
       if (await editarLibro(l)) await refrescar();
     },
+    cambiado: () => refrescar(),
   });
 }
 

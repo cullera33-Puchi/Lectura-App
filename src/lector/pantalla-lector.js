@@ -6,7 +6,9 @@
 // ajustes, y Sincronizar.
 
 import { abrirLibro, AperturaCancelada, MENSAJE_LIBRO_ILEGIBLE } from './lector.js';
-import { leerLibro, leerArchivo, leerUbicaciones, guardarUbicaciones } from '../datos/libros.js';
+import {
+  leerLibro, leerArchivo, leerUbicaciones, guardarUbicaciones, valorarLibro,
+} from '../datos/libros.js';
 import { leerProgreso, guardarProgreso, cambiarEstado } from '../datos/progreso.js';
 import { RegistroSesiones } from '../datos/sesiones.js';
 import { anotacionesDeLibro, crearMarcador, eliminarAnotacion } from '../datos/anotaciones.js';
@@ -313,6 +315,13 @@ async function proponerTerminar(a) {
   if (eleccion !== 'terminar' || actual !== a) return;
   a.progreso = await cambiarEstado(a.id, 'terminado');
   registrar(`"${a.titulo}" terminado`);
+  // Punto 5: se propone valorarlo.
+  const estrellas = await mostrarHoja(`¿Qué te ha parecido "${a.titulo}"?`, [5, 4, 3, 2, 1].map((n) => ({
+    id: String(n), texto: `${'★'.repeat(n)}${'☆'.repeat(5 - n)}`,
+  })));
+  if (!estrellas) return;
+  await valorarLibro(a.id, { estrellas: Number(estrellas) });
+  registrar(`"${a.titulo}" valorado con ${estrellas} estrellas`);
 }
 
 // --- Índice ---
