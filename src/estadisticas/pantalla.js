@@ -7,8 +7,16 @@ import { formatoDuracion } from './calculo.js';
 import { fijarObjetivo } from '../datos/colecciones.js';
 import { pedirNumero } from '../ui/hoja.js';
 import { registrar } from '../ui/registro.js';
+import { svgIcono } from '../ui/iconos.js';
 
 const $ = (id) => document.getElementById(id);
+let alCambiarDatos = () => pintarEstadisticas();
+
+// alCambiar: repinta la pestaña visible y marca las demás (el objetivo
+// también aparece en "Leyendo ahora").
+export function configurarEstadisticas({ alCambiar }) {
+  alCambiarDatos = alCambiar;
+}
 
 function el(etiqueta, clase, texto) {
   const e = document.createElement(etiqueta);
@@ -72,7 +80,7 @@ async function cambiarObjetivo(anio, actual) {
   if (!n) return;
   await fijarObjetivo(anio, n);
   registrar(`Objetivo de ${anio}: ${n} libros`);
-  await pintarEstadisticas();
+  await alCambiarDatos();
 }
 
 function seccionObjetivo(e, ahora) {
@@ -182,19 +190,38 @@ export async function pintarEstadisticas() {
   $('contenido-estadisticas').replaceChildren(...partes);
 }
 
-// Resumen para "Leyendo ahora": hoy, racha y objetivo anual.
+// Resumen para "Leyendo ahora": hoy, racha y objetivo anual, en una tarjeta
+// con fondo propio que abre la pestaña Estadísticas.
 export async function crearResumenObjetivos(alPulsar) {
   const e = await obtenerEstadisticas();
-  const tarjeta = el('button', 'grupo tarjeta resumen-objetivos');
+  const tarjeta = el('button', 'resumen-objetivos');
   tarjeta.type = 'button';
   tarjeta.setAttribute('aria-label', 'Ver estadísticas');
-  const fila = el('div', 'tarjeta-cifras');
-  fila.append(
-    cifra(formatoDuracion(e.hoy.ms), 'hoy'),
-    cifra(plural(e.racha.actual, 'día', 'días'), 'de racha'),
-    cifra(e.objetivo ? `${e.objetivo.hechos} de ${e.objetivo.libros}` : String(e.delAnio.terminados), `libros en ${e.anio}`),
+  const celdas = el('div', 'resumen-celdas');
+  const celda = (valor, texto) => {
+    const c = el('div', 'resumen-celda');
+    c.append(el('strong', '', valor), el('span', '', texto));
+    return c;
+  };
+  celdas.append(
+    celda(formatoDuracion(e.hoy.ms), 'Hoy'),
+    celda(plural(e.racha.actual, 'día', 'días'), 'Racha'),
+    e.objetivo
+      ? celda(`${e.objetivo.hechos} de ${e.objetivo.libros}`, `Objetivo ${e.anio}`)
+      : celda(String(e.delAnio.terminados), `Terminados en ${e.anio}`),
   );
-  tarjeta.appendChild(fila);
+  tarjeta.appendChild(celdas);
+  if (e.objetivo) {
+    const avance = el('div', 'avance');
+    const relleno = el('span');
+    relleno.style.width = `${Math.min(100, (e.objetivo.hechos / e.objetivo.libros) * 100)}%`;
+    avance.appendChild(relleno);
+    tarjeta.appendChild(avance);
+  }
+  const pie = el('div', 'resumen-pie');
+  pie.append(el('span', '', e.objetivo ? 'Ver estadísticas' : 'Fijar un objetivo y ver estadísticas'));
+  pie.insertAdjacentHTML('beforeend', svgIcono('avanzar'));
+  tarjeta.appendChild(pie);
   tarjeta.addEventListener('click', alPulsar);
   return tarjeta;
 }

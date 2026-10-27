@@ -296,7 +296,7 @@ body[data-perfil="tinta"] .indicador {
 }
 
 .con-pestanas .contenido {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 96px);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 112px);
 }
 
 .pantalla-agrupada .contenido {
@@ -2012,11 +2012,98 @@ body[data-perfil="tinta"] .muestra[aria-pressed="true"] .m-caja {
   font-size: 15px;
 }
 
+/* Resumen de objetivos en "Leyendo ahora" */
 .resumen-objetivos {
   display: block;
   width: 100%;
+  margin-top: 4px;
+  padding: 16px 16px 0;
+  border-radius: 12px;
+  background: var(--relleno);
+  color: var(--texto);
   text-align: left;
-  margin-top: 8px;
+}
+
+.resumen-celdas {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.resumen-celda {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.resumen-celda:first-child {
+  padding-left: 0;
+}
+
+.resumen-celda + .resumen-celda {
+  border-left: var(--grosor) solid var(--separador);
+}
+
+.resumen-celda strong {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resumen-celda span {
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.resumen-objetivos .avance {
+  margin-top: 14px;
+  background: var(--separador);
+}
+
+.resumen-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 12px 0;
+  border-top: var(--grosor) solid var(--separador);
+  color: var(--acento);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.resumen-pie .icono {
+  width: 18px;
+  height: 18px;
+}
+
+.resumen-objetivos:active {
+  opacity: 0.7;
+}
+
+body[data-perfil="tinta"] .resumen-objetivos {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+}
+
+body[data-perfil="tinta"] .resumen-objetivos:active {
+  opacity: 1;
+}
+
+body[data-perfil="tinta"] .resumen-celda span,
+body[data-perfil="tinta"] .resumen-pie {
+  color: var(--texto);
+}
+
+body[data-perfil="tinta"] .resumen-celda + .resumen-celda,
+body[data-perfil="tinta"] .resumen-pie {
+  border-color: var(--texto);
+  border-width: 2px;
 }
 
 .campo-hoja {

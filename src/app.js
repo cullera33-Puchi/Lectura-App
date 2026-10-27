@@ -11,7 +11,7 @@ import {
   prepararBiblioteca, pintarBiblioteca, mostrarMensaje, librosParaMostrar, descargando,
 } from './biblioteca/biblioteca.js';
 import { pintarInicio, configurarInicio } from './biblioteca/inicio.js';
-import { pintarEstadisticas } from './estadisticas/pantalla.js';
+import { pintarEstadisticas, configurarEstadisticas } from './estadisticas/pantalla.js';
 import {
   prepararPantallaLector, abrirPantallaLector, cerrarPantallaLector, lectorAbierto, cerrarPanelAbierto,
   idLibroAbierto,
@@ -217,6 +217,7 @@ async function iniciar() {
   });
   prepararTitulosGrandes();
   configurarInicio({ verEstadisticas: () => irAPestana('estadisticas') });
+  configurarEstadisticas({ alCambiar: refrescar });
 
   alCambiarPreferencias((_, tipo) => {
     aplicarTema();
