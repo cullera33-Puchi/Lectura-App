@@ -3,7 +3,7 @@
 import { estadoSesion, tokenVigente } from '../sync/google.js';
 import { CONFIG } from '../../config.js';
 
-export const VERSION_APP = '0.1.0 (fase 1)';
+export const VERSION_APP = '0.1.1 (fase 1)';
 
 let resultadoPersistencia = 'sin pedir';
 

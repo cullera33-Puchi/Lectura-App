@@ -53,6 +53,10 @@ async function abrirLibro(id) {
   }
 }
 
+// Errores no previstos al registro, visible en Ajustes.
+window.addEventListener('error', (e) => registrar(`Error: ${e.message} (${e.filename?.split('/').pop()}:${e.lineno})`, 'error'));
+window.addEventListener('unhandledrejection', (e) => registrar(`Error: ${e.reason?.message || e.reason}`, 'error'));
+
 window.addEventListener('popstate', async () => {
   if (lectorAbierto()) {
     await cerrarPantallaLector();

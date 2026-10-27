@@ -9,6 +9,11 @@
 // cambian la página de golpe, sin animación.
 //
 // Los toques se capturan dentro del iframe del libro con el hook de contenido.
+//
+// Safari no ejecuta los manejadores de eventos en un iframe con sandbox sin
+// "allow-scripts", aunque se registren desde la app. Por eso se activa
+// allowScriptedContent y se neutralizan los scripts del propio libro antes de
+// pintarlo: se eliminan y, además, una política CSP impide ejecutarlos.
 
 import { registrar } from '../ui/registro.js';
 import { cssLibro, temaEfectivo, proporcionMargenes } from '../ui/temas.js';
@@ -34,6 +39,34 @@ function suavizado(t) {
   return 1 - Math.pow(1 - t, 3);
 }
 
+const NS_XHTML = 'http://www.w3.org/1999/xhtml';
+const POLITICA_SIN_SCRIPTS = "script-src 'none'; object-src 'none'; frame-src 'none'";
+
+function neutralizarScripts(doc) {
+  for (const nombre of ['script', 'iframe', 'object', 'embed']) {
+    Array.from(doc.getElementsByTagNameNS('*', nombre)).forEach((e) => e.remove());
+  }
+  for (const elemento of Array.from(doc.getElementsByTagName('*'))) {
+    for (const atributo of Array.from(elemento.attributes)) {
+      const nombre = atributo.localName.toLowerCase();
+      const esManejador = nombre.startsWith('on');
+      const esEnlaceScript = /^\s*javascript:/i.test(atributo.value);
+      if (esManejador || esEnlaceScript) elemento.removeAttributeNode(atributo);
+    }
+  }
+  let cabecera = doc.getElementsByTagNameNS('*', 'head')[0];
+  if (!cabecera && doc.documentElement) {
+    cabecera = doc.createElementNS(NS_XHTML, 'head');
+    doc.documentElement.insertBefore(cabecera, doc.documentElement.firstChild);
+  }
+  if (cabecera) {
+    const meta = doc.createElementNS(NS_XHTML, 'meta');
+    meta.setAttribute('http-equiv', 'Content-Security-Policy');
+    meta.setAttribute('content', POLITICA_SIN_SCRIPTS);
+    cabecera.insertBefore(meta, cabecera.firstChild);
+  }
+}
+
 function aplanarIndice(elementos, nivel = 0, lista = []) {
   for (const e of elementos || []) {
     lista.push({ etiqueta: (e.label || '').trim() || 'Sin título', href: e.href, nivel });
@@ -50,6 +83,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
   const movil = perfil === 'movil';
   const inicio = performance.now();
   const libro = ePub(datos);
+  libro.spine.hooks.content.register(neutralizarScripts);
 
   try {
     await conTiempoLimite(libro.ready, 20000, 'tiempo de apertura agotado');
@@ -96,7 +130,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
     spread: 'none',
     gap: calcularHueco(),
     manager: movil ? 'continuous' : 'default',
-    allowScriptedContent: false,
+    allowScriptedContent: true, // ver nota al principio: necesario en Safari
   });
 
   let ultimoToque = 0;
