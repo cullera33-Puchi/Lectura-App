@@ -24,6 +24,7 @@ const UMBRAL_MOVIMIENTO_PX = 10;
 const MAX_DURACION_TOQUE_MS = 600;
 const VENTANA_CLIC_TRAS_TOQUE_MS = 800;
 const CARACTERES_POR_UBICACION = 1600;
+const ESPERA_COMPROBACION_MS = 400;
 const URL_FUENTES = new URL('../../fonts/fuentes.css', import.meta.url).href;
 
 export const MENSAJE_LIBRO_ILEGIBLE = 'Este libro no se puede abrir. Puede tener protección DRM.';
@@ -135,6 +136,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   let ultimoToque = 0;
   let animando = false;
+  let destruido = false;
   let ultimaPosicion = null;
 
   // --- Estilos dentro del libro ---
@@ -237,14 +239,56 @@ export async function abrirLibro(contenedor, datos, opciones) {
     return animarDesplazamiento(destino - d.scrollLeft);
   }
 
+  function traza(texto) {
+    registrar(`Lector: ${texto}`);
+  }
+
+  function huellaPosicion() {
+    const d = contenedorDesplazable();
+    return `${ultimaPosicion?.start?.cfi}|${d?.scrollLeft}`;
+  }
+
+  // Último recurso: ir al principio del capítulo siguiente o anterior.
+  function saltarCapitulo(direccion) {
+    const indice = direccion > 0 ? ultimaPosicion?.end?.index + 1 : ultimaPosicion?.start?.index - 1;
+    const seccion = Number.isInteger(indice) ? libro.spine.get(indice) : null;
+    if (!seccion) {
+      traza(direccion > 0 ? 'no hay más páginas' : 'no hay páginas anteriores');
+      return;
+    }
+    traza(`salto al capítulo ${indice}`);
+    rendition.display(seccion.href);
+  }
+
+  // Pasa de página y comprueba que se ha movido. Si no, prueba con
+  // rendition.next() o prev() y, si tampoco, salta de capítulo.
+  function pasar(direccion) {
+    const antes = huellaPosicion();
+    const d = contenedorDesplazable();
+    traza(`paso ${direccion > 0 ? 'adelante' : 'atrás'} (desplazamiento ${Math.round(d?.scrollLeft ?? -1)} de ${d?.scrollWidth}, página ${Math.round(anchoPagina())})`);
+    const despues = (promesa, accion) => Promise.resolve(promesa)
+      .catch((e) => traza(`error al pasar página: ${e.message}`))
+      .then(() => new Promise((r) => setTimeout(r, ESPERA_COMPROBACION_MS)))
+      .then(accion);
+    despues(completarPaso(direccion), () => {
+      if (destruido || huellaPosicion() !== antes) return;
+      traza('la página no se ha movido. Se usa el paso de respaldo');
+      const antesRespaldo = huellaPosicion();
+      despues(direccion > 0 ? rendition.next() : rendition.prev(), () => {
+        if (destruido || huellaPosicion() !== antesRespaldo) return;
+        saltarCapitulo(direccion);
+      });
+    });
+  }
+
   function siguiente() {
     if (animando) return;
-    completarPaso(1);
+    pasar(1);
   }
 
   function anterior() {
     if (animando) return;
-    completarPaso(-1);
+    pasar(-1);
   }
 
   // --- Gestos dentro del iframe ---
@@ -258,6 +302,8 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   function actuarPorZona(x) {
     const ancho = contenedor.clientWidth;
+    const zona = x < ancho / 3 ? 'izquierda' : (x > (ancho * 2) / 3 ? 'derecha' : 'centro');
+    traza(`toque en x=${Math.round(x)} de ${ancho} (${zona})`);
     if (x < ancho / 3) anterior();
     else if (x > (ancho * 2) / 3) siguiente();
     else avisos.alTocarCentro?.();
@@ -314,16 +360,21 @@ export async function abrirLibro(contenedor, datos, opciones) {
       if (g.arrastrando) {
         const velocidad = Math.abs(dx) / Math.max(duracion, 1);
         const pasa = Math.abs(dx) > UMBRAL_DESLIZAR_PX || velocidad > 0.3;
+        traza(`deslizamiento horizontal de ${Math.round(dx)} px`);
         if (!pasa) completarPaso(0);
-        else completarPaso(dx < 0 ? 1 : -1);
+        else pasar(dx < 0 ? 1 : -1);
         return;
       }
       if (!g.movido && duracion < MAX_DURACION_TOQUE_MS) {
-        if (e.target.closest?.('a[href]')) return; // los enlaces del libro funcionan
+        if (e.target.closest?.('a[href]')) {
+          traza('toque sobre un enlace del libro');
+          return; // los enlaces del libro funcionan
+        }
         e.preventDefault(); // evita el clic sintético y el zoom por doble toque
         actuarPorZona(g.xVisor);
         return;
       }
+      traza(`gesto sin acción (dx ${Math.round(dx)}, dy ${Math.round(dy)}, ${Math.round(duracion)} ms)`);
       if (dy > 80 && Math.abs(dy) > Math.abs(dx) * 1.5) avisos.alDeslizarAbajo?.();
     }, { passive: false });
 
@@ -366,6 +417,8 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   rendition.on('relocated', (posicion) => {
     ultimaPosicion = posicion;
+    const mostrada = posicion.start.displayed;
+    traza(`posición: sección ${posicion.start.index}, página ${mostrada?.page} de ${mostrada?.total}`);
     avisos.alCambiarPosicion?.(infoPosicion(posicion));
   });
 
@@ -379,10 +432,11 @@ export async function abrirLibro(contenedor, datos, opciones) {
     registrar(`No se pudo ir a la posición guardada (${e.message}). Se abre al principio.`, 'error');
   }
   if (!visualizado) await rendition.display();
+  const d0 = contenedorDesplazable();
+  traza(`visor ${contenedor.clientWidth}x${contenedor.clientHeight}, página ${Math.round(anchoPagina())}, contenido ${d0?.scrollWidth}`);
   registrar(`"${metadatos.title}" abierto en ${Math.round(performance.now() - inicio)} ms (gestor ${movil ? 'continuous' : 'default'})`);
 
   // Ubicaciones para el porcentaje: de la caché o generadas en segundo plano.
-  let destruido = false;
   let generando = null;
   if (opciones.ubicaciones) {
     libro.locations.load(opciones.ubicaciones);
