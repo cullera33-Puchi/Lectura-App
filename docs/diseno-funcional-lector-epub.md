@@ -452,6 +452,7 @@ Del repaso de la app y nuevas funciones. La numeración se mantiene para poder e
 | 19 | Capítulo dañado que bloquea el lector y libros muy ilustrados que superan el tiempo de apertura en la tablet | Medio |
 | 20 | iPhone en horizontal: rebote al deslizar en la penúltima página de un capítulo (pendiente de reproducir) | Bajo |
 | 22 | Notas al pie emergentes: al tocar la llamada de una nota, se muestra su texto en una hoja sin salir de la página. Hay que reconocer las notas en los distintos formatos de EPUB (EPUB 3 con `epub:type="noteref"`, Calibre y conversiones de Kindle, notas en otro archivo del libro) y dejar el salto normal cuando no se reconozca | Medio |
+| 23 | Cómics en CBR (y CBZ): importarlos, verlos en la biblioteca con su portada y leerlos página a página, con zoom, doble página en horizontal y sentido de lectura de manga. Es viable con dos decisiones previas: añadir una librería para descomprimir RAR (por ejemplo, libarchive.js en WebAssembly, copiada en `vendor/`, cargada solo al importar) y una excepción a la regla 1, porque un cómic no tiene CFI y la posición sería el número de página. Al importar se convertiría a CBZ para leerlo después con JSZip, que ya está en la app | Alto |
 
 ### Ideas a valorar (sin fecha)
 
