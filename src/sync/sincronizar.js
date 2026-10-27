@@ -20,7 +20,7 @@
 import {
   localizarCarpeta, localizarSubcarpeta, buscarArchivos, leerJson, crearJson, actualizarJson,
   subirArchivo, descargarArchivo, enviarAPapelera, nombresEnCarpeta, obtenerMetadatos, renombrar,
-  buscarPorPrefijo, ErrorDrive, ErrorJsonIlegible,
+  listarCarpeta, ErrorDrive, ErrorJsonIlegible, TIPO_CARPETA,
 } from './drive.js';
 import {
   normalizarBiblioteca, normalizarProgreso, fusionarBiblioteca, fusionarProgreso, posicionesNuevas,
@@ -65,25 +65,83 @@ export function sincronizando() {
   return Boolean(enCurso);
 }
 
+// Menos llamadas a Drive (0.8.3). Una sincronización sin cambios hace tres
+// peticiones a la vez: comprobar la carpeta guardada, listar su contenido y
+// listar los archivos de los libros (para volver a subir los que falten). Los
+// JSON cuyo archivo no ha cambiado desde la última vez (mismo id y misma fecha
+// de modificación en Drive) no se descargan: se usa la copia guardada, que es
+// exactamente lo que hay en Drive. La primera sincronización de cada día
+// localiza la carpeta por su marca, por si hay otra más antigua.
+const CLAVE_CARPETAS = 'carpetasDrive';
+const claveJson = (nombre) => `json:${nombre}`;
+const hoyLocal = () => new Date().toDateString();
+
 async function localizarCarpetas(token) {
+  const guardadas = await leerSincronizacion(CLAVE_CARPETAS);
+  if (guardadas?.raiz && guardadas.dia === hoyLocal()) {
+    try {
+      const [raiz, contenido, nombresGuardada] = await Promise.all([
+        obtenerMetadatos(token, guardadas.raiz),
+        listarCarpeta(token, guardadas.raiz),
+        nombresEnCarpeta(token, guardadas.libros).catch(() => null),
+      ]);
+      if (!raiz.trashed) {
+        const subcarpeta = async (tipo) => contenido.find((a) => a.mimeType === TIPO_CARPETA && a.appProperties?.tipo === tipo)?.id
+          || (await localizarSubcarpeta(token, guardadas.raiz, tipo)).id;
+        const [libros, portadas] = await Promise.all([subcarpeta('libros'), subcarpeta('portadas')]);
+        // Si la carpeta de libros ha cambiado, se lista la nueva.
+        const nombresLibros = libros === guardadas.libros && nombresGuardada ? nombresGuardada : await nombresEnCarpeta(token, libros);
+        if (libros !== guardadas.libros || portadas !== guardadas.portadas) {
+          await guardarSincronizacion(CLAVE_CARPETAS, { raiz: guardadas.raiz, libros, portadas, dia: guardadas.dia });
+        }
+        return { carpetas: { raiz: guardadas.raiz, libros, portadas }, contenido, nombresLibros };
+      }
+      registrar('La carpeta de Drive guardada está en la papelera: se vuelve a localizar');
+    } catch (e) {
+      if (!(e instanceof ErrorDrive) || e.estadoHttp !== 404) throw e;
+      registrar('La carpeta de Drive guardada ya no existe: se vuelve a localizar');
+    }
+  }
   const { carpeta } = await localizarCarpeta(token);
-  const [libros, portadas] = await Promise.all([
+  const [libros, portadas, contenido] = await Promise.all([
     localizarSubcarpeta(token, carpeta.id, 'libros'),
     localizarSubcarpeta(token, carpeta.id, 'portadas'),
+    listarCarpeta(token, carpeta.id),
   ]);
-  return { raiz: carpeta.id, libros: libros.id, portadas: portadas.id };
+  const carpetas = { raiz: carpeta.id, libros: libros.id, portadas: portadas.id };
+  await guardarSincronizacion(CLAVE_CARPETAS, { ...carpetas, dia: hoyLocal() });
+  return { carpetas, contenido, nombresLibros: await nombresEnCarpeta(token, libros.id) };
+}
+
+// Recuerda el contenido de un JSON tal como está en Drive (leído o escrito).
+function recordarJson(nombre, archivo, crudo) {
+  if (!archivo?.id || !archivo.modifiedTime) return Promise.resolve();
+  return guardarSincronizacion(claveJson(nombre), { id: archivo.id, modifiedTime: archivo.modifiedTime, crudo });
 }
 
 // Lee todas las copias de un JSON. Las que no se pueden interpretar se
 // renombran (no se sobrescriben) para no perder su contenido, y se avisa.
-async function leerRemoto(token, carpetaId, nombre, normalizar, unir, avisos) {
-  const archivos = await buscarArchivos(token, carpetaId, nombre);
+// contenido: listado de la carpeta ya hecho en esta sincronización (si no, se
+// busca). Si hay un solo archivo y no ha cambiado, no se descarga.
+async function leerRemoto(token, carpetaId, nombre, normalizar, unir, avisos, contenido = null) {
+  const archivos = contenido
+    ? contenido.filter((a) => a.name === nombre)
+    : await buscarArchivos(token, carpetaId, nombre);
+  if (archivos.length === 1) {
+    const conocido = await leerSincronizacion(claveJson(nombre));
+    const a = archivos[0];
+    if (conocido && conocido.id === a.id && conocido.modifiedTime === a.modifiedTime) {
+      return { datos: normalizar(conocido.crudo), archivo: a, duplicados: [] };
+    }
+  }
   const validos = [];
   const contenidos = [];
   for (const archivo of archivos) {
     try {
-      contenidos.push(normalizar(await leerJson(token, archivo.id)));
+      const crudo = await leerJson(token, archivo.id);
+      contenidos.push(normalizar(crudo));
       validos.push(archivo);
+      if (archivos.length === 1) await recordarJson(nombre, archivo, crudo);
     } catch (e) {
       if (!(e instanceof ErrorJsonIlegible)) throw e;
       const apartado = nombre.replace('.json', `.danado-${new Date().toISOString().slice(0, 10)}.json`);
@@ -100,8 +158,9 @@ async function leerRemoto(token, carpetaId, nombre, normalizar, unir, avisos) {
 }
 
 async function escribirJson(token, carpetaId, archivo, nombre, datos) {
-  if (archivo) await actualizarJson(token, archivo.id, datos);
-  else await crearJson(token, carpetaId, nombre, datos);
+  const escrito = archivo ? await actualizarJson(token, archivo.id, datos) : await crearJson(token, carpetaId, nombre, datos);
+  await recordarJson(nombre, escrito, datos);
+  return escrito;
 }
 
 async function subirLibro(token, carpetas, pendiente, remotoPorId, nombresLibros) {
@@ -213,19 +272,28 @@ function librosPublicables(locales, remotoPorId) {
 // estadísticas. Así no hay conflictos ni doble conteo.
 const PREFIJO_SESIONES = 'sesiones-';
 
-async function sincronizarSesiones(token, raiz, avisos) {
+async function sincronizarSesiones(token, raiz, avisos, contenido) {
   const propio = idDispositivo();
   const nombrePropio = `${PREFIJO_SESIONES}${propio}.json`;
-  const archivos = await buscarPorPrefijo(token, raiz, PREFIJO_SESIONES);
+  const archivos = contenido.filter((a) => a.name.startsWith(PREFIJO_SESIONES));
 
   // Este dispositivo: todo su histórico local, desde la v1.
   const locales = await sesionesParaExportar();
   const propios = archivos.filter((a) => a.name === nombrePropio);
   const legibles = [];
   let remoto = normalizarSesiones(null);
-  for (const a of propios) {
+  // Solo este dispositivo escribe su archivo: si no ha cambiado desde la
+  // última vez, su contenido es el que se guardó entonces.
+  const conocido = propios.length === 1 ? await leerSincronizacion(claveJson(nombrePropio)) : null;
+  if (conocido && conocido.id === propios[0].id && conocido.modifiedTime === propios[0].modifiedTime) {
+    remoto = normalizarSesiones(conocido.crudo);
+    legibles.push(propios[0]);
+  }
+  for (const a of legibles.length ? [] : propios) {
     try {
-      const otro = normalizarSesiones(await leerJson(token, a.id));
+      const crudo = await leerJson(token, a.id);
+      if (propios.length === 1) await recordarJson(nombrePropio, a, crudo);
+      const otro = normalizarSesiones(crudo);
       remoto = { ...remoto, sesiones: fusionarSesiones(remoto.sesiones, otro).sesiones };
       legibles.push(a);
     } catch (e) {
@@ -268,11 +336,21 @@ async function sincronizarSesiones(token, raiz, avisos) {
 
 // Anotaciones (v4): se leen, se fusionan por id con las locales y se escribe
 // el archivo solo si ha cambiado. Las duplicadas se fusionan y van a la papelera.
-async function sincronizarAnotaciones(token, raiz, avisos) {
+async function sincronizarAnotaciones(token, raiz, avisos, contenido) {
   const pendientes = (await listarPendientes()).filter((p) => p.tipo === 'anotaciones');
-  const remoto = await leerRemoto(token, raiz, NOMBRE_ANOTACIONES, normalizarAnotaciones, unirAnotaciones, avisos);
+  let remoto = await leerRemoto(token, raiz, NOMBRE_ANOTACIONES, normalizarAnotaciones, unirAnotaciones, avisos, contenido);
   const antes = await todasLasAnotaciones();
-  const fusion = fusionarAnotaciones(antes, remoto.datos);
+  let fusion = fusionarAnotaciones(antes, remoto.datos);
+  // El listado es del principio de la sincronización: antes de escribir se
+  // comprueba que el archivo no ha cambiado desde entonces. Si ha cambiado, se
+  // vuelve a leer y a fusionar.
+  if (fusion.escribirRemoto && remoto.archivo && !remoto.duplicados.length) {
+    const actual = await obtenerMetadatos(token, remoto.archivo.id);
+    if (actual.modifiedTime !== remoto.archivo.modifiedTime) {
+      remoto = await leerRemoto(token, raiz, NOMBRE_ANOTACIONES, normalizarAnotaciones, unirAnotaciones, avisos);
+      fusion = fusionarAnotaciones(antes, remoto.datos);
+    }
+  }
   // Marcadores añadidos o quitados en el otro dispositivo, para el resumen.
   const recibidos = Object.entries(fusion.anotaciones.anotaciones)
     .filter(([id, a]) => (a.fecha || '') > (antes[id]?.fecha || '')).length;
@@ -310,15 +388,14 @@ async function ejecutar(token, alEstado) {
   const resumen = { subidos: 0, nuevos: 0, bajas: 0, posiciones: 0, avisos: [] };
 
   estado('Buscando la carpeta en Drive...');
-  const carpetas = await localizarCarpetas(token);
+  const { carpetas, contenido, nombresLibros } = await localizarCarpetas(token);
 
   estado('Leyendo la biblioteca de Drive...');
-  const leerJsons = () => Promise.all([
-    leerRemoto(token, carpetas.raiz, NOMBRE_BIBLIOTECA, normalizarBiblioteca, unirBibliotecas, resumen.avisos),
-    leerRemoto(token, carpetas.raiz, NOMBRE_PROGRESO, normalizarProgreso, unirProgresos, resumen.avisos),
-    nombresEnCarpeta(token, carpetas.libros),
+  const leerJsons = (listado) => Promise.all([
+    leerRemoto(token, carpetas.raiz, NOMBRE_BIBLIOTECA, normalizarBiblioteca, unirBibliotecas, resumen.avisos, listado),
+    leerRemoto(token, carpetas.raiz, NOMBRE_PROGRESO, normalizarProgreso, unirProgresos, resumen.avisos, listado),
   ]);
-  let [remotoBiblioteca, remotoProgreso, nombresLibros] = await leerJsons();
+  let [remotoBiblioteca, remotoProgreso] = await leerJsons(contenido);
   let remotoPorId = new Map(remotoBiblioteca.datos.libros.map((l) => [l.id, l]));
 
   await repararAusentes(nombresLibros, await listarPendientes());
@@ -379,13 +456,19 @@ async function ejecutar(token, alEstado) {
     };
     fusionProgreso = fusionarProgreso(progresosLocales, remotoProgreso.datos);
 
-    const cambiados = await Promise.all([remotoBiblioteca.archivo, remotoProgreso.archivo].map(async (a) => {
-      if (!a) return false;
-      return (await obtenerMetadatos(token, a.id)).modifiedTime !== a.modifiedTime;
-    }));
-    if (intento === 1 && cambiados.some(Boolean)) {
+    // Solo si se va a escribir: comprobar que nadie ha cambiado los JSON
+    // mientras se subían los libros.
+    const escribira = fusionBiblioteca.escribirRemoto || fusionProgreso.escribirRemoto
+      || remotoBiblioteca.duplicados.length || remotoProgreso.duplicados.length;
+    const cambiados = intento === 1 && escribira
+      ? await Promise.all([remotoBiblioteca.archivo, remotoProgreso.archivo].map(async (a) => {
+        if (!a) return false;
+        return (await obtenerMetadatos(token, a.id)).modifiedTime !== a.modifiedTime;
+      }))
+      : [];
+    if (cambiados.some(Boolean)) {
       registrar('Los JSON de Drive han cambiado durante la sincronización. Se vuelven a leer.');
-      [remotoBiblioteca, remotoProgreso] = await leerJsons();
+      [remotoBiblioteca, remotoProgreso] = await leerJsons(null);
       remotoPorId = new Map(remotoBiblioteca.datos.libros.map((l) => [l.id, l]));
       continue;
     }
@@ -453,8 +536,8 @@ async function ejecutar(token, alEstado) {
   // Archivos distintos en Drive: se sincronizan a la vez.
   estado('Sincronizando las estadísticas y los marcadores...');
   const [sesionesRecibidas, marcadoresRecibidos] = await Promise.all([
-    sincronizarSesiones(token, carpetas.raiz, resumen.avisos),
-    sincronizarAnotaciones(token, carpetas.raiz, resumen.avisos),
+    sincronizarSesiones(token, carpetas.raiz, resumen.avisos, contenido),
+    sincronizarAnotaciones(token, carpetas.raiz, resumen.avisos, contenido),
   ]);
   resumen.sesiones = sesionesRecibidas;
   resumen.marcadores = marcadoresRecibidos;

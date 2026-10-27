@@ -4,7 +4,7 @@ import { registrar } from '../ui/registro.js';
 
 const API = 'https://www.googleapis.com/drive/v3';
 const API_SUBIDA = 'https://www.googleapis.com/upload/drive/v3';
-const TIPO_CARPETA = 'application/vnd.google-apps.folder';
+export const TIPO_CARPETA = 'application/vnd.google-apps.folder';
 
 export const NOMBRE_CARPETA = 'Lector EPUB';
 const MARCA_APP = { clave: 'app', valor: 'lector-epub' };
@@ -118,7 +118,9 @@ export async function localizarCarpeta(token) {
     `appProperties has { key=${literal(MARCA_APP.clave)} and value=${literal(MARCA_APP.valor)} }`,
     'trashed = false',
   ].join(' and ');
-  const encontradas = await buscar(token, consulta);
+  // Las subcarpetas llevan la misma marca y además un tipo: se descartan.
+  const encontradas = (await buscar(token, consulta, 'id,name,createdTime,modifiedTime,appProperties'))
+    .filter((c) => !c.appProperties?.tipo);
   if (encontradas.length) {
     return { carpeta: encontradas[0], creada: false, total: encontradas.length };
   }
@@ -165,6 +167,13 @@ export function buscarArchivos(token, carpetaId, nombre) {
 
 export async function buscarArchivo(token, carpetaId, nombre) {
   return (await buscarArchivos(token, carpetaId, nombre))[0] || null;
+}
+
+// Todo el contenido de una carpeta (sin la papelera) en una sola consulta, con
+// lo necesario para saber qué ha cambiado sin descargarlo.
+export function listarCarpeta(token, carpetaId) {
+  const consulta = `${literal(carpetaId)} in parents and trashed = false`;
+  return buscar(token, consulta, 'id,name,mimeType,createdTime,modifiedTime,appProperties');
 }
 
 // Nombres de los archivos (no en la papelera) de una carpeta.

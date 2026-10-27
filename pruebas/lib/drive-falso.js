@@ -10,7 +10,7 @@ function crear(meta, contenido) {
   archivos.set(id, a);
   return a;
 }
-const publico = (a) => ({ id: a.id, name: a.name, createdTime: a.createdTime, modifiedTime: a.modifiedTime, size: String(a.contenido.length), trashed: a.trashed });
+const publico = (a) => ({ id: a.id, name: a.name, mimeType: a.mimeType, appProperties: a.appProperties, createdTime: a.createdTime, modifiedTime: a.modifiedTime, size: String(a.contenido.length), trashed: a.trashed });
 
 function filtrar(q) {
   let r = [...archivos.values()];
@@ -92,6 +92,7 @@ function estado() {
   return { sesiones, vivos: vivos.map((a) => a.name), papelera: [...archivos.values()].filter((a) => a.trashed).map((a) => a.name), biblioteca: json('biblioteca.json'), progreso: json('progreso.json'), anotaciones: json('anotaciones.json') };
 }
 module.exports = { instalar, estado };
-module.exports.danar = (nombre) => { for (const a of archivos.values()) if (a.name === nombre && !a.trashed) a.contenido = Buffer.from('{ esto no es json'); };
+// Como en Drive, cambiar el contenido cambia la fecha de modificación.
+module.exports.danar = (nombre) => { for (const a of archivos.values()) if (a.name === nombre && !a.trashed) { a.contenido = Buffer.from('{ esto no es json'); a.modifiedTime = new Date(Date.now() + (++n)).toISOString(); } };
 module.exports.aPapelera = (nombre) => { for (const a of archivos.values()) if (a.name === nombre) a.trashed = true; };
 module.exports.archivos = archivos;

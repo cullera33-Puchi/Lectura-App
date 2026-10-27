@@ -437,12 +437,12 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.8.0 | Corrección de los errores confirmados: cambios en colecciones, objetivos y Quiero leer perdidos si se hacían durante una sincronización, libros eliminados que podían reaparecer, subidas sin reintento, copia de seguridad sin Quiero leer, botón Atrás de Android que cerraba la app con una hoja abierta, datos de "Hoy" sin repintar al día siguiente, sesiones que pasan la medianoche y varios detalles del lector (búsqueda, barra, marcadores, teclado) |
 | 0.8.1 | Rendimiento: portadas en paralelo, motor de lectura cargado al abrir el primer libro, menos escrituras al pasar página, búsqueda más rápida, sesiones en memoria y panel "Aa" sin redibujar |
 | 0.8.2 | Usabilidad: controles ocultos al pasar página, teclas y mandos para pasar página, avisos de fallos de sincronización, resumen de sincronización completo, zonas de toque de 44 px, búsqueda vacía con el filtro activo, previsión del objetivo anual y accesibilidad |
+| 0.8.3 | Sincronización sin cambios con 3 peticiones a Drive a la vez (antes, unas 12 una tras otra): la carpeta se recuerda, se lista una sola vez y los JSON que no han cambiado no se descargan. Antes de escribir se sigue leyendo y fusionando |
 
 Pendiente del repaso:
 
 | Nº | Mejora | Esfuerzo |
 |---|---|---|
-| 1 | Sincronización sin cambios con 1 o 2 llamadas a Drive en lugar de unas 12 | Medio |
 | 4 | Servir la app desde la caché del dispositivo (arranque más rápido con mala conexión y sin mezcla de versiones al publicar) | Medio |
 | 5 | Biblioteca sin rehacer la lista entera en cada filtro o búsqueda | Medio |
 | 18 | Reloj atrasado en un dispositivo: la posición leída en él puede perder frente a una anterior del otro | Bajo |
