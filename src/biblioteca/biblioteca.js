@@ -1,8 +1,6 @@
 // Pantalla de biblioteca (punto 7 del diseño).
 
-import {
-  listarLibros, urlPortada, eliminarLibro, quitarArchivoLocal,
-} from '../datos/libros.js';
+import { listarLibros, eliminarLibro, quitarArchivoLocal } from '../datos/libros.js';
 import { cambiarEstado } from '../datos/progreso.js';
 import { leerAjuste, guardarAjuste } from '../datos/almacen.js';
 import { listarPendientes, leerSincronizacion } from '../datos/pendientes.js';
@@ -10,36 +8,26 @@ import { perfilActual, nombreDispositivo } from '../datos/preferencias.js';
 import { asegurarToken } from '../sync/google.js';
 import { descargarLibro, MENSAJE_SIN_CONEXION } from '../sync/sincronizar.js';
 import { importarArchivo } from './importar.js';
+import {
+  crearPortada, estadoDe, textoEstado, estadoCorto,
+} from './portadas.js';
 import { mostrarHoja } from '../ui/hoja.js';
+import { mostrarAviso } from '../ui/aviso.js';
+import { svgIcono } from '../ui/iconos.js';
 import { registrar } from '../ui/registro.js';
 
 const $ = (id) => document.getElementById(id);
 
+const ORDENES = [
+  { id: 'ultimo', nombre: 'Último leído' },
+  { id: 'titulo', nombre: 'Título' },
+  { id: 'autor', nombre: 'Autor' },
+];
+
 const vista = { orden: 'ultimo', filtro: 'todos' };
-const descargando = new Map(); // id -> avance de 0 a 1
+export const descargando = new Map(); // id -> avance de 0 a 1
 let alAbrirLibro = () => {};
-
-function estadoDe(libro) {
-  return libro.progreso?.estado || 'pendiente';
-}
-
-function fechaCorta(iso) {
-  const fecha = new Date(iso);
-  const opciones = { day: 'numeric', month: 'short' };
-  if (fecha.getFullYear() !== new Date().getFullYear()) opciones.year = 'numeric';
-  return fecha.toLocaleDateString('es-ES', opciones);
-}
-
-function textoEstado(libro) {
-  const p = libro.progreso;
-  const estado = estadoDe(libro);
-  if (estado === 'pendiente' || !p) return 'Sin empezar';
-  const avance = estado === 'terminado'
-    ? 'Terminado'
-    : (p.porcentaje != null ? `${Math.round(p.porcentaje * 100)} %` : 'Leyendo');
-  const donde = p.dispositivo ? `${p.dispositivo}, ` : '';
-  return `${avance}. ${donde}${fechaCorta(p.fecha)}`;
-}
+let refrescar = () => pintarBiblioteca();
 
 function comparar(a, b) {
   const texto = (x) => (x || '').toLocaleLowerCase('es');
@@ -53,7 +41,7 @@ function comparar(a, b) {
 
 // Libros con el progreso más reciente entre el local y el último sincronizado,
 // y con su estado de descarga.
-async function librosParaMostrar() {
+export async function librosParaMostrar() {
   const [libros, copiaRemota, pendientes] = await Promise.all([
     listarLibros(),
     leerSincronizacion('progresoRemoto'),
@@ -68,12 +56,14 @@ async function librosParaMostrar() {
   });
 }
 
-function insignia(libro) {
-  if (descargando.has(libro.id)) return null;
-  if (libro.noDisponible) return 'No disponible';
-  if (!libro.descargado) return '☁ En la nube';
-  if (libro.pendienteSubir) return '↑ Pendiente de subir';
-  return null;
+function barraDescarga(id) {
+  const barra = document.createElement('div');
+  barra.className = 'barra-descarga';
+  barra.setAttribute('aria-label', 'Descargando');
+  const relleno = document.createElement('span');
+  relleno.style.width = `${Math.round((descargando.get(id) || 0) * 100)}%`;
+  barra.appendChild(relleno);
+  return barra;
 }
 
 async function crearElementoLibro(libro, enLista) {
@@ -88,20 +78,6 @@ async function crearElementoLibro(libro, enLista) {
   abrir.className = 'libro-abrir';
   abrir.setAttribute('aria-label', `Abrir ${libro.titulo}`);
 
-  const url = await urlPortada(libro.id);
-  let portada;
-  if (url) {
-    portada = document.createElement('img');
-    portada.src = url;
-    portada.alt = '';
-    portada.loading = 'lazy';
-  } else {
-    portada = document.createElement('div');
-    portada.textContent = enLista ? '' : libro.titulo;
-    portada.classList.add('portada-sin-imagen');
-  }
-  portada.classList.add('portada');
-
   const texto = document.createElement('div');
   texto.className = 'libro-texto';
   const titulo = document.createElement('div');
@@ -112,38 +88,42 @@ async function crearElementoLibro(libro, enLista) {
   autor.textContent = libro.autor || 'Autor desconocido';
   const estado = document.createElement('div');
   estado.className = 'libro-estado';
-  estado.textContent = textoEstado(libro);
+  if (enLista) {
+    // En tinta electrónica, texto completo: avance, dispositivo y fecha.
+    const marcas = [];
+    if (descargando.has(libro.id)) marcas.push('Descargando');
+    else if (libro.noDisponible) marcas.push('No disponible');
+    else if (!libro.descargado) marcas.push('En la nube');
+    else if (libro.pendienteSubir) marcas.push('Pendiente de subir');
+    estado.textContent = [textoEstado(libro), ...marcas].join('. ');
+  } else {
+    const corto = estadoCorto(libro, { descargando: descargando.has(libro.id) });
+    estado.innerHTML = corto.html;
+    if (corto.clase) estado.classList.add(corto.clase);
+  }
   texto.append(titulo, autor, estado);
+  if (descargando.has(libro.id)) texto.appendChild(barraDescarga(libro.id));
 
-  const textoInsignia = insignia(libro);
-  if (textoInsignia) {
-    const marca = document.createElement('span');
-    marca.className = 'insignia';
-    marca.textContent = textoInsignia;
-    texto.appendChild(marca);
-  }
-  if (descargando.has(libro.id)) {
-    const barra = document.createElement('div');
-    barra.className = 'barra-descarga';
-    barra.setAttribute('aria-label', 'Descargando');
-    const relleno = document.createElement('span');
-    relleno.style.width = `${Math.round(descargando.get(libro.id) * 100)}%`;
-    barra.appendChild(relleno);
-    texto.appendChild(barra);
-  }
-
-  abrir.append(portada, texto);
+  abrir.append(await crearPortada(libro), texto);
   abrir.addEventListener('click', () => pulsarLibro(libro));
 
   const mas = document.createElement('button');
   mas.type = 'button';
   mas.className = 'libro-mas';
-  mas.textContent = '⋯';
+  mas.innerHTML = svgIcono('mas_opciones');
   mas.setAttribute('aria-label', `Acciones de ${libro.titulo}`);
   mas.addEventListener('click', () => accionesLibro(libro));
 
   elemento.append(abrir, mas);
   return elemento;
+}
+
+function pintarChips() {
+  document.querySelectorAll('.chip').forEach((c) => {
+    const activo = c.dataset.filtro === vista.filtro;
+    c.classList.toggle('activo', activo);
+    c.setAttribute('aria-selected', String(activo));
+  });
 }
 
 export async function pintarBiblioteca() {
@@ -153,6 +133,7 @@ export async function pintarBiblioteca() {
     .filter((l) => vista.filtro === 'todos' || estadoDe(l) === vista.filtro)
     .sort(comparar);
 
+  pintarChips();
   const lista = $('lista-libros');
   lista.className = enLista ? 'lista' : 'rejilla';
   const elementos = await Promise.all(visibles.map((l) => crearElementoLibro(l, enLista)));
@@ -161,22 +142,23 @@ export async function pintarBiblioteca() {
   const vacia = $('biblioteca-vacia');
   vacia.hidden = visibles.length > 0;
   vacia.textContent = todos.length === 0
-    ? 'Todavía no hay libros. Pulsa "Añadir libro" para importar un EPUB, o "Sincronizar" para traer los del otro dispositivo.'
+    ? 'Todavía no hay libros. Pulsa + para importar un EPUB, o sincroniza para traer los del otro dispositivo.'
     : 'No hay libros con este filtro.';
 
   const enNube = todos.filter((l) => !l.descargado && !l.noDisponible && l.archivoDriveId);
   $('btn-descargar-todos').hidden = !enLista || enNube.length === 0;
 }
 
+// Mensajes breves: se muestran como aviso flotante, visible en cualquier pestaña.
 export function mostrarMensaje(texto, esError = false) {
-  const caja = $('mensaje-biblioteca');
-  caja.textContent = texto;
-  caja.classList.toggle('error', esError);
+  if (!texto) return;
+  mostrarAviso(texto, esError ? 8000 : 4500);
 }
 
 function pintarAvance(id) {
-  const relleno = document.querySelector(`.libro[data-id="${id}"] .barra-descarga span`);
-  if (relleno) relleno.style.width = `${Math.round((descargando.get(id) || 0) * 100)}%`;
+  document.querySelectorAll(`[data-id="${id}"] .barra-descarga span`).forEach((relleno) => {
+    relleno.style.width = `${Math.round((descargando.get(id) || 0) * 100)}%`;
+  });
 }
 
 // Descarga varios libros con un token obtenido dentro del gesto del usuario.
@@ -186,7 +168,7 @@ async function descargar(promesaToken, libros) {
     return false;
   }
   libros.forEach((l) => descargando.set(l.id, 0));
-  await pintarBiblioteca();
+  await refrescar();
   let todoBien = true;
   try {
     const token = await promesaToken;
@@ -210,11 +192,13 @@ async function descargar(promesaToken, libros) {
     mostrarMensaje(e.message, true);
     registrar(e.message, 'error');
   }
-  await pintarBiblioteca();
+  await refrescar();
   return todoBien;
 }
 
-function pulsarLibro(libro) {
+// Abrir un libro desde la biblioteca o desde "Leyendo ahora". Si está solo en
+// la nube, se descarga primero.
+export function pulsarLibro(libro) {
   if (descargando.has(libro.id)) return;
   if (libro.descargado) {
     alAbrirLibro(libro.id);
@@ -224,8 +208,7 @@ function pulsarLibro(libro) {
     mostrarMensaje(`"${libro.titulo}" no está disponible en Google Drive.`, true);
     return;
   }
-  // Solo en la nube: se descarga y se abre. asegurarToken() va dentro del gesto.
-  const promesaToken = asegurarToken();
+  const promesaToken = asegurarToken(); // dentro del gesto
   descargar(promesaToken, [libro]).then((bien) => {
     if (bien) alAbrirLibro(libro.id);
   });
@@ -236,7 +219,7 @@ async function importar(archivos) {
   let n = 0;
   for (const archivo of archivos) {
     n += 1;
-    mostrarMensaje(archivos.length > 1 ? `Importando ${n} de ${archivos.length}...` : `Importando ${archivo.name}...`);
+    mostrarAviso(archivos.length > 1 ? `Importando ${n} de ${archivos.length}...` : 'Importando...', 60000);
     try {
       const r = await importarArchivo(archivo);
       if (r.resultado === 'importado') {
@@ -256,29 +239,29 @@ async function importar(archivos) {
   }
   const lineas = [];
   if (resumen.importados) {
-    lineas.push(`${resumen.importados === 1 ? '1 libro añadido' : `${resumen.importados} libros añadidos`}. Se subirá a Drive al pulsar Sincronizar.`);
+    lineas.push(`${resumen.importados === 1 ? '1 libro añadido' : `${resumen.importados} libros añadidos`}. Se subirá a Drive al sincronizar.`);
   }
   for (const t of resumen.duplicados) lineas.push(`"${t}" ya está en la biblioteca. No se ha duplicado.`);
   lineas.push(...resumen.errores);
   mostrarMensaje(lineas.join('\n'), resumen.errores.length > 0);
-  await pintarBiblioteca();
+  await refrescar();
 }
 
-async function accionesLibro(libro) {
+export async function accionesLibro(libro) {
   const terminado = estadoDe(libro) === 'terminado';
   const botones = [];
   if (libro.descargado) botones.push({ id: 'abrir', texto: 'Abrir' });
   else if (!libro.noDisponible) botones.push({ id: 'abrir', texto: 'Descargar y abrir' });
-  botones.push({ id: 'terminado', texto: terminado ? 'Marcar como no terminado' : 'Marcar como terminado', secundario: true });
+  botones.push({ id: 'terminado', texto: terminado ? 'Marcar como no terminado' : 'Marcar como terminado' });
   if (libro.descargado && libro.archivoDriveId && !libro.pendienteSubir) {
-    botones.push({ id: 'quitar', texto: 'Quitar de este dispositivo', secundario: true });
+    botones.push({ id: 'quitar', texto: 'Quitar de este dispositivo' });
   }
-  botones.push({ id: 'eliminar', texto: 'Eliminar de la biblioteca', secundario: true });
-  botones.push({ id: null, texto: 'Cancelar', secundario: true });
+  botones.push({ id: 'eliminar', texto: 'Eliminar de la biblioteca', destructivo: true });
 
+  const cabecera = [libro.titulo, libro.autor, textoEstado(libro)].filter(Boolean).join('\n');
   // La descarga necesita el gesto del usuario para la ventana de Google, así
   // que se lanza desde el propio botón de la hoja.
-  const eleccion = await mostrarHoja(`${libro.titulo}\n${libro.autor || ''}`.trim(), botones, {
+  const eleccion = await mostrarHoja(cabecera, botones, {
     alPulsar: (id) => {
       if (id === 'abrir') pulsarLibro(libro);
     },
@@ -288,43 +271,50 @@ async function accionesLibro(libro) {
     const nuevo = terminado ? (libro.progreso?.cfi ? 'leyendo' : 'pendiente') : 'terminado';
     await cambiarEstado(libro.id, nuevo, nombreDispositivo());
     registrar(`"${libro.titulo}" marcado como ${nuevo}`);
-    await pintarBiblioteca();
+    await refrescar();
   } else if (eleccion === 'quitar') {
     await quitarArchivoLocal(libro.id);
     registrar(`"${libro.titulo}" quitado de este dispositivo`);
     mostrarMensaje(`"${libro.titulo}" quitado de este dispositivo. Sigue en Google Drive.`);
-    await pintarBiblioteca();
+    await refrescar();
   } else if (eleccion === 'eliminar') {
     const confirmar = await mostrarHoja(
       `¿Eliminar "${libro.titulo}" de la biblioteca?\nSe borrará de este dispositivo y, al sincronizar, también de Google Drive y del otro dispositivo.`,
-      [
-        { id: 'si', texto: 'Eliminar' },
-        { id: null, texto: 'Cancelar', secundario: true },
-      ],
+      [{ id: 'si', texto: 'Eliminar', destructivo: true }],
     );
     if (confirmar === 'si') {
       await eliminarLibro(libro.id);
       registrar(`"${libro.titulo}" eliminado de la biblioteca`);
-      mostrarMensaje(`"${libro.titulo}" eliminado. Pulsa Sincronizar para quitarlo también de Drive.`);
-      await pintarBiblioteca();
+      mostrarMensaje(`"${libro.titulo}" eliminado. Sincroniza para quitarlo también de Drive.`);
+      await refrescar();
     }
   }
 }
 
-export async function prepararBiblioteca({ abrirLibro }) {
-  alAbrirLibro = abrirLibro;
-  Object.assign(vista, (await leerAjuste('vistaBiblioteca')) || {});
-  $('orden-biblioteca').value = vista.orden;
-  $('filtro-biblioteca').value = vista.filtro;
+async function elegirOrden() {
+  const eleccion = await mostrarHoja('Ordenar por', ORDENES.map((o) => ({
+    id: o.id,
+    texto: o.id === vista.orden ? `${o.nombre} ✓` : o.nombre,
+  })));
+  if (!eleccion) return;
+  vista.orden = eleccion;
+  await guardarAjuste('vistaBiblioteca', { ...vista });
+  await pintarBiblioteca();
+}
 
-  const alCambiarVista = async () => {
-    vista.orden = $('orden-biblioteca').value;
-    vista.filtro = $('filtro-biblioteca').value;
-    await guardarAjuste('vistaBiblioteca', { ...vista });
-    await pintarBiblioteca();
-  };
-  $('orden-biblioteca').addEventListener('change', alCambiarVista);
-  $('filtro-biblioteca').addEventListener('change', alCambiarVista);
+export async function prepararBiblioteca(opciones) {
+  alAbrirLibro = opciones.abrirLibro;
+  if (opciones.refrescar) refrescar = opciones.refrescar;
+  Object.assign(vista, (await leerAjuste('vistaBiblioteca')) || {});
+
+  document.querySelectorAll('.chip').forEach((c) => {
+    c.addEventListener('click', async () => {
+      vista.filtro = c.dataset.filtro;
+      await guardarAjuste('vistaBiblioteca', { ...vista });
+      await pintarBiblioteca();
+    });
+  });
+  $('btn-ordenar').addEventListener('click', elegirOrden);
 
   $('archivo-epub').addEventListener('change', async (e) => {
     const archivos = Array.from(e.target.files || []);
