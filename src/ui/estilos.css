@@ -2693,3 +2693,44 @@ body[data-perfil="tinta"] .barra-libro::-moz-range-thumb {
 body[data-perfil="tinta"] .barra-libro:disabled {
   opacity: 1;
 }
+
+/* Volver a donde estabas, tras un salto dentro del libro */
+.volver-lectura {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 64px);
+  left: 50%;
+  z-index: 12;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 32px);
+  padding: 9px 16px 9px 10px;
+  border-radius: 20px;
+  background: var(--barra);
+  -webkit-backdrop-filter: var(--desenfoque);
+  backdrop-filter: var(--desenfoque);
+  box-shadow: var(--sombra-flotante);
+  color: var(--acento);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.volver-lectura span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.volver-lectura .icono {
+  width: 18px;
+  height: 18px;
+}
+
+body[data-perfil="tinta"] .volver-lectura {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-size: 17px;
+}

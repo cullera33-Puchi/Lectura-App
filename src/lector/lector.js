@@ -579,6 +579,13 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   rendition.hooks.content.register(instalarEstilos);
   rendition.hooks.content.register(instalarGestos);
+  // Enlace interno del libro (nota, índice dentro del texto): antes de que
+  // epub.js salte, se avisa con la posición de partida para poder volver.
+  rendition.hooks.content.register((contents) => {
+    contents.on('linkClicked', () => {
+      if (ultimaPosicion) avisos.alSaltarPorEnlace?.(ultimaPosicion.start.cfi, infoPosicion(ultimaPosicion));
+    });
+  });
   document.addEventListener('keydown', alPulsarTecla);
 
   // --- Posición ---

@@ -168,11 +168,54 @@ async function abrirMarcadores() {
   abrirPanel('panel-marcadores');
 }
 
-// Salto a otra parte del libro (índice, búsqueda, barra, marcadores).
+// --- Volver a donde estabas (punto 2) ---
+// Tras un salto (índice, búsqueda, barra, marcador o enlace del libro) aparece
+// un botón para regresar. Después de regresar, el mismo botón permite ir otra
+// vez al destino. Desaparece al pasar varias páginas o al cerrar el libro.
+const PASOS_PARA_OCULTAR_VOLVER = 5;
+const MARGEN_SALTO_MS = 1200; // el propio salto también avisa de la nueva posición
+
+function pintarVolver() {
+  const v = actual?.volver;
+  $('btn-volver-lectura').hidden = !v;
+  if (v) $('texto-volver').textContent = v.etiqueta;
+}
+
+function anotarSalto(a, cfi, info) {
+  if (!a || !cfi) return;
+  const donde = info?.capitulo ? `«${info.capitulo}»` : 'la página anterior';
+  const pct = info?.porcentaje != null ? `, ${Math.round(info.porcentaje * 100)} %` : '';
+  a.volver = { cfi, etiqueta: `Volver a ${donde}${pct}`, desde: Date.now(), pasos: 0 };
+  pintarVolver();
+}
+
+// Salto a otra parte del libro, recordando de dónde se sale.
 async function saltar(destino) {
   const a = actual;
   if (!a?.motor) return;
+  if (a.info?.cfi) anotarSalto(a, a.info.cfi, a.info);
   await a.motor.irA(destino);
+}
+
+async function volver() {
+  const a = actual;
+  const v = a?.volver;
+  if (!v) return;
+  registrar('Lector: vuelta a la posición anterior al salto');
+  if (a.info?.cfi) anotarSalto(a, a.info.cfi, a.info);
+  else a.volver = null;
+  await a.motor.irA(v.cfi);
+}
+
+// Cada paso de página normal cuenta para ocultar el botón.
+function contarPasoParaVolver(a) {
+  const v = a.volver;
+  if (!v || Date.now() - v.desde < MARGEN_SALTO_MS) return;
+  v.pasos += 1;
+  if (v.pasos >= PASOS_PARA_OCULTAR_VOLVER) {
+    a.volver = null;
+    pintarVolver();
+  }
 }
 
 // --- Barra para recorrer el libro (punto 3) ---
@@ -252,6 +295,7 @@ async function alCambiarPosicion(info) {
   }
 
   a.ultimoCfi = info.cfi;
+  contarPasoParaVolver(a);
   const estado = p?.estado === 'terminado' ? 'terminado' : 'leyendo';
   a.progreso = await guardarProgreso(a.id, datos(info.cfi, estado));
   if (actual === a) a.sesiones.paginaPasada(); // si se ha cerrado, la sesión ya terminó
@@ -635,6 +679,9 @@ export async function abrirPantallaLector(id) {
           else controlesVisibles(!capaAbierta($('controles-lector')));
         },
         alDeslizarAbajo: () => alCerrar(),
+        alSaltarPorEnlace: (cfi, info) => {
+          if (actual === nuevo) anotarSalto(nuevo, cfi, info);
+        },
         alGenerarUbicaciones: (json) => guardarUbicaciones(id, json),
         // Repaginar (ajustes o giro de pantalla) no es pasar página.
         alRepaginar: () => {
@@ -671,6 +718,7 @@ export async function cerrarPantallaLector() {
   actual = null;
   cerrarPaneles();
   $('controles-lector').hidden = true;
+  $('btn-volver-lectura').hidden = true;
   cerrado.motor?.destruir();
   $('visor').replaceChildren();
   $('lector').hidden = true;
@@ -693,6 +741,7 @@ export function prepararPantallaLector({ cerrar }) {
   $('btn-buscar-libro').addEventListener('click', abrirBuscar);
   $('barra-libro').addEventListener('input', previsualizarBarra);
   $('btn-marcador').addEventListener('click', alternarMarcador);
+  $('btn-volver-lectura').addEventListener('click', volver);
   $('btn-marcadores').addEventListener('click', abrirMarcadores);
   $('btn-cerrar-marcadores').addEventListener('click', cerrarPaneles);
   $('barra-libro').addEventListener('change', saltarConBarra);
