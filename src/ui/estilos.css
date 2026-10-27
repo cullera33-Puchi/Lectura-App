@@ -153,6 +153,12 @@ button:disabled {
   cursor: default;
 }
 
+/* Tinta: sin grises. Un botón desactivado se tacha. */
+body[data-perfil="tinta"] button:disabled {
+  opacity: 1;
+  text-decoration: line-through;
+}
+
 .icono {
   width: 24px;
   height: 24px;
@@ -944,6 +950,7 @@ body[data-perfil="tinta"] .chip.activo {
 }
 
 .portada-sin-imagen {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -952,10 +959,6 @@ body[data-perfil="tinta"] .chip.activo {
   font-family: "Literata", Georgia, serif;
   overflow: hidden;
   overflow-wrap: anywhere;
-}
-
-.portada-sin-imagen {
-  container-type: inline-size;
 }
 
 /* El texto escala con el ancho de la portada (cqw: % del contenedor). */
@@ -980,6 +983,14 @@ body[data-perfil="tinta"] .portada {
 body[data-perfil="tinta"] .portada-sin-imagen {
   background: var(--fondo) !important;
   color: var(--texto);
+}
+
+body[data-perfil="tinta"] .portada-sin-imagen .p-autor {
+  opacity: 1;
+}
+
+body[data-perfil="tinta"] .carrusel {
+  scroll-snap-type: none;
 }
 
 .libro.en-nube .portada,
@@ -1160,6 +1171,7 @@ body[data-perfil="tinta"] .fondo {
   z-index: 21;
   max-width: 600px;
   max-height: 88vh;
+  max-height: 88dvh;
   margin: 0 auto;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -1183,6 +1195,7 @@ body[data-perfil="tinta"] .hoja {
 
 .hoja-alta {
   height: 88vh;
+  height: 88dvh;
   display: flex;
   flex-direction: column;
 }
@@ -1262,8 +1275,7 @@ body[data-perfil="tinta"] .asa {
   overflow: hidden;
 }
 
-body[data-tema="claro"] .grupo-hoja,
-body[data-tema="sepia"] .grupo-hoja {
+body[data-tema="claro"] .grupo-hoja {
   background: rgba(250, 250, 250, 0.92);
 }
 

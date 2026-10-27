@@ -10,6 +10,7 @@ function sinAnimacion() {
 
 export function abrirCapa(elemento) {
   clearTimeout(elemento._cierre);
+  cancelAnimationFrame(elemento._apertura);
   elemento.hidden = false;
   if (sinAnimacion()) {
     elemento.classList.add('abierta');
@@ -17,10 +18,11 @@ export function abrirCapa(elemento) {
   }
   // Fuerza el estilo inicial antes de añadir la clase para que haya transición.
   void elemento.offsetWidth;
-  requestAnimationFrame(() => elemento.classList.add('abierta'));
+  elemento._apertura = requestAnimationFrame(() => elemento.classList.add('abierta'));
 }
 
 export function cerrarCapa(elemento) {
+  cancelAnimationFrame(elemento._apertura);
   if (elemento.hidden) return;
   elemento.classList.remove('abierta');
   if (sinAnimacion()) {

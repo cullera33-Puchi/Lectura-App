@@ -1,6 +1,7 @@
 // Botón Sincronizar (biblioteca y lector) e indicador de cambios pendientes.
 
-import { asegurarToken } from '../sync/google.js';
+import { asegurarToken, invalidarToken } from '../sync/google.js';
+import { ErrorDrive } from '../sync/drive.js';
 import { sincronizar, sincronizando, textoResumen, MENSAJE_SIN_CONEXION } from '../sync/sincronizar.js';
 import { alCambiarPendientes, avisarCambioPendientes } from '../datos/pendientes.js';
 import { mostrarAviso } from './aviso.js';
@@ -37,6 +38,9 @@ export async function ejecutarSincronizacion(promesaToken) {
     await alTerminar(resumen);
     return resumen;
   } catch (e) {
+    // Sesión rechazada por Google (caducada o revocada): se marca para que el
+    // siguiente toque la renueve en lugar de repetir el mismo token.
+    if (e instanceof ErrorDrive && e.estadoHttp === 401) await invalidarToken();
     mostrarAviso(e.message, 8000);
     registrar(`Sincronización: ${e.message}`, 'error');
     return null;

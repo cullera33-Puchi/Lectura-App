@@ -7,14 +7,21 @@
 import { cargarPreferencias, preferencias, alCambiarPreferencias } from './datos/preferencias.js';
 import { leerAjuste, guardarAjuste } from './datos/almacen.js';
 import { iniciarSesionGoogle } from './sync/google.js';
-import { prepararBiblioteca, pintarBiblioteca, mostrarMensaje } from './biblioteca/biblioteca.js';
+import {
+  prepararBiblioteca, pintarBiblioteca, mostrarMensaje, librosParaMostrar, descargando,
+} from './biblioteca/biblioteca.js';
 import { pintarInicio } from './biblioteca/inicio.js';
 import {
-  prepararPantallaLector, abrirPantallaLector, cerrarPantallaLector, lectorAbierto,
+  prepararPantallaLector, abrirPantallaLector, cerrarPantallaLector, lectorAbierto, cerrarPanelAbierto,
+  idLibroAbierto,
 } from './lector/pantalla-lector.js';
+import { AperturaCancelada } from './lector/lector.js';
+import { leerLibro } from './datos/libros.js';
+import { sincronizando } from './sync/sincronizar.js';
+import { mostrarAviso } from './ui/aviso.js';
 import { prepararAjustes, pintarAjustes, pintarDiagnostico } from './ui/ajustes.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
-import { prepararHoja } from './ui/hoja.js';
+import { prepararHoja, hojaAbierta, cancelarHoja } from './ui/hoja.js';
 import { prepararSincronizacion } from './ui/sincronizacion.js';
 import { pintarIconos } from './ui/iconos.js';
 import { aplicarTemaInterfaz, alCambiarModoSistema } from './ui/temas.js';
@@ -26,6 +33,9 @@ const PANTALLAS = ['bienvenida', 'inicio', 'biblioteca', 'ajustes'];
 const PESTANAS = ['inicio', 'biblioteca'];
 
 let pestanaActual = 'inicio';
+let abriendo = false; // apertura de un libro en curso
+let scrollAntesDeLeer = 0;
+let recargaPendiente = false;
 
 function mostrarPantalla(nombre) {
   for (const p of PANTALLAS) $(`pantalla-${p}`).hidden = p !== nombre;
@@ -43,16 +53,36 @@ function aplicarTema() {
   aplicarTemaInterfaz(dispositivo.perfil, lectura);
 }
 
-// Repinta las dos pestañas tras cualquier cambio en la biblioteca.
+// Repintado tras cualquier cambio en la biblioteca. Los datos se leen una vez
+// y solo se pinta la pestaña visible; la otra se pinta al entrar en ella. Si
+// llega un refresco más reciente mientras se leen los datos, este se descarta.
+let numeroPintado = 0;
+const pestanasPorPintar = new Set(PESTANAS);
+
+function pestanaVisible() {
+  return PESTANAS.find((p) => !$(`pantalla-${p}`).hidden) || null;
+}
+
+async function pintarPestana(nombre, libros) {
+  pestanasPorPintar.delete(nombre);
+  if (nombre === 'inicio') await pintarInicio(libros);
+  else await pintarBiblioteca(libros);
+}
+
 async function refrescar() {
-  await Promise.all([pintarBiblioteca(), pintarInicio()]);
+  const numero = ++numeroPintado;
+  const libros = await librosParaMostrar();
+  if (numero !== numeroPintado) return;
+  PESTANAS.forEach((p) => pestanasPorPintar.add(p));
+  const visible = pestanaVisible();
+  if (visible) await pintarPestana(visible, libros);
 }
 
 async function irAPestana(nombre) {
   pestanaActual = nombre;
   mostrarPantalla(nombre);
   await guardarAjuste('pestana', nombre);
-  await refrescar();
+  if (pestanasPorPintar.has(nombre)) await pintarPestana(nombre);
 }
 
 function abrirAjustes() {
@@ -61,15 +91,56 @@ function abrirAjustes() {
   pintarAjustes();
 }
 
+// Vuelve atrás solo si la entrada actual es la indicada (evita salir de la app
+// con dos toques seguidos en Cerrar o Atrás).
+function volverDesde(pantalla) {
+  if (history.state?.pantalla === pantalla) history.back();
+}
+
 async function abrirLibro(id) {
+  if (abriendo) return; // doble toque en una portada
+  abriendo = true;
+  scrollAntesDeLeer = window.scrollY;
   history.pushState({ pantalla: 'lector' }, '');
   try {
     await abrirPantallaLector(id);
   } catch (e) {
-    registrar(e.message, 'error');
-    history.back();
-    mostrarMensaje(e.message, true);
+    if (!(e instanceof AperturaCancelada)) {
+      registrar(e.message, 'error');
+      mostrarMensaje(e.message, true);
+    }
+    volverDesde('lector');
+  } finally {
+    abriendo = false;
   }
+}
+
+async function alCerrarLector() {
+  await cerrarPantallaLector();
+  await refrescar();
+  window.scrollTo(0, scrollAntesDeLeer);
+}
+
+// Si se sincroniza con un libro abierto y el otro dispositivo lo ha eliminado,
+// se cierra el lector.
+async function comprobarLibroAbierto() {
+  const id = idLibroAbierto();
+  if (!id) return;
+  const libro = await leerLibro(id);
+  if (!libro || libro.eliminado) {
+    mostrarAviso('Este libro se ha eliminado de la biblioteca desde el otro dispositivo.', 6000);
+    volverDesde('lector');
+  }
+}
+
+// Recarga con la versión nueva solo si no hay nada en curso.
+function appOciosa() {
+  return !lectorAbierto() && !abriendo && !sincronizando() && !hojaAbierta() && descargando.size === 0
+    && $('pantalla-bienvenida').hidden;
+}
+
+function recargarSiProcede() {
+  if (recargaPendiente && appOciosa()) location.reload();
 }
 
 // Título grande que se reduce al desplazar, como en iOS: cuando el título
@@ -90,13 +161,28 @@ function prepararTitulosGrandes() {
 window.addEventListener('error', (e) => registrar(`Error: ${e.message} (${e.filename?.split('/').pop()}:${e.lineno})`, 'error'));
 window.addEventListener('unhandledrejection', (e) => registrar(`Error: ${e.reason?.message || e.reason}`, 'error'));
 
+// Botón Atrás (Android): primero cierra la hoja o el panel abiertos; después,
+// el lector o Ajustes.
 window.addEventListener('popstate', async () => {
-  if (lectorAbierto()) {
-    await cerrarPantallaLector();
-    await refrescar();
+  const pantallaAbierta = lectorAbierto() ? 'lector' : (!$('pantalla-ajustes').hidden ? 'ajustes' : null);
+  if (hojaAbierta()) {
+    cancelarHoja();
+    if (abriendo) {
+      await cerrarPantallaLector(); // cancela la apertura en curso
+    } else if (pantallaAbierta) {
+      history.pushState({ pantalla: pantallaAbierta }, '');
+    }
+    return;
+  }
+  if (lectorAbierto() && cerrarPanelAbierto()) {
+    history.pushState({ pantalla: 'lector' }, '');
+    return;
+  }
+  if (lectorAbierto() || abriendo) {
+    await alCerrarLector();
   } else if (!$('pantalla-ajustes').hidden) {
     mostrarPantalla(pestanaActual);
-    await refrescar();
+    if (pestanasPorPintar.has(pestanaActual)) await pintarPestana(pestanaActual);
   }
 });
 
@@ -110,10 +196,15 @@ async function iniciar() {
   prepararAjustes();
   prepararBienvenida({ terminado: () => irAPestana('inicio') });
   await prepararBiblioteca({ abrirLibro, refrescar });
-  prepararPantallaLector({ cerrar: () => history.back() });
-  prepararSincronizacion({ terminado: refrescar });
+  prepararPantallaLector({ cerrar: () => volverDesde('lector') });
+  prepararSincronizacion({
+    terminado: async () => {
+      await refrescar();
+      await comprobarLibroAbierto();
+    },
+  });
   document.querySelectorAll('.boton-ajustes').forEach((b) => b.addEventListener('click', abrirAjustes));
-  $('btn-volver-ajustes').addEventListener('click', () => history.back());
+  $('btn-volver-ajustes').addEventListener('click', () => volverDesde('ajustes'));
   document.querySelectorAll('.pestana').forEach((b) => {
     b.addEventListener('click', () => irAPestana(b.dataset.pestana));
   });
@@ -143,7 +234,12 @@ async function iniciar() {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!habiaVersion) return;
       registrar('Versión nueva de la app disponible');
-      if (!lectorAbierto()) location.reload();
+      recargaPendiente = true;
+      recargarSiProcede();
+    });
+    // Si había algo en curso, se recarga cuando la app pasa a segundo plano.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') recargarSiProcede();
     });
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
       .then((r) => r?.update())
@@ -154,4 +250,7 @@ async function iniciar() {
   pintarDiagnostico();
 }
 
-iniciar().catch((e) => registrar(`Error al iniciar: ${e.message}`, 'error'));
+iniciar().catch((e) => {
+  registrar(`Error al iniciar: ${e.message}`, 'error');
+  mostrarAviso(`No se ha podido iniciar la app: ${e.message}\nCierra la app y vuelve a abrirla.`, 600000);
+});

@@ -42,6 +42,15 @@ export function mostrarHoja(titulo, botones, { alPulsar } = {}) {
   });
 }
 
+export function hojaAbierta() {
+  return Boolean(resolverActual);
+}
+
+// Para el botón Atrás de Android.
+export function cancelarHoja() {
+  if (resolverActual) cerrar(null);
+}
+
 export function prepararHoja() {
   $('fondo-hoja').addEventListener('click', () => cerrar(null));
   $('hoja-cancelar').addEventListener('click', () => cerrar(null));

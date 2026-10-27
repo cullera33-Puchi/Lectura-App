@@ -86,7 +86,6 @@
         <button type="button" id="btn-ajustes" class="boton-icono boton-ajustes" aria-label="Ajustes"><i data-icono="ajustes"></i></button>
       </div>
     </header>
-    <input type="file" id="archivo-epub" class="oculto-accesible" accept=".epub,application/epub+zip" multiple>
     <div class="contenido">
       <h1 class="titulo-grande">Biblioteca</h1>
       <div class="filtros">
@@ -154,6 +153,9 @@
       </div>
     </div>
   </section>
+
+  <!-- Selector de archivos, fuera de las pantallas para que funcione desde cualquier pestaña -->
+  <input type="file" id="archivo-epub" class="oculto-accesible" accept=".epub,application/epub+zip" multiple>
 
   <!-- Barra de pestañas -->
   <nav id="barra-pestanas" class="barra-pestanas" hidden>

@@ -11,6 +11,7 @@ import { registrar, suscribirRegistro, entradasRegistro, horaCorta, registroComo
 import { datosDiagnostico, diagnosticoComoTexto, pedirPersistencia } from './diagnostico.js';
 
 const $ = (id) => document.getElementById(id);
+const MAX_LINEAS_REGISTRO = 150;
 
 function mostrarDrive(texto, esError = false) {
   const caja = $('resultado-drive');
@@ -31,9 +32,16 @@ function pintarSesion() {
 }
 
 let pintando = false;
+let repetir = false;
 
+// Si llega una petición mientras se pinta, se repite al terminar para no
+// mostrar datos desactualizados (por ejemplo, la caducidad del token).
 export async function pintarDiagnostico() {
-  if (pintando || $('pantalla-ajustes').hidden) return;
+  if ($('pantalla-ajustes').hidden) return;
+  if (pintando) {
+    repetir = true;
+    return;
+  }
   pintando = true;
   try {
     const dl = $('tabla-diagnostico');
@@ -47,6 +55,10 @@ export async function pintarDiagnostico() {
     }
   } finally {
     pintando = false;
+    if (repetir) {
+      repetir = false;
+      pintarDiagnostico();
+    }
   }
 }
 
@@ -54,7 +66,9 @@ function pintarEntrada(entrada) {
   const li = document.createElement('li');
   li.textContent = `${horaCorta(entrada.fecha)} ${entrada.texto}`;
   if (entrada.tipo === 'error') li.className = 'error';
-  $('lista-registro').prepend(li);
+  const lista = $('lista-registro');
+  lista.prepend(li);
+  while (lista.children.length > MAX_LINEAS_REGISTRO) lista.lastElementChild.remove();
 }
 
 export function pintarAjustes() {

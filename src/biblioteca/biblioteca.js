@@ -4,8 +4,10 @@ import { listarLibros, eliminarLibro, quitarArchivoLocal } from '../datos/libros
 import { cambiarEstado } from '../datos/progreso.js';
 import { leerAjuste, guardarAjuste } from '../datos/almacen.js';
 import { listarPendientes, leerSincronizacion } from '../datos/pendientes.js';
-import { perfilActual, nombreDispositivo } from '../datos/preferencias.js';
-import { asegurarToken } from '../sync/google.js';
+import { perfilActual } from '../datos/preferencias.js';
+import { lectorAbierto } from '../lector/pantalla-lector.js';
+import { asegurarToken, invalidarToken } from '../sync/google.js';
+import { ErrorDrive } from '../sync/drive.js';
 import { descargarLibro, MENSAJE_SIN_CONEXION } from '../sync/sincronizar.js';
 import { importarArchivo } from './importar.js';
 import {
@@ -126,9 +128,10 @@ function pintarChips() {
   });
 }
 
-export async function pintarBiblioteca() {
+// libros: datos ya leídos con librosParaMostrar() (si no, se leen aquí).
+export async function pintarBiblioteca(libros) {
   const enLista = perfilActual() === 'tinta';
-  const todos = await librosParaMostrar();
+  const todos = libros || await librosParaMostrar();
   const visibles = todos
     .filter((l) => vista.filtro === 'todos' || estadoDe(l) === vista.filtro)
     .sort(comparar);
@@ -162,6 +165,7 @@ function pintarAvance(id) {
 }
 
 // Descarga varios libros con un token obtenido dentro del gesto del usuario.
+// Un 401 deja la sesión marcada como caducada para renovarla al volver a pulsar.
 async function descargar(promesaToken, libros) {
   if (!navigator.onLine) {
     mostrarMensaje(MENSAJE_SIN_CONEXION, true);
@@ -180,6 +184,11 @@ async function descargar(promesaToken, libros) {
         });
       } catch (e) {
         todoBien = false;
+        if (e instanceof ErrorDrive && e.estadoHttp === 401) {
+          await invalidarToken();
+          mostrarMensaje('La sesión de Google ha caducado. Pulsa de nuevo para renovarla.', true);
+          break;
+        }
         mostrarMensaje(e.message, true);
         registrar(e.message, 'error');
       } finally {
@@ -188,9 +197,11 @@ async function descargar(promesaToken, libros) {
     }
   } catch (e) {
     todoBien = false;
-    libros.forEach((l) => descargando.delete(l.id));
     mostrarMensaje(e.message, true);
     registrar(e.message, 'error');
+  } finally {
+    // También los que no se llegaron a intentar (sesión caducada a mitad).
+    libros.forEach((l) => descargando.delete(l.id));
   }
   await refrescar();
   return todoBien;
@@ -210,7 +221,8 @@ export function pulsarLibro(libro) {
   }
   const promesaToken = asegurarToken(); // dentro del gesto
   descargar(promesaToken, [libro]).then((bien) => {
-    if (bien) alAbrirLibro(libro.id);
+    // Si mientras tanto se ha abierto otro libro, no se cambia de libro.
+    if (bien && !lectorAbierto()) alAbrirLibro(libro.id);
   });
 }
 
@@ -269,7 +281,7 @@ export async function accionesLibro(libro) {
 
   if (eleccion === 'terminado') {
     const nuevo = terminado ? (libro.progreso?.cfi ? 'leyendo' : 'pendiente') : 'terminado';
-    await cambiarEstado(libro.id, nuevo, nombreDispositivo());
+    await cambiarEstado(libro.id, nuevo);
     registrar(`"${libro.titulo}" marcado como ${nuevo}`);
     await refrescar();
   } else if (eleccion === 'quitar') {
@@ -323,9 +335,10 @@ export async function prepararBiblioteca(opciones) {
   });
 
   $('btn-descargar-todos').addEventListener('click', async () => {
+    if (descargando.size) return; // ya hay descargas en curso
     const promesaToken = asegurarToken(); // dentro del gesto
     const todos = await librosParaMostrar();
-    const enNube = todos.filter((l) => !l.descargado && !l.noDisponible && l.archivoDriveId);
+    const enNube = todos.filter((l) => !l.descargado && !l.noDisponible && l.archivoDriveId && !descargando.has(l.id));
     const bien = await descargar(promesaToken, enNube);
     if (bien) mostrarMensaje(enNube.length === 1 ? '1 libro descargado.' : `${enNube.length} libros descargados.`);
   });

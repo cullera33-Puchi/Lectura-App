@@ -90,8 +90,9 @@ function vacio() {
   return div;
 }
 
-export async function pintarInicio() {
-  const libros = await librosParaMostrar();
+// libros: datos ya leídos con librosParaMostrar() (si no, se leen aquí).
+export async function pintarInicio(datos) {
+  const libros = datos || await librosParaMostrar();
   const contenedor = $('contenido-inicio');
   if (!libros.length) {
     contenedor.replaceChildren(vacio());
