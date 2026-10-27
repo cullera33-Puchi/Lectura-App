@@ -375,6 +375,21 @@ Criterios de aceptación de la v2:
 | Búsqueda en la biblioteca | Por título, autor o serie | Bajo |
 | Edición de metadatos y portada | Corregir datos mal informados en algunos EPUB | Bajo |
 
+### Copia de seguridad (adelantada a la v4)
+
+Protege avances, estadísticas, colecciones y objetivos de los dos dispositivos. No incluye los EPUB, que ya están en Drive.
+
+| Función | Detalle |
+|---|---|
+| Copia automática en Drive | En la primera sincronización de cada día se crea `copias/copia-AAAA-MM-DD.json`. Nunca se sobrescribe. Si el otro dispositivo ya ha hecho la del día, no se repite |
+| Antigüedad | Se conservan las 30 últimas diarias y la primera de cada mes durante 12 meses. Las demás van a la papelera de Drive |
+| Descarga manual | Desde Ajustes. En el iPhone se abre la hoja de compartir para guardarla en Archivos |
+| Restaurar | Desde una copia de Drive o desde un archivo. Se fusiona entrada a entrada y gana lo más reciente, así que no se pierde nada posterior a la copia. Lo restaurado se envía a Drive al sincronizar |
+
+Contenido del archivo: `tipo`, `version`, `fecha`, dispositivo de origen, libros (sin los campos locales), colecciones, objetivos, progreso fusionado y sesiones de cada dispositivo.
+
+Regla: cada dispositivo solo escribe su propio archivo de sesiones, también al restaurar. Las sesiones de otro dispositivo se recuperan restaurando la misma copia en ese dispositivo. Una sesión restaurada conserva su identificador original, así la fusión la reconoce y no se cuenta dos veces.
+
 ### v4. Lectura activa
 
 | Mejora | Qué aporta | Esfuerzo |
@@ -396,4 +411,3 @@ En el perfil Tinta electrónica, los colores de subrayado se sustituyen por subr
 | Compartir un EPUB desde otra app directamente al lector | Viable en la tablet, porque Android lo permite a las apps web instaladas. En el iPhone, Safari no lo permite |
 | Refresco forzado en tinta electrónica cada cierto número de páginas | Para limpiar restos de páginas anteriores. Validar antes si la tablet ya lo gestiona por sí sola |
 | Tercer dispositivo (ordenador) | Cabe en el diseño actual sin cambios |
-| Copia de seguridad exportable | Descarga de biblioteca, progreso, anotaciones y estadísticas en un único archivo |
