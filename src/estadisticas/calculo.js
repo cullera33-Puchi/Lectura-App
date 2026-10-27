@@ -166,6 +166,34 @@ export function resumenLibro(sesiones) {
   };
 }
 
+// Previsión de fin de un libro en curso. Lo que falta se estima con el tiempo
+// ya dedicado al libro y la fracción leída: T·(1−p)/p. Ese tiempo se reparte
+// según la media diaria de lectura (de todos los libros) en los últimos días,
+// contando también los días sin leer. Devuelve null si no hay datos para una
+// estimación razonable.
+const DIAS_MEDIA = 14;
+const MINIMO_LEIDO = 0.05;
+const MINIMO_MS_LIBRO = 10 * 60000;
+const MAXIMO_DIAS = 365;
+
+export function previsionFin({ msLibro, fraccion, sesiones, ahora = new Date() }) {
+  if (!(fraccion >= MINIMO_LEIDO && fraccion < 1) || !(msLibro >= MINIMO_MS_LIBRO)) return null;
+  const desde = ahora.getTime() - DIAS_MEDIA * 86400000;
+  let reciente = 0;
+  for (const s of sesiones) {
+    const inicio = Date.parse(s.inicio);
+    if (inicio >= desde && inicio <= ahora.getTime()) reciente += duracionMs(s);
+  }
+  const mediaDiaria = reciente / DIAS_MEDIA;
+  if (mediaDiaria < 60000) return null; // menos de un minuto al día: no hay ritmo
+  const msRestante = (msLibro * (1 - fraccion)) / fraccion;
+  const dias = Math.max(1, Math.ceil(msRestante / mediaDiaria));
+  if (dias > MAXIMO_DIAS) return null;
+  const fecha = new Date(ahora);
+  fecha.setDate(fecha.getDate() + dias);
+  return { msRestante, dias, fecha: claveDia(fecha), mediaDiaria };
+}
+
 const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const FRANJAS = [
   { nombre: 'de madrugada', desde: 0, hasta: 6 },

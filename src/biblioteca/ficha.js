@@ -7,7 +7,7 @@ import { leerColecciones } from '../datos/colecciones.js';
 import { valorarLibro } from '../datos/libros.js';
 import { mostrarFormulario } from '../ui/hoja.js';
 import { todasLasSesiones } from '../estadisticas/datos.js';
-import { resumenLibro, formatoDuracion } from '../estadisticas/calculo.js';
+import { resumenLibro, formatoDuracion, previsionFin } from '../estadisticas/calculo.js';
 import { completarEdicion } from './importar.js';
 import { crearPortada, porcentajeDe, textoEstado } from './portadas.js';
 import { abrirFicha, cerrarFicha } from '../ui/ficha.js';
@@ -53,6 +53,18 @@ function filas(lista) {
     grupo.appendChild(fila);
   }
   return grupo.children.length ? grupo : null;
+}
+
+// "Hacia el 12 de noviembre (alrededor de 3 h de lectura)".
+function textoPrevision(prevision) {
+  if (!prevision) return null;
+  const minutos = Math.max(5, Math.round(prevision.msRestante / 300000) * 5);
+  const lectura = `alrededor de ${formatoDuracion(minutos * 60000)} de lectura`;
+  if (prevision.dias <= 1) return `Hoy o mañana (${lectura})`;
+  const dia = new Date(`${prevision.fecha}T12:00:00`);
+  const opciones = { day: 'numeric', month: 'long' };
+  if (dia.getFullYear() !== new Date().getFullYear()) opciones.year = 'numeric';
+  return `Hacia el ${dia.toLocaleDateString('es-ES', opciones)} (${lectura})`;
 }
 
 function cabecera(texto) {
@@ -181,6 +193,9 @@ export async function mostrarFichaLibro(libro, acciones) {
     ['Empezado', fecha(lectura.primera)],
     ['Terminado', estado === 'terminado' ? fecha(libro.progreso?.fechaTerminado || libro.progreso?.fecha) : null],
     ['Última lectura', fecha(lectura.ultima)],
+    ['Fin previsto', estado === 'leyendo' ? textoPrevision(previsionFin({
+      msLibro: lectura.ms, fraccion: libro.progreso?.porcentaje, sesiones,
+    })) : null],
     ['Tiempo de lectura', lectura.sesiones ? formatoDuracion(lectura.ms) : null],
     ['Sesiones', lectura.sesiones ? String(lectura.sesiones) : null],
     ['Páginas pasadas', lectura.paginas ? String(lectura.paginas) : null],

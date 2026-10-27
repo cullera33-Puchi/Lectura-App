@@ -13,3 +13,12 @@ ok(r.objetivo.hechos === 2 && r.objetivo.libros === 24, 'objetivo anual');
 ok(r.anios.length === 2 && r.anios[1].anio === 2025 && r.anios[1].terminados === 1, 'histórico por años');
 ok(r.dispositivos.length === 2 && r.dispositivos[0].nombre === 'iPhone', 'desglose por dispositivo');
 ok(c.formatoDuracion(90 * 60000) === '1 h 30 min' && c.formatoDuracion(5 * 60000) === '5 min', 'formato de duración');
+
+// Previsión de fin: 2 h dedicadas al 40 % dejan 3 h; con 30 min al día de
+// media en los últimos 14 días (7 h), son 6 días.
+const reciente = Array.from({ length: 7 }, (_, i) => s(`2026-10-${String(14 + i * 2).padStart(2, '0')}`, 60, 20));
+const pf = c.previsionFin({ msLibro: 120 * 60000, fraccion: 0.4, sesiones: reciente, ahora });
+ok(pf && Math.round(pf.msRestante / 60000) === 180 && pf.dias === 6 && pf.fecha === '2026-11-02', `previsión de fin: ${JSON.stringify(pf && { dias: pf.dias, fecha: pf.fecha })}`);
+ok(c.previsionFin({ msLibro: 120 * 60000, fraccion: 0.02, sesiones: reciente, ahora }) === null, 'sin previsión con menos del 5 % leído');
+ok(c.previsionFin({ msLibro: 120 * 60000, fraccion: 0.4, sesiones: [s('2026-09-01', 60, 20)], ahora }) === null, 'sin previsión si no se ha leído en los últimos 14 días');
+ok(c.previsionFin({ msLibro: 5 * 60000, fraccion: 0.4, sesiones: reciente, ahora }) === null, 'sin previsión con menos de 10 min en el libro');

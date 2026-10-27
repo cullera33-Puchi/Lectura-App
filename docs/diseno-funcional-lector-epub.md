@@ -52,8 +52,11 @@ Notas para la implementación:
 Lector EPUB/
 ├── libros/          <id>.epub
 ├── portadas/        <id>.jpg      (miniatura, unos 300 px de alto)
-├── biblioteca.json  catálogo de libros
-└── progreso.json    posición de lectura por libro
+├── copias/          copia-AAAA-MM-DD.json (copia de seguridad diaria)
+├── biblioteca.json  catálogo de libros, colecciones, objetivos y Quiero leer
+├── progreso.json    posición de lectura por libro
+├── anotaciones.json marcadores (y, más adelante, subrayados y notas)
+└── sesiones-<id>.json sesiones de lectura, uno por dispositivo
 ```
 
 La carpeta raíz se marca con `appProperties: { "app": "lector-epub" }` para localizarla sin depender del nombre.
@@ -400,22 +403,41 @@ Regla: cada dispositivo solo escribe su propio archivo de sesiones, también al 
 
 ### v4. Lectura activa
 
-| Mejora | Qué aporta | Esfuerzo |
+| Mejora | Qué aporta | Esfuerzo | Estado |
+|---|---|---|---|
+| Búsqueda dentro del libro | Localizar un nombre o una frase. Resultados con su contexto, salto al pasaje y resaltado temporal (subrayado en Tinta electrónica) | Medio | Hecho (0.7.0) |
+| Marcadores | Volver a pasajes concretos. Botón en la barra superior y lista en el menú. Se sincronizan | Bajo | Hecho (0.7.2) |
+| Subrayados en colores y notas | Con pulsación larga sobre el texto. Se sincronizan entre dispositivos | Medio | Pendiente |
+| Exportar subrayados y notas a Markdown | Llevarse las ideas de un libro a otro sitio | Bajo | Pendiente (depende de los subrayados) |
+| Diccionario | Definición de una palabra con pulsación larga | Medio | Pendiente. Choca con la regla 7 (ningún servicio externo salvo Google): habría que incluir un diccionario sin conexión o aceptar una excepción |
+
+Impacto en el diseño: archivo `anotaciones.json` en Drive (ya creado para los marcadores), con cada anotación anclada por un CFI. Se fusiona por identificador de anotación y gana la fecha más reciente. Los borrados se conservan marcados con `eliminado`, igual que los libros. Los subrayados usarán el mismo archivo con un rango CFI.
+
+En el perfil Tinta electrónica, los colores de subrayado se sustituirán por subrayado simple, sin grises.
+
+### Mejoras 0.7
+
+| Mejora | Detalle | Versión |
 |---|---|---|
-| Subrayados en colores y notas | Con pulsación larga sobre el texto. Se sincronizan entre dispositivos | Medio |
-| Marcadores | Volver a pasajes concretos | Bajo |
-| Exportar subrayados y notas a Markdown | Llevarse las ideas de un libro a otro sitio | Bajo |
-| Búsqueda dentro del libro | Localizar un nombre o una frase | Medio |
-| Diccionario | Definición de una palabra con pulsación larga, consultando un diccionario en línea | Medio |
-
-Impacto en el diseño: nuevo archivo `anotaciones.json` en Drive, con cada subrayado anclado por un rango CFI. Se fusiona por identificador de anotación, con borrados marcados igual que los libros.
-
-En el perfil Tinta electrónica, los colores de subrayado se sustituyen por subrayado simple o fondo gris, según cómo se vean en la pantalla de la tablet.
+| Barra para recorrer el libro | Deslizador bajo el texto al mostrar los controles, con vista previa del capítulo y el porcentaje antes de soltar | 0.7.1 |
+| Volver a donde estabas | Tras un salto (índice, búsqueda, marcador, barra o enlace) aparece un botón para regresar, y después para ir otra vez al destino. Se oculta al pasar varias páginas | 0.7.3 |
+| Ajustes de lectura por libro | Interruptor "Solo para este libro" en "Aa": tamaño, fuente, interlineado, márgenes y justificación propios de ese libro | 0.7.4 |
+| Valoración y nota | Estrellas y una nota personal en la ficha. Al terminar un libro se propone valorarlo. Se sincronizan en `biblioteca.json` (`valoracion`) | 0.7.5 |
+| Quiero leer | Lista ordenable de próximas lecturas, con fila propia en Leyendo ahora y grupo en la biblioteca. Viaja en `biblioteca.json` (`quieroLeer`) | 0.7.6 |
+| Aviso de duplicados | Detecta el mismo libro importado desde archivos distintos (mismo identificador del EPUB, o mismo título y autor). Avisa al importar y en la biblioteca; se elige qué copia conservar o se marca como libros distintos | 0.7.7 |
+| Meta diaria de minutos | Se fija en Estadísticas, se sigue en la tarjeta Hoy y en Leyendo ahora y avisa una vez al día al cumplirla. Viaja con los objetivos (`objetivos.diario`) | 0.7.8 |
+| Fin previsto | En la ficha de un libro en curso: fecha estimada con el tiempo dedicado, el porcentaje leído y la media diaria de lectura de los últimos 14 días | 0.7.9 |
 
 ### Ideas a valorar (sin fecha)
 
 | Idea | Comentario |
 |---|---|
+| Notas al pie emergentes | Mostrar la nota en una hoja al tocar la llamada, sin saltar al final del capítulo |
+| Exportar estadísticas a Excel | Sesiones y libros terminados en un archivo para analizarlos fuera de la app |
+| Biblioteca grande | Revisar rendimiento y memoria con varios cientos de libros (portadas, búsqueda y sincronización) |
+| Añadir libros desde Drive | Importar EPUB que ya están en una carpeta de Drive sin descargarlos antes al dispositivo |
+| Botones físicos de la tablet | Pasar página con los botones de volumen o los de la funda, si el navegador de la tablet los expone |
+| Espacio en el dispositivo | Mostrar lo que ocupa cada libro y liberar espacio de los terminados |
 | Compartir un EPUB desde otra app directamente al lector | Viable en la tablet, porque Android lo permite a las apps web instaladas. En el iPhone, Safari no lo permite |
 | Refresco forzado en tinta electrónica cada cierto número de páginas | Para limpiar restos de páginas anteriores. Validar antes si la tablet ya lo gestiona por sí sola |
 | Tercer dispositivo (ordenador) | Cabe en el diseño actual sin cambios |
