@@ -9,11 +9,72 @@ import {
 } from './portadas.js';
 import { svgIcono } from '../ui/iconos.js';
 import { crearResumenObjetivos } from '../estadisticas/pantalla.js';
+import { leerQuieroLeer, moverEnQuieroLeer, alternarQuieroLeer } from '../datos/quiero-leer.js';
+import { abrirFicha } from '../ui/ficha.js';
 
 let alVerEstadisticas = () => {};
+let alCambiar = () => {};
 
-export function configurarInicio({ verEstadisticas }) {
+export function configurarInicio({ verEstadisticas, refrescar }) {
   alVerEstadisticas = verEstadisticas;
+  if (refrescar) alCambiar = refrescar;
+}
+
+// Título de sección con un enlace a la derecha (por ejemplo, "Ordenar").
+function tituloConEnlace(texto, enlace, alPulsar) {
+  const fila = document.createElement('div');
+  fila.className = 'seccion-cabecera';
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'enlace';
+  b.textContent = enlace;
+  b.addEventListener('click', alPulsar);
+  fila.append(titulo(texto), b);
+  return fila;
+}
+
+// --- Quiero leer (punto 6): ordenar la lista ---
+
+async function ordenarQuieroLeer() {
+  const [{ ids }, libros] = await Promise.all([leerQuieroLeer(), librosParaMostrar()]);
+  const porId = new Map(libros.map((l) => [l.id, l]));
+  const lista = ids.map((id) => porId.get(id)).filter(Boolean);
+  const grupo = document.createElement('div');
+  grupo.className = 'grupo lista-ordenar';
+  lista.forEach((libro, i) => {
+    const fila = document.createElement('div');
+    fila.className = 'fila fila-ordenar';
+    const texto = document.createElement('span');
+    texto.className = 'ordenar-texto';
+    texto.textContent = `${i + 1}. ${libro.titulo}`;
+    const botonOrden = (icono, etiqueta, accion, desactivado) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'boton-icono';
+      b.innerHTML = svgIcono(icono);
+      b.setAttribute('aria-label', etiqueta);
+      b.disabled = desactivado;
+      b.addEventListener('click', async () => {
+        await accion();
+        await ordenarQuieroLeer();
+        alCambiar();
+      });
+      return b;
+    };
+    fila.append(
+      texto,
+      botonOrden('arriba', `Subir ${libro.titulo}`, () => moverEnQuieroLeer(libro.id, -1), i === 0),
+      botonOrden('abajo', `Bajar ${libro.titulo}`, () => moverEnQuieroLeer(libro.id, 1), i === lista.length - 1),
+      botonOrden('quitar', `Quitar ${libro.titulo} de Quiero leer`, () => alternarQuieroLeer(libro.id), false),
+    );
+    grupo.appendChild(fila);
+  });
+  const pie = document.createElement('p');
+  pie.className = 'pie-grupo';
+  pie.textContent = lista.length
+    ? 'El primero es el siguiente que leerás. Añade libros desde el botón ⋯ de cada uno.'
+    : 'La lista está vacía. Añade libros desde el botón ⋯ de cada uno.';
+  abrirFicha('Quiero leer', lista.length ? [grupo, pie] : [pie]);
 }
 
 const $ = (id) => document.getElementById(id);
@@ -152,8 +213,14 @@ export async function pintarInicio(datos) {
     return;
   }
   const fecha = (l) => l.progreso?.fecha || '';
+  const { ids: quieroIds } = await leerQuieroLeer();
+  const enQuiero = new Set(quieroIds);
   const leyendo = libros.filter((l) => estadoDe(l) === 'leyendo').sort((a, b) => fecha(b).localeCompare(fecha(a)));
-  const nuevos = libros.filter((l) => estadoDe(l) === 'pendiente').sort((a, b) => (b.fechaAlta || '').localeCompare(a.fechaAlta || ''));
+  // "Quiero leer": los que aún no se han empezado, en el orden de la lista.
+  const porId = new Map(libros.map((l) => [l.id, l]));
+  const quiero = quieroIds.map((id) => porId.get(id)).filter((l) => l && estadoDe(l) === 'pendiente');
+  const nuevos = libros.filter((l) => estadoDe(l) === 'pendiente' && !enQuiero.has(l.id))
+    .sort((a, b) => (b.fechaAlta || '').localeCompare(a.fechaAlta || ''));
   const terminados = libros.filter((l) => estadoDe(l) === 'terminado').sort((a, b) => fecha(b).localeCompare(fecha(a)));
 
   // El resumen de objetivos va justo después del libro en curso, para que se
@@ -162,6 +229,7 @@ export async function pintarInicio(datos) {
   if (leyendo.length) partes.push(await tarjetaActual(leyendo[0]));
   partes.push(titulo('Objetivos de lectura'), await crearResumenObjetivos(alVerEstadisticas));
   if (leyendo.length > 1) partes.push(titulo('Seguir leyendo'), await carrusel(leyendo.slice(1)));
+  if (quiero.length) partes.push(tituloConEnlace('Quiero leer', 'Ordenar', ordenarQuieroLeer), await carrusel(quiero));
   if (nuevos.length) {
     partes.push(titulo(leyendo.length ? 'Añadidos recientemente' : 'Empieza uno nuevo'));
     partes.push(await carrusel(nuevos));

@@ -19,6 +19,7 @@ import {
 } from '../datos/colecciones.js';
 import { editarLibro } from './editar.js';
 import { mostrarFichaLibro } from './ficha.js';
+import { leerQuieroLeer, alternarQuieroLeer, estaEnQuieroLeer } from '../datos/quiero-leer.js';
 import { mostrarAviso } from '../ui/aviso.js';
 import { svgIcono } from '../ui/iconos.js';
 import { registrar } from '../ui/registro.js';
@@ -31,8 +32,10 @@ const ORDENES = [
   { id: 'autor', nombre: 'Autor' },
 ];
 
-// grupo: null, { tipo: 'serie', valor: nombre } o { tipo: 'coleccion', valor: id }
+// grupo: null, { tipo: 'serie', valor: nombre }, { tipo: 'coleccion', valor: id }
+// o { tipo: 'quiero' } (lista "Quiero leer", en su orden)
 const vista = { orden: 'ultimo', filtro: 'todos', grupo: null };
+let quieroIds = [];
 let busqueda = '';
 export const descargando = new Map(); // id -> avance de 0 a 1
 let alAbrirLibro = () => {};
@@ -53,6 +56,7 @@ function enGrupo(libro) {
   const g = vista.grupo;
   if (!g) return true;
   if (g.tipo === 'serie') return libro.serie === g.valor;
+  if (g.tipo === 'quiero') return quieroIds.includes(libro.id);
   return (libro.colecciones || []).includes(g.valor);
 }
 
@@ -62,6 +66,7 @@ function comparar(a, b) {
   const texto = (x) => (x || '').toLocaleLowerCase('es');
   // Una serie se muestra en orden de lectura.
   if (vista.grupo?.tipo === 'serie') return numeroSerie(a) - numeroSerie(b) || texto(a.titulo).localeCompare(texto(b.titulo), 'es');
+  if (vista.grupo?.tipo === 'quiero') return quieroIds.indexOf(a.id) - quieroIds.indexOf(b.id);
   if (vista.orden === 'titulo') return texto(a.titulo).localeCompare(texto(b.titulo), 'es');
   if (vista.orden === 'autor') {
     return texto(a.autor).localeCompare(texto(b.autor), 'es') || texto(a.titulo).localeCompare(texto(b.titulo), 'es');
@@ -185,7 +190,7 @@ async function pintarGrupo(colecciones) {
     caja.hidden = true;
     return;
   }
-  $('grupo-nombre').textContent = g.tipo === 'serie' ? `Serie: ${g.valor}` : coleccion.nombre;
+  $('grupo-nombre').textContent = g.tipo === 'serie' ? `Serie: ${g.valor}` : (g.tipo === 'quiero' ? 'Quiero leer' : coleccion.nombre);
   $('btn-gestionar-grupo').hidden = g.tipo !== 'coleccion';
   caja.hidden = false;
 }
@@ -193,7 +198,8 @@ async function pintarGrupo(colecciones) {
 // libros: datos ya leídos con librosParaMostrar() (si no, se leen aquí).
 export async function pintarBiblioteca(libros) {
   const enLista = perfilActual() === 'tinta';
-  const [todos, colecciones] = await Promise.all([libros || librosParaMostrar(), leerColecciones()]);
+  const [todos, colecciones, quiero] = await Promise.all([libros || librosParaMostrar(), leerColecciones(), leerQuieroLeer()]);
+  quieroIds = quiero.ids;
   await pintarGrupo(colecciones);
   const visibles = todos
     .filter((l) => vista.filtro === 'todos' || estadoDe(l) === vista.filtro)
@@ -229,6 +235,8 @@ async function elegirGrupo() {
   for (const l of libros) if (l.serie) series.set(l.serie, (series.get(l.serie) || 0) + 1);
   const cuenta = (n) => (n === 1 ? '1 libro' : `${n} libros`);
   const opciones = [{ id: 'todos', texto: vista.grupo ? 'Todos los libros' : 'Todos los libros \u2713' }];
+  const enQuiero = (await leerQuieroLeer()).ids.filter((id) => libros.some((l) => l.id === id)).length;
+  if (enQuiero) opciones.push({ id: 'quiero', texto: `Quiero leer (${cuenta(enQuiero)})${vista.grupo?.tipo === 'quiero' ? ' \u2713' : ''}` });
   for (const c of colecciones) {
     const n = libros.filter((l) => (l.colecciones || []).includes(c.id)).length;
     const marcado = vista.grupo?.tipo === 'coleccion' && vista.grupo.valor === c.id ? ' \u2713' : '';
@@ -242,6 +250,7 @@ async function elegirGrupo() {
   const eleccion = await mostrarHoja('Colecciones y series', opciones);
   if (!eleccion) return;
   if (eleccion === 'todos') vista.grupo = null;
+  else if (eleccion === 'quiero') vista.grupo = { tipo: 'quiero' };
   else if (eleccion === 'nueva') {
     const nombre = await pedirValor('Nombre de la nueva colección', '', { textoBoton: 'Crear' });
     if (!nombre) return;
@@ -423,6 +432,8 @@ export async function accionesLibro(libro) {
   else if (!libro.noDisponible) botones.push({ id: 'abrir', texto: 'Descargar y abrir' });
   botones.push({ id: 'ficha', texto: 'Ficha del libro' });
   botones.push({ id: 'terminado', texto: terminado ? 'Marcar como no terminado' : 'Marcar como terminado' });
+  const enQuiero = await estaEnQuieroLeer(libro.id);
+  botones.push({ id: 'quiero', texto: enQuiero ? 'Quitar de Quiero leer' : 'Añadir a Quiero leer' });
   botones.push({ id: 'colecciones', texto: 'Añadir a una colección' });
   botones.push({ id: 'editar', texto: 'Editar información' });
   if (libro.descargado && libro.archivoDriveId && !libro.pendienteSubir) {
@@ -445,6 +456,10 @@ export async function accionesLibro(libro) {
     const nuevo = terminado ? (libro.progreso?.cfi ? 'leyendo' : 'pendiente') : 'terminado';
     await cambiarEstado(libro.id, nuevo);
     registrar(`"${libro.titulo}" marcado como ${nuevo}`);
+    await refrescar();
+  } else if (eleccion === 'quiero') {
+    const dentro = await alternarQuieroLeer(libro.id);
+    mostrarMensaje(dentro ? `"${libro.titulo}" añadido a Quiero leer.` : `"${libro.titulo}" quitado de Quiero leer.`);
     await refrescar();
   } else if (eleccion === 'colecciones') {
     await elegirColeccionesDeLibro(libro);

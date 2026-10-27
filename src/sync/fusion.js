@@ -193,13 +193,26 @@ export function fusionarObjetivos(local = {}, remoto = {}) {
 
 // Añade a la biblioteca fusionada las colecciones y los objetivos. Devuelve
 // también si eso obliga a escribir el archivo remoto.
+// Lista "Quiero leer": { ids, fecha }. Se ordena a mano, así que gana entera
+// la más reciente.
+export function fusionarQuieroLeer(local, remoto) {
+  const valida = (x) => esObjeto(x) && Array.isArray(x.ids);
+  if (!valida(remoto)) return valida(local) ? local : { ids: [], fecha: null };
+  if (!valida(local)) return remoto;
+  return (local.fecha || '') > (remoto.fecha || '') ? local : remoto;
+}
+
 export function fusionarExtrasBiblioteca(biblioteca, remoto, extrasLocales) {
   const colecciones = fusionarColecciones(extrasLocales.colecciones, remoto.colecciones);
   const objetivos = fusionarObjetivos(extrasLocales.objetivos, remoto.objetivos);
+  const quieroLeer = fusionarQuieroLeer(extrasLocales.quieroLeer, remoto.quieroLeer);
   const cambio = !igual(colecciones, fusionarColecciones([], remoto.colecciones))
     || !igual(objetivos, fusionarObjetivos({}, remoto.objetivos))
+    || !igual(quieroLeer, remoto.quieroLeer ?? null)
     || !Array.isArray(remoto.colecciones) || !esObjeto(remoto.objetivos);
-  return { biblioteca: { ...biblioteca, colecciones, objetivos }, cambio, colecciones, objetivos };
+  return {
+    biblioteca: { ...biblioteca, colecciones, objetivos, quieroLeer }, cambio, colecciones, objetivos, quieroLeer,
+  };
 }
 
 export const VERSION_SESIONES = 1;

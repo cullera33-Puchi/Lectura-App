@@ -28,6 +28,7 @@ import {
   VERSION_SESIONES, normalizarAnotaciones, fusionarAnotaciones, unirAnotaciones,
 } from './fusion.js';
 import { todasLasAnotaciones, guardarAnotacionesFusionadas } from '../datos/anotaciones.js';
+import { leerQuieroLeer, guardarQuieroLeerFusionado } from '../datos/quiero-leer.js';
 import {
   todosLosLibros, leerLibro, leerArchivo, leerPortada, actualizarLibro, aplicarLibroRemoto,
   guardarPortadaDescargada, guardarArchivoDescargado, idsConPortada, idsDescargados, volverASubir,
@@ -352,6 +353,7 @@ async function ejecutar(token, alEstado) {
     const extras = fusionarExtrasBiblioteca(fusionBiblioteca.biblioteca, remotoBiblioteca.datos, {
       colecciones: await leerColecciones({ incluirEliminadas: true }),
       objetivos: await leerObjetivos(),
+      quieroLeer: await leerQuieroLeer(),
     });
     fusionBiblioteca = {
       ...fusionBiblioteca,
@@ -413,6 +415,7 @@ async function ejecutar(token, alEstado) {
   }
   await guardarColeccionesFusionadas(fusionBiblioteca.extras.colecciones);
   await guardarObjetivosFusionados(fusionBiblioteca.extras.objetivos);
+  await guardarQuieroLeerFusionado(fusionBiblioteca.extras.quieroLeer);
   await guardarSincronizacion('progresoRemoto', fusionProgreso.progreso);
   const bibliotecaAnterior = await leerSincronizacion('bibliotecaRemota');
   await guardarSincronizacion('bibliotecaRemota', fusionBiblioteca.biblioteca);

@@ -239,7 +239,7 @@ async function iniciar() {
     ir: (nombre) => irAPestana(nombre),
     permitido: () => !lectorAbierto() && !abriendo && !hojaAbierta() && !fichaAbierta(),
   });
-  configurarInicio({ verEstadisticas: () => irAPestana('estadisticas') });
+  configurarInicio({ verEstadisticas: () => irAPestana('estadisticas'), refrescar });
   configurarEstadisticas({ alCambiar: refrescar });
 
   alCambiarPreferencias((_, tipo) => {

@@ -2801,3 +2801,33 @@ body[data-perfil="tinta"] .campo-nota {
   border: 2px solid var(--texto);
   border-radius: 0;
 }
+
+/* Título de sección con enlace (Quiero leer, Ordenar) */
+.seccion-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.seccion-cabecera .seccion-titulo {
+  margin-right: auto;
+}
+
+/* Ordenar "Quiero leer" */
+.fila-ordenar {
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.ordenar-texto {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fila-ordenar .boton-icono {
+  flex: none;
+}
