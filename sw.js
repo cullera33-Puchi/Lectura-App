@@ -1,10 +1,13 @@
 // Service worker: red primero y caché como respaldo.
-// Las peticiones a la red se revalidan siempre (cache: 'no-cache'), porque
-// GitHub Pages permite al navegador guardar los archivos 10 minutos y la app
-// podría seguir usando una versión anterior. Sin conexión, se usa la caché.
+// - Las peticiones a la red se revalidan siempre (cache: 'no-cache'), porque
+//   GitHub Pages permite al navegador guardar los archivos 10 minutos y la app
+//   podría seguir usando una versión anterior.
+// - Si la red no responde en unos segundos (conexión colgada), se usa la caché
+//   para que la app abra igual que sin conexión.
 // Solo gestiona archivos de la propia app; Google y Drive van siempre a la red.
 
-const CACHE = 'lector-epub-v6';
+const CACHE = 'lector-epub-v8';
+const ESPERA_RED_MS = 4000;
 const ARCHIVOS = [
   './',
   'index.html',
@@ -72,7 +75,12 @@ const ARCHIVOS = [
 ];
 
 self.addEventListener('install', (evento) => {
-  evento.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  // cache: 'reload' evita copiar a la caché nueva archivos antiguos de la caché HTTP.
+  evento.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(ARCHIVOS.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (evento) => {
@@ -83,18 +91,39 @@ self.addEventListener('activate', (evento) => {
   );
 });
 
+// Una respuesta con redirección no se puede usar para una navegación: se copia.
+async function limpiarRedireccion(respuesta) {
+  if (!respuesta.redirected) return respuesta;
+  return new Response(await respuesta.blob(), { status: respuesta.status, statusText: respuesta.statusText, headers: respuesta.headers });
+}
+
+async function responder(evento) {
+  const peticion = evento.request;
+  const desdeCache = () => caches.match(peticion, { ignoreSearch: true });
+  const red = fetch(peticion.url, { cache: 'no-cache' }).then(async (respuesta) => {
+    if (respuesta.ok) {
+      const copia = respuesta.clone();
+      evento.waitUntil(caches.open(CACHE).then((c) => c.put(peticion, copia)));
+    }
+    return limpiarRedireccion(respuesta);
+  });
+  red.catch(() => {}); // si ya se respondió con la caché, el fallo de red no importa
+  // Si la red tarda, se responde con la caché (si la hay) y la red sigue
+  // actualizándola en segundo plano.
+  const plazo = new Promise((resolver) => setTimeout(resolver, ESPERA_RED_MS)).then(desdeCache);
+  try {
+    const primera = await Promise.race([red, plazo]);
+    if (primera) return primera;
+    return await red;
+  } catch {
+    const enCache = await desdeCache();
+    if (enCache) return enCache;
+    throw new Error('Sin conexión y sin copia en caché');
+  }
+}
+
 self.addEventListener('fetch', (evento) => {
   const peticion = evento.request;
   if (peticion.method !== 'GET' || new URL(peticion.url).origin !== self.location.origin) return;
-  evento.respondWith(
-    fetch(peticion.url, { cache: 'no-cache' })
-      .then((respuesta) => {
-        if (respuesta.ok) {
-          const copia = respuesta.clone();
-          caches.open(CACHE).then((c) => c.put(peticion, copia));
-        }
-        return respuesta;
-      })
-      .catch(() => caches.match(peticion, { ignoreSearch: true })),
-  );
+  evento.respondWith(responder(evento));
 });
