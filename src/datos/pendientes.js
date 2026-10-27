@@ -1,6 +1,6 @@
 // Cola de cambios pendientes de sincronizar y datos de la última sincronización.
 
-import { leer, leerTodos, guardar, borrar, alEscribir } from './almacen.js';
+import { leer, leerTodos, guardar, borrar, contar, alEscribir } from './almacen.js';
 
 const oyentes = new Set();
 
@@ -12,13 +12,21 @@ export async function borrarPendiente(clave) {
   await borrar('pendientes', clave);
 }
 
-export async function contarPendientes() {
-  return (await listarPendientes()).length;
+export function contarPendientes() {
+  return contar('pendientes');
 }
 
 // La interfaz pinta el indicador del botón Sincronizar al recibir este aviso.
+// Solo se avisa si el número ha cambiado (cada página pasada reescribe el
+// mismo pendiente de progreso).
+let ultimoNumero = null;
+
 export function avisarCambioPendientes() {
-  contarPendientes().then((n) => oyentes.forEach((fn) => fn(n)));
+  contarPendientes().then((n) => {
+    if (n === ultimoNumero) return;
+    ultimoNumero = n;
+    oyentes.forEach((fn) => fn(n));
+  });
 }
 
 export function alCambiarPendientes(fn) {

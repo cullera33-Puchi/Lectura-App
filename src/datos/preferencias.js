@@ -22,6 +22,13 @@ export async function cargarPreferencias() {
     bienvenidaCompleta: false,
     ...(dispositivo || {}),
   };
+  // Identificador estable del dispositivo. El nombre se puede editar o
+  // repetir; el identificador no. Sirve para reconocer lo escrito por el otro
+  // dispositivo y, en la v2, para el archivo de sesiones de cada uno.
+  if (!estado.dispositivo.id) {
+    estado.dispositivo.id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await guardarAjuste('dispositivo', estado.dispositivo);
+  }
   estado.lectura = { ...ajustesLecturaIniciales(), ...((await leerAjuste('lectura')) || {}) };
   return preferencias();
 }
@@ -36,6 +43,10 @@ export function perfilActual() {
 
 export function nombreDispositivo() {
   return estado.dispositivo.dispositivo;
+}
+
+export function idDispositivo() {
+  return estado.dispositivo.id;
 }
 
 function avisar(tipo) {

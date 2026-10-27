@@ -1,8 +1,8 @@
 // Catálogo local de libros.
 
-import { leer, leerTodos, leerClaves, borrar, escribirVarios } from './almacen.js';
-
-export const ESTADOS = ['pendiente', 'leyendo', 'terminado'];
+import {
+  leer, leerTodos, leerClaves, escribirVarios, leerYEscribir,
+} from './almacen.js';
 
 // Libros visibles (no eliminados), con su progreso y si el archivo está en el dispositivo.
 export async function listarLibros() {
@@ -22,6 +22,11 @@ export async function listarLibros() {
     }));
 }
 
+// Todos los registros, incluidos los eliminados (para la sincronización).
+export function todosLosLibros() {
+  return leerTodos('libros');
+}
+
 export function leerLibro(id) {
   return leer('libros', id);
 }
@@ -34,23 +39,34 @@ export function leerPortada(id) {
   return leer('portadas', id);
 }
 
+export function idsConPortada() {
+  return leerClaves('portadas');
+}
+
+export function idsDescargados() {
+  return leerClaves('archivos');
+}
+
+// Se guarda la promesa, no la URL, para que dos peticiones simultáneas de la
+// misma portada compartan una sola URL de objeto.
 const urlsPortada = new Map();
 
-export async function urlPortada(id) {
-  if (urlsPortada.has(id)) return urlsPortada.get(id);
-  const blob = await leerPortada(id);
-  const url = blob ? URL.createObjectURL(blob) : null;
-  urlsPortada.set(id, url);
-  return url;
+export function urlPortada(id) {
+  if (!urlsPortada.has(id)) {
+    urlsPortada.set(id, leerPortada(id).then((blob) => (blob ? URL.createObjectURL(blob) : null)));
+  }
+  return urlsPortada.get(id);
 }
 
 function olvidarPortada(id) {
-  const url = urlsPortada.get(id);
-  if (url) URL.revokeObjectURL(url);
+  const promesa = urlsPortada.get(id);
   urlsPortada.delete(id);
+  promesa?.then((url) => url && URL.revokeObjectURL(url));
 }
 
-// Alta de un libro importado. Si estaba eliminado, se recupera.
+// Alta de un libro importado. Si estaba eliminado, se recupera: también se
+// anula su baja pendiente, para que la sincronización no borre en Drive el
+// archivo que se va a subir o reutilizar.
 export async function guardarLibroImportado(libro, datosEpub, portada) {
   const ahora = new Date().toISOString();
   const registro = {
@@ -65,6 +81,7 @@ export async function guardarLibroImportado(libro, datosEpub, portada) {
     { almacen: 'libros', valor: registro },
     { almacen: 'archivos', valor: datosEpub, clave: libro.id },
     { almacen: 'pendientes', valor: { clave: `subirLibro:${libro.id}`, tipo: 'subirLibro', id: libro.id, fecha: ahora } },
+    { almacen: 'pendientes', clave: `bajaLibro:${libro.id}`, borrar: true },
   ];
   if (portada) operaciones.push({ almacen: 'portadas', valor: portada, clave: libro.id });
   else operaciones.push({ almacen: 'portadas', clave: libro.id, borrar: true });
@@ -74,63 +91,60 @@ export async function guardarLibroImportado(libro, datosEpub, portada) {
 }
 
 // Baja: se conserva el registro con eliminado: true para que llegue al otro
-// dispositivo al sincronizar (fase 2). Se borran el archivo, la portada y la caché.
+// dispositivo al sincronizar. Se borran el archivo, la portada y la caché.
 export async function eliminarLibro(id) {
-  const libro = await leer('libros', id);
-  if (!libro) return;
-  const ahora = new Date().toISOString();
   olvidarPortada(id);
-  await escribirVarios([
-    { almacen: 'libros', valor: { ...libro, eliminado: true, fechaModificacion: ahora } },
-    { almacen: 'archivos', clave: id, borrar: true },
-    { almacen: 'portadas', clave: id, borrar: true },
-    { almacen: 'ubicaciones', clave: id, borrar: true },
-    { almacen: 'pendientes', clave: `subirLibro:${id}`, borrar: true },
-    { almacen: 'pendientes', valor: { clave: `bajaLibro:${id}`, tipo: 'bajaLibro', id, fecha: ahora } },
-  ]);
+  const ahora = new Date().toISOString();
+  await leerYEscribir(['libros', 'archivos', 'portadas', 'ubicaciones', 'pendientes'], 'libros', id, (libro) => {
+    if (!libro) return null;
+    return {
+      operaciones: [
+        { almacen: 'libros', valor: { ...libro, eliminado: true, fechaModificacion: ahora } },
+        { almacen: 'archivos', clave: id, borrar: true },
+        { almacen: 'portadas', clave: id, borrar: true },
+        { almacen: 'ubicaciones', clave: id, borrar: true },
+        { almacen: 'pendientes', clave: `subirLibro:${id}`, borrar: true },
+        { almacen: 'pendientes', valor: { clave: `bajaLibro:${id}`, tipo: 'bajaLibro', id, fecha: ahora } },
+      ],
+    };
+  });
 }
 
-export function leerUbicaciones(id) {
-  return leer('ubicaciones', id);
-}
-
-export function guardarUbicaciones(id, json) {
-  return escribirVarios([{ almacen: 'ubicaciones', valor: json, clave: id }]);
-}
-
-export function borrarUbicaciones(id) {
-  return borrar('ubicaciones', id);
-}
-
-// Todos los registros, incluidos los eliminados (para la sincronización).
-export function todosLosLibros() {
-  return leerTodos('libros');
-}
-
-export async function actualizarLibro(id, cambios) {
-  const libro = await leer('libros', id);
-  if (!libro) return null;
-  const nuevo = { ...libro, ...cambios };
-  await escribirVarios([{ almacen: 'libros', valor: nuevo }]);
-  return nuevo;
+// Cambia campos de un libro en una sola transacción.
+export function actualizarLibro(id, cambios) {
+  return leerYEscribir(['libros'], 'libros', id, (libro) => {
+    if (!libro) return null;
+    const nuevo = { ...libro, ...cambios };
+    return { operaciones: [{ almacen: 'libros', valor: nuevo }], resultado: nuevo };
+  });
 }
 
 // Aplica en local un registro llegado de Drive, conservando los campos locales.
-export async function aplicarLibroRemoto(registro) {
-  const local = await leer('libros', registro.id);
-  const nuevo = { ...(local || {}), ...registro };
-  const operaciones = [{ almacen: 'libros', valor: nuevo }];
-  if (registro.eliminado) {
-    olvidarPortada(registro.id);
-    operaciones.push(
-      { almacen: 'archivos', clave: registro.id, borrar: true },
-      { almacen: 'portadas', clave: registro.id, borrar: true },
-      { almacen: 'ubicaciones', clave: registro.id, borrar: true },
-      { almacen: 'pendientes', clave: `subirLibro:${registro.id}`, borrar: true },
-    );
-  }
-  await escribirVarios(operaciones);
-  return nuevo;
+// Si el registro local ha cambiado después (por ejemplo, el usuario lo ha
+// eliminado durante la sincronización), gana el local y no se toca.
+export function aplicarLibroRemoto(registro) {
+  const id = registro.id;
+  return leerYEscribir(['libros', 'archivos', 'portadas', 'ubicaciones', 'pendientes'], 'libros', id, (local) => {
+    if (local && (local.fechaModificacion || '') > (registro.fechaModificacion || '')) return null;
+    const nuevo = { ...(local || {}), ...registro };
+    // Un archivo nuevo en Drive hace que el libro vuelva a estar disponible.
+    if (local?.noDisponible && registro.archivoDriveId && registro.archivoDriveId !== local.archivoDriveId) {
+      nuevo.noDisponible = false;
+    }
+    const operaciones = [{ almacen: 'libros', valor: nuevo }];
+    if (registro.eliminado) {
+      operaciones.push(
+        { almacen: 'archivos', clave: id, borrar: true },
+        { almacen: 'portadas', clave: id, borrar: true },
+        { almacen: 'ubicaciones', clave: id, borrar: true },
+        { almacen: 'pendientes', clave: `subirLibro:${id}`, borrar: true },
+      );
+    }
+    return { operaciones, resultado: nuevo };
+  }).then((resultado) => {
+    if (registro.eliminado) olvidarPortada(id);
+    return resultado;
+  });
 }
 
 export async function guardarArchivoDescargado(id, datos) {
@@ -148,4 +162,26 @@ export async function quitarArchivoLocal(id) {
     { almacen: 'archivos', clave: id, borrar: true },
     { almacen: 'ubicaciones', clave: id, borrar: true },
   ]);
+}
+
+export function leerUbicaciones(id) {
+  return leer('ubicaciones', id);
+}
+
+export function guardarUbicaciones(id, json) {
+  return escribirVarios([{ almacen: 'ubicaciones', valor: json, clave: id }]);
+}
+
+// Pone en cola la subida de un libro cuyo archivo ya no está en Drive.
+export async function volverASubir(id) {
+  const fecha = new Date().toISOString();
+  await leerYEscribir(['libros', 'pendientes'], 'libros', id, (libro) => {
+    if (!libro || libro.eliminado) return null;
+    return {
+      operaciones: [
+        { almacen: 'libros', valor: { ...libro, archivoDriveId: null, portadaDriveId: null } },
+        { almacen: 'pendientes', valor: { clave: `subirLibro:${id}`, tipo: 'subirLibro', id, fecha } },
+      ],
+    };
+  });
 }

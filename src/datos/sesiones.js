@@ -4,6 +4,7 @@
 // página, así no se pierde si el sistema cierra la app.
 
 import { guardar, borrar } from './almacen.js';
+import { idDispositivo } from './preferencias.js';
 
 const INACTIVIDAD_MS = 5 * 60 * 1000;
 const DURACION_MINIMA_MS = 5 * 1000;
@@ -41,6 +42,7 @@ export class RegistroSesiones {
     this.sesion = {
       libroId: this.libroId,
       dispositivo: this.dispositivo,
+      dispositivoId: idDispositivo(),
       inicio: new Date(ahora).toISOString(),
       fin: new Date(ahora).toISOString(),
       paginas: 0,

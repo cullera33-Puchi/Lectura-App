@@ -3,14 +3,14 @@
 // Almacenes (punto 5 del diseño):
 //   ajustes        clave-valor: perfil, dispositivo, lectura, sesión de Google
 //   libros         metadatos por id (huella SHA-256)
-//   archivos       EPUB descargado por id (Blob). Separado de libros para no
-//                  cargar todos los archivos al pintar la biblioteca
+//   archivos       EPUB descargado por id (ArrayBuffer). Separado de libros para
+//                  no cargar todos los archivos al pintar la biblioteca
 //   portadas       miniatura JPEG por id (Blob)
 //   ubicaciones    caché de las ubicaciones de epub.js por id, para calcular
 //                  el porcentaje sin regenerarlas en cada apertura
 //   progreso       última posición local por id
 //   pendientes     cambios aún no sincronizados, por clave "<tipo>:<id>"
-//   sincronizacion fecha de la última sincronización y copia de los JSON remotos
+//   sincronizacion copia de los JSON remotos y datos de la última sincronización
 //   sesiones       sesiones de lectura (autoincremental)
 
 const NOMBRE_BD = 'lector-epub';
@@ -27,6 +27,12 @@ export function alEscribir(fn) {
 function avisarEscritura(almacenes) {
   const lista = Array.isArray(almacenes) ? almacenes : [almacenes];
   oyentesEscritura.forEach((fn) => fn(lista));
+}
+
+// iOS puede cerrar la conexión cuando suspende la app. En ese caso se olvida
+// la conexión y la siguiente operación abre otra.
+function olvidarConexion() {
+  bdPromesa = null;
 }
 
 function abrir() {
@@ -50,28 +56,55 @@ function abrir() {
       const sesiones = crear('sesiones', { keyPath: 'clave', autoIncrement: true });
       sesiones?.createIndex('libro', 'libroId');
     };
-    peticion.onsuccess = () => resolver(peticion.result);
-    peticion.onerror = () => rechazar(peticion.error);
-    peticion.onblocked = () => rechazar(new Error('Hay otra pestaña de la app abierta con una versión anterior. Ciérrala y recarga.'));
+    peticion.onsuccess = () => {
+      const bd = peticion.result;
+      bd.onclose = olvidarConexion;
+      bd.onversionchange = () => {
+        bd.close();
+        olvidarConexion();
+      };
+      resolver(bd);
+    };
+    peticion.onerror = () => {
+      olvidarConexion();
+      rechazar(peticion.error);
+    };
+    // Otra pestaña con una versión anterior tiene la base abierta. La apertura
+    // se completa sola cuando esa pestaña la cierra; mientras, se avisa.
+    peticion.onblocked = () => console.warn('IndexedDB: esperando a que otra pestaña cierre la base de datos');
   });
   return bdPromesa;
 }
 
-async function operar(almacenes, modo, accion) {
-  const bd = await abrir();
+function ejecutar(bd, almacenes, modo, accion) {
   return new Promise((resolver, rechazar) => {
     const tx = bd.transaction(almacenes, modo);
+    // accion devuelve una petición (su resultado), una función que da el
+    // resultado al terminar la transacción, o un valor.
     let resultado;
     const valor = accion(tx);
     if (valor && 'onsuccess' in valor) valor.onsuccess = () => { resultado = valor.result; };
     else resultado = valor;
     tx.oncomplete = () => {
       if (modo === 'readwrite') avisarEscritura(almacenes);
-      resolver(resultado);
+      resolver(typeof resultado === 'function' ? resultado() : resultado);
     };
     tx.onerror = () => rechazar(tx.error);
     tx.onabort = () => rechazar(tx.error || new Error('Operación cancelada'));
   });
+}
+
+async function operar(almacenes, modo, accion) {
+  let bd = await abrir();
+  try {
+    return await ejecutar(bd, almacenes, modo, accion);
+  } catch (e) {
+    // Conexión cerrada por el sistema: se reabre y se reintenta una vez.
+    if (e?.name !== 'InvalidStateError' && e?.name !== 'UnknownError') throw e;
+    olvidarConexion();
+    bd = await abrir();
+    return ejecutar(bd, almacenes, modo, accion);
+  }
 }
 
 export function leer(almacen, clave) {
@@ -80,6 +113,14 @@ export function leer(almacen, clave) {
 
 export function leerTodos(almacen) {
   return operar(almacen, 'readonly', (tx) => tx.objectStore(almacen).getAll());
+}
+
+export function leerClaves(almacen) {
+  return operar(almacen, 'readonly', (tx) => tx.objectStore(almacen).getAllKeys());
+}
+
+export function contar(almacen) {
+  return operar(almacen, 'readonly', (tx) => tx.objectStore(almacen).count());
 }
 
 // Con keyPath, la clave va dentro del valor y no se pasa.
@@ -108,10 +149,28 @@ export function escribirVarios(operaciones) {
   });
 }
 
+// Lee un registro y escribe su nueva versión en la misma transacción, para que
+// ninguna otra escritura se cuele entre la lectura y la escritura.
+// transformar(actual) devuelve { operaciones, resultado } o null para no hacer nada.
+export function leerYEscribir(almacenes, almacenLectura, clave, transformar) {
+  return operar(almacenes, 'readwrite', (tx) => {
+    const salida = { resultado: undefined };
+    const peticion = tx.objectStore(almacenLectura).get(clave);
+    peticion.onsuccess = () => {
+      const cambio = transformar(peticion.result);
+      if (!cambio) return;
+      salida.resultado = cambio.resultado;
+      for (const o of cambio.operaciones) {
+        const a = tx.objectStore(o.almacen);
+        if (o.borrar) a.delete(o.clave);
+        else if (o.clave === undefined) a.put(o.valor);
+        else a.put(o.valor, o.clave);
+      }
+    };
+    return () => salida.resultado;
+  });
+}
+
 export const leerAjuste = (clave) => leer('ajustes', clave);
 export const guardarAjuste = (clave, valor) => guardar('ajustes', valor, clave);
 export const borrarAjuste = (clave) => borrar('ajustes', clave);
-
-export function leerClaves(almacen) {
-  return operar(almacen, 'readonly', (tx) => tx.objectStore(almacen).getAllKeys());
-}
