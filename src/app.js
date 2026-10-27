@@ -96,7 +96,17 @@ async function iniciar() {
   registrar(`navigator.storage.persist(): ${persistencia}`);
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch((e) => registrar(`Service worker no registrado: ${e.message}`, 'error'));
+    // Si ya había una versión instalada y se activa otra, se recarga para usar
+    // el código nuevo. Si se está leyendo, se espera a la próxima apertura.
+    const habiaVersion = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!habiaVersion) return;
+      registrar('Versión nueva de la app disponible');
+      if (!lectorAbierto()) location.reload();
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then((r) => r?.update())
+      .catch((e) => registrar(`Service worker no registrado: ${e.message}`, 'error'));
   }
 
   await iniciarSesionGoogle();

@@ -1,8 +1,10 @@
 // Service worker: red primero y caché como respaldo.
-// Así cada cambio publicado se ve al momento y la app abre sin conexión.
+// Las peticiones a la red se revalidan siempre (cache: 'no-cache'), porque
+// GitHub Pages permite al navegador guardar los archivos 10 minutos y la app
+// podría seguir usando una versión anterior. Sin conexión, se usa la caché.
 // Solo gestiona archivos de la propia app; Google y Drive van siempre a la red.
 
-const CACHE = 'lector-epub-v2';
+const CACHE = 'lector-epub-v3';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -76,7 +78,7 @@ self.addEventListener('fetch', (evento) => {
   const peticion = evento.request;
   if (peticion.method !== 'GET' || new URL(peticion.url).origin !== self.location.origin) return;
   evento.respondWith(
-    fetch(peticion)
+    fetch(peticion.url, { cache: 'no-cache' })
       .then((respuesta) => {
         if (respuesta.ok) {
           const copia = respuesta.clone();
