@@ -16,6 +16,10 @@ Lector EPUB personal para iPhone y tablet de tinta electrónica, con biblioteca 
 - Mejoras 0.6: dos páginas con la tablet en horizontal, ficha del libro y resumen del año.
 - Copia de seguridad: copia diaria en la subcarpeta `copias` de Drive (30 diarias y 12 mensuales), descarga manual y restauración por fusión desde Ajustes. Incluye avances, estadísticas, colecciones y objetivos, no los EPUB.
 
+## Pruebas
+
+Las pruebas automáticas están en `pruebas/`. Ver `pruebas/README.md`. Solo se usan en desarrollo.
+
 ## Configuración
 
 1. Google Cloud: proyecto con la API de Google Drive activada y pantalla de consentimiento con el permiso `drive.file`. En modo Prueba, con la cuenta del usuario como usuario de prueba.

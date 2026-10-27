@@ -1,0 +1,11 @@
+{
+  "name": "lector-epub-pruebas",
+  "private": true,
+  "description": "Pruebas automáticas del lector. Solo para desarrollo: la app no las usa.",
+  "scripts": {
+    "test": "node ejecutar.js"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
