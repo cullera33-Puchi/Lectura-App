@@ -21,135 +21,156 @@
 <body data-perfil="movil" data-tema="claro">
 
   <!-- Primer uso -->
-  <section id="pantalla-bienvenida" class="pantalla" hidden>
-    <div class="contenido">
+  <section id="pantalla-bienvenida" class="pantalla pantalla-agrupada" hidden>
+    <div class="contenido bienvenida">
+      <img class="icono-app" src="iconos/icono-192.png" alt="" width="88" height="88">
       <div id="bienvenida-paso1">
-        <h1>Lector EPUB</h1>
-        <p class="paso">Paso 1 de 2</p>
-        <h2>¿Qué dispositivo es este?</h2>
-        <div class="opciones-grandes">
-          <button type="button" class="opcion-grande" data-perfil="movil">
-            <strong>Móvil</strong>
-            <span>Para el iPhone. Con animaciones y temas claro, sepia y oscuro.</span>
+        <h1 class="titulo-bienvenida">Lector EPUB</h1>
+        <p class="subtitulo">Paso 1 de 2. ¿Qué dispositivo es este?</p>
+        <div class="grupo">
+          <button type="button" class="fila fila-opcion opcion-grande" data-perfil="movil">
+            <i data-icono="movil" class="icono-fila"></i>
+            <span class="fila-texto"><strong>Móvil</strong><span>Para el iPhone. Con animaciones y temas claro, sepia y oscuro.</span></span>
+            <i data-icono="avanzar" class="chevron"></i>
           </button>
-          <button type="button" class="opcion-grande" data-perfil="tinta">
-            <strong>Tinta electrónica</strong>
-            <span>Para la tablet. Sin animaciones, en blanco y negro.</span>
+          <button type="button" class="fila fila-opcion opcion-grande" data-perfil="tinta">
+            <i data-icono="tableta" class="icono-fila"></i>
+            <span class="fila-texto"><strong>Tinta electrónica</strong><span>Para la tablet. Sin animaciones, en blanco y negro.</span></span>
+            <i data-icono="avanzar" class="chevron"></i>
           </button>
         </div>
-        <p class="nota">Puedes cambiarlo después en Ajustes.</p>
+        <p class="pie-grupo">Puedes cambiarlo después en Ajustes.</p>
       </div>
       <div id="bienvenida-paso2" hidden>
-        <p class="paso">Paso 2 de 2</p>
-        <h2>Nombre y cuenta de Google</h2>
-        <label class="campo">Nombre del dispositivo
-          <input type="text" id="bienvenida-nombre" autocomplete="off" maxlength="40">
-        </label>
-        <p class="nota">Es el nombre que verás en los avisos de sincronización.</p>
-        <p>La biblioteca y el avance de lectura se guardan en la carpeta "Lector EPUB" de tu Google Drive.</p>
-        <div class="botones">
-          <button type="button" id="bienvenida-conectar">Conectar con Google</button>
+        <h1 class="titulo-bienvenida">Nombre y cuenta</h1>
+        <p class="subtitulo">Paso 2 de 2</p>
+        <div class="grupo">
+          <label class="fila fila-campo">
+            <span>Nombre</span>
+            <input type="text" id="bienvenida-nombre" autocomplete="off" maxlength="40">
+          </label>
         </div>
+        <p class="pie-grupo">Es el nombre que verás en los avisos de sincronización. La biblioteca y el avance de lectura se guardan en la carpeta "Lector EPUB" de tu Google Drive.</p>
+        <button type="button" id="bienvenida-conectar" class="boton-principal">Conectar con Google</button>
         <div id="bienvenida-mensaje" class="mensaje" role="status"></div>
-        <div class="botones">
-          <button type="button" id="bienvenida-atras" class="secundario">Atrás</button>
-          <button type="button" id="bienvenida-omitir" class="secundario">Ahora no</button>
+        <div class="botones-texto">
+          <button type="button" id="bienvenida-atras" class="boton-texto">Atrás</button>
+          <button type="button" id="bienvenida-omitir" class="boton-texto">Ahora no</button>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- Leyendo ahora -->
+  <section id="pantalla-inicio" class="pantalla con-pestanas" hidden>
+    <header class="barra-nav">
+      <span class="titulo-compacto">Leyendo ahora</span>
+      <div class="acciones-nav">
+        <button type="button" class="boton-icono boton-sincronizar" aria-label="Sincronizar"><i data-icono="sincronizar"></i><span class="indicador" hidden></span></button>
+        <button type="button" class="boton-icono boton-ajustes" aria-label="Ajustes"><i data-icono="ajustes"></i></button>
+      </div>
+    </header>
+    <div class="contenido">
+      <h1 class="titulo-grande">Leyendo ahora</h1>
+      <div id="contenido-inicio"></div>
+    </div>
+  </section>
+
   <!-- Biblioteca -->
-  <section id="pantalla-biblioteca" class="pantalla" hidden>
-    <header class="cabecera">
-      <h1>Biblioteca</h1>
-      <div class="acciones-cabecera">
-        <button type="button" id="btn-sincronizar" class="secundario boton-sincronizar">Sincronizar<span class="indicador" hidden></span></button>
-        <label class="boton" for="archivo-epub">Añadir libro</label>
-        <button type="button" id="btn-ajustes" class="secundario">Ajustes</button>
+  <section id="pantalla-biblioteca" class="pantalla con-pestanas" hidden>
+    <header class="barra-nav">
+      <span class="titulo-compacto">Biblioteca</span>
+      <div class="acciones-nav">
+        <button type="button" id="btn-sincronizar" class="boton-icono boton-sincronizar" aria-label="Sincronizar"><i data-icono="sincronizar"></i><span class="indicador" hidden></span></button>
+        <label class="boton-icono" for="archivo-epub" aria-label="Añadir libro" role="button"><i data-icono="mas"></i></label>
+        <button type="button" id="btn-ajustes" class="boton-icono boton-ajustes" aria-label="Ajustes"><i data-icono="ajustes"></i></button>
       </div>
     </header>
     <input type="file" id="archivo-epub" class="oculto-accesible" accept=".epub,application/epub+zip" multiple>
     <div class="contenido">
+      <h1 class="titulo-grande">Biblioteca</h1>
       <div class="filtros">
-        <label>Ordenar
-          <select id="orden-biblioteca">
-            <option value="ultimo">Último leído</option>
-            <option value="titulo">Título</option>
-            <option value="autor">Autor</option>
-          </select>
-        </label>
-        <label>Mostrar
-          <select id="filtro-biblioteca">
-            <option value="todos">Todos</option>
-            <option value="pendiente">Pendientes</option>
-            <option value="leyendo">Leyendo</option>
-            <option value="terminado">Terminados</option>
-          </select>
-        </label>
-        <button type="button" id="btn-descargar-todos" class="secundario" hidden>Descargar todos</button>
+        <div class="chips" role="tablist" aria-label="Mostrar">
+          <button type="button" class="chip" data-filtro="todos">Todos</button>
+          <button type="button" class="chip" data-filtro="leyendo">Leyendo</button>
+          <button type="button" class="chip" data-filtro="pendiente">Pendientes</button>
+          <button type="button" class="chip" data-filtro="terminado">Terminados</button>
+        </div>
+        <button type="button" id="btn-ordenar" class="boton-icono" aria-label="Ordenar"><i data-icono="ordenar"></i></button>
       </div>
-      <div id="mensaje-biblioteca" class="mensaje" role="status"></div>
+      <button type="button" id="btn-descargar-todos" class="boton-secundario" hidden>Descargar todos</button>
       <div id="lista-libros"></div>
       <p id="biblioteca-vacia" class="vacia" hidden></p>
     </div>
   </section>
 
   <!-- Ajustes -->
-  <section id="pantalla-ajustes" class="pantalla" hidden>
-    <header class="cabecera">
-      <h1>Ajustes</h1>
-      <div class="acciones-cabecera">
-        <button type="button" id="btn-volver-ajustes" class="secundario">Volver</button>
-      </div>
+  <section id="pantalla-ajustes" class="pantalla pantalla-agrupada" hidden>
+    <header class="barra-nav">
+      <button type="button" id="btn-volver-ajustes" class="boton-atras"><i data-icono="atras"></i>Atrás</button>
+      <span class="titulo-compacto">Ajustes</span>
     </header>
     <div class="contenido">
-      <section class="bloque">
-        <h2>Este dispositivo</h2>
-        <fieldset>
-          <legend>Perfil</legend>
-          <label><input type="radio" name="perfil" value="movil"> Móvil</label>
-          <label><input type="radio" name="perfil" value="tinta"> Tinta electrónica</label>
-        </fieldset>
-        <label class="campo">Nombre del dispositivo
+      <h1 class="titulo-grande">Ajustes</h1>
+
+      <h2 class="cabecera-grupo">Este dispositivo</h2>
+      <div class="grupo">
+        <div class="fila">
+          <span>Perfil</span>
+          <div class="segmentado" role="radiogroup" aria-label="Perfil">
+            <label><input type="radio" name="perfil" value="movil"><span>Móvil</span></label>
+            <label><input type="radio" name="perfil" value="tinta"><span>Tinta</span></label>
+          </div>
+        </div>
+        <label class="fila fila-campo">
+          <span>Nombre</span>
           <input type="text" id="nombre-dispositivo" autocomplete="off" maxlength="40">
         </label>
-      </section>
+      </div>
 
-      <section class="bloque">
-        <h2>Cuenta de Google</h2>
-        <p id="estado-sesion"></p>
-        <div class="botones">
-          <button type="button" id="btn-conectar">Conectar con Google</button>
-          <button type="button" id="btn-probar-drive" class="secundario">Probar conexión con Drive</button>
-          <button type="button" id="btn-cerrar-sesion" class="secundario">Cerrar sesión</button>
-        </div>
-        <div id="resultado-drive" class="mensaje" role="status"></div>
-      </section>
+      <h2 class="cabecera-grupo">Cuenta de Google</h2>
+      <div class="grupo">
+        <div class="fila"><span id="estado-sesion"></span></div>
+        <button type="button" id="btn-conectar" class="fila fila-boton">Conectar con Google</button>
+        <button type="button" id="btn-probar-drive" class="fila fila-boton">Probar conexión con Drive</button>
+        <button type="button" id="btn-cerrar-sesion" class="fila fila-boton destructivo">Cerrar sesión</button>
+      </div>
+      <div id="resultado-drive" class="mensaje" role="status"></div>
 
-      <section class="bloque">
-        <h2>Diagnóstico</h2>
+      <h2 class="cabecera-grupo">Diagnóstico</h2>
+      <div class="grupo">
         <dl id="tabla-diagnostico"></dl>
-        <div class="botones">
-          <button type="button" id="btn-actualizar-diagnostico" class="secundario">Actualizar</button>
-          <button type="button" id="btn-persistir" class="secundario">Pedir almacenamiento persistente</button>
-          <button type="button" id="btn-copiar" class="secundario">Copiar diagnóstico y registro</button>
-        </div>
-        <textarea id="texto-copiar" readonly hidden></textarea>
-      </section>
+      </div>
+      <div class="grupo">
+        <button type="button" id="btn-actualizar-diagnostico" class="fila fila-boton">Actualizar</button>
+        <button type="button" id="btn-persistir" class="fila fila-boton">Pedir almacenamiento persistente</button>
+        <button type="button" id="btn-copiar" class="fila fila-boton">Copiar diagnóstico y registro</button>
+      </div>
+      <textarea id="texto-copiar" readonly hidden></textarea>
 
-      <section class="bloque">
-        <h2>Registro</h2>
+      <h2 class="cabecera-grupo">Registro</h2>
+      <div class="grupo">
         <ol id="lista-registro"></ol>
-      </section>
+      </div>
     </div>
   </section>
 
-  <!-- Acciones sobre un libro -->
+  <!-- Barra de pestañas -->
+  <nav id="barra-pestanas" class="barra-pestanas" hidden>
+    <button type="button" class="pestana" data-pestana="inicio"><i data-icono="leyendo"></i><span>Leyendo ahora</span></button>
+    <button type="button" class="pestana" data-pestana="biblioteca"><i data-icono="biblioteca"></i><span>Biblioteca</span></button>
+  </nav>
+
+  <!-- Hoja de acciones -->
   <div id="fondo-hoja" class="fondo" hidden></div>
-  <div id="hoja-acciones" class="hoja" role="dialog" aria-modal="true" hidden>
-    <p id="hoja-titulo" class="hoja-titulo"></p>
-    <div id="hoja-botones" class="hoja-botones"></div>
+  <div id="hoja-acciones" class="hoja hoja-acciones" role="dialog" aria-modal="true" hidden>
+    <div class="grupo-hoja">
+      <p id="hoja-titulo" class="hoja-titulo"></p>
+      <div id="hoja-botones"></div>
+    </div>
+    <div class="grupo-hoja">
+      <button type="button" id="hoja-cancelar" class="fila-hoja negrita">Cancelar</button>
+    </div>
   </div>
 
   <!-- Aviso flotante -->
@@ -158,28 +179,41 @@
   <!-- Lector -->
   <div id="lector" hidden>
     <div id="visor"></div>
-    <div id="barra-superior" class="barra" hidden>
-      <button type="button" id="btn-cerrar-libro" class="secundario">Cerrar</button>
-      <span id="titulo-libro"></span>
-      <button type="button" id="btn-indice" class="secundario">Índice</button>
-      <button type="button" id="btn-sincronizar-lector" class="secundario boton-sincronizar" aria-label="Sincronizar">Sinc.<span class="indicador" hidden></span></button>
-    </div>
-    <div id="barra-inferior" class="barra" hidden>
-      <div class="info-lectura">
-        <span id="info-capitulo"></span>
-        <span id="info-progreso"></span>
+    <div id="controles-lector" hidden>
+      <div class="flotante flotante-arriba">
+        <button type="button" id="btn-cerrar-libro" class="boton-redondo" aria-label="Cerrar el libro"><i data-icono="cerrar"></i></button>
+        <span id="titulo-libro" class="titulo-flotante"></span>
       </div>
-      <button type="button" id="btn-aa" class="secundario" aria-label="Ajustes de lectura">Aa</button>
+      <div class="flotante flotante-abajo">
+        <div class="info-lectura">
+          <span id="info-capitulo"></span>
+          <span id="info-progreso"></span>
+        </div>
+        <button type="button" id="btn-menu-lector" class="boton-redondo" aria-label="Menú del libro"><i data-icono="menu"></i></button>
+      </div>
     </div>
     <div id="fondo-panel" class="fondo" hidden></div>
-    <div id="panel-indice" class="panel" role="dialog" aria-label="Índice" hidden>
-      <div class="panel-cabecera">
-        <h2>Índice</h2>
-        <button type="button" id="btn-cerrar-indice" class="secundario">Cerrar</button>
+
+    <div id="panel-menu" class="hoja" role="dialog" aria-label="Menú del libro" hidden>
+      <div class="asa"></div>
+      <p id="menu-titulo" class="hoja-cabecera-texto"></p>
+      <div class="grupo">
+        <button type="button" id="btn-indice" class="fila fila-menu"><span>Contenido</span><i data-icono="indice"></i></button>
+        <button type="button" id="btn-aa" class="fila fila-menu"><span>Temas y ajustes</span><span class="icono-aa">Aa</span></button>
+        <button type="button" id="btn-sincronizar-lector" class="fila fila-menu boton-sincronizar"><span>Sincronizar</span><span class="indicador" hidden></span><i data-icono="sincronizar"></i></button>
+      </div>
+    </div>
+
+    <div id="panel-indice" class="hoja hoja-alta" role="dialog" aria-label="Contenido" hidden>
+      <div class="asa"></div>
+      <div class="hoja-cabecera">
+        <h2>Contenido</h2>
+        <button type="button" id="btn-cerrar-indice" class="boton-redondo pequeno" aria-label="Cerrar"><i data-icono="cerrar"></i></button>
       </div>
       <ol id="lista-indice"></ol>
     </div>
-    <div id="panel-aa" class="panel panel-inferior" role="dialog" aria-label="Ajustes de lectura" hidden></div>
+
+    <div id="panel-aa" class="hoja" role="dialog" aria-label="Temas y ajustes" hidden></div>
   </div>
 </body>
 </html>

@@ -6,20 +6,24 @@ import { alCambiarPendientes, avisarCambioPendientes } from '../datos/pendientes
 import { mostrarAviso } from './aviso.js';
 import { registrar } from './registro.js';
 
-const BOTONES = ['btn-sincronizar', 'btn-sincronizar-lector'];
+// Botones Sincronizar: barras de "Leyendo ahora" y Biblioteca, y menú del lector.
+const botones = () => document.querySelectorAll('.boton-sincronizar');
 let alTerminar = () => {};
 
 function pintarIndicador(n) {
-  for (const id of BOTONES) {
-    const indicador = document.querySelector(`#${id} .indicador`);
+  for (const b of botones()) {
+    const indicador = b.querySelector('.indicador');
     indicador.textContent = n > 99 ? '99+' : String(n);
     indicador.hidden = n === 0;
-    document.getElementById(id).setAttribute('aria-label', n ? `Sincronizar (${n} cambios pendientes)` : 'Sincronizar');
+    b.setAttribute('aria-label', n ? `Sincronizar (${n} cambios pendientes)` : 'Sincronizar');
   }
 }
 
 function botonesOcupados(ocupados) {
-  for (const id of BOTONES) document.getElementById(id).disabled = ocupados;
+  for (const b of botones()) {
+    b.disabled = ocupados;
+    b.classList.toggle('girando', ocupados);
+  }
 }
 
 // Ejecuta la sincronización con una promesa de token ya pedida.
@@ -55,7 +59,7 @@ function alPulsar() {
 
 export function prepararSincronizacion({ terminado }) {
   alTerminar = terminado;
-  for (const id of BOTONES) document.getElementById(id).addEventListener('click', alPulsar);
+  for (const b of botones()) b.addEventListener('click', alPulsar);
   alCambiarPendientes(pintarIndicador);
   avisarCambioPendientes();
 }
