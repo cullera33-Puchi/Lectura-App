@@ -432,6 +432,7 @@ En el perfil Tinta electrónica, los colores de subrayado se sustituirán por su
 
 | Idea | Comentario |
 |---|---|
+| Detalle de un mes en Estadísticas | Al tocar una barra del gráfico de meses, mostrar los libros leídos ese mes con el tiempo dedicado a cada uno (y los terminados), sumando los dos dispositivos |
 | Notas al pie emergentes | Mostrar la nota en una hoja al tocar la llamada, sin saltar al final del capítulo |
 | Exportar estadísticas a Excel | Sesiones y libros terminados en un archivo para analizarlos fuera de la app |
 | Biblioteca grande | Revisar rendimiento y memoria con varios cientos de libros (portadas, búsqueda y sincronización) |
