@@ -87,7 +87,7 @@
     <div class="contenido">
       <h1 class="titulo-grande">Biblioteca</h1>
       <div class="filtros">
-        <div class="chips" role="tablist" aria-label="Mostrar">
+        <div class="chips" role="group" aria-label="Mostrar">
           <button type="button" class="chip" data-filtro="todos">Todos</button>
           <button type="button" class="chip" data-filtro="leyendo">Leyendo</button>
           <button type="button" class="chip" data-filtro="pendiente">Pendientes</button>
@@ -221,7 +221,7 @@
 
   <!-- Hoja de acciones -->
   <div id="fondo-hoja" class="fondo" hidden></div>
-  <div id="hoja-acciones" class="hoja hoja-acciones" role="dialog" aria-modal="true" hidden>
+  <div id="hoja-acciones" class="hoja hoja-acciones" role="dialog" aria-modal="true" aria-labelledby="hoja-titulo" hidden>
     <div class="grupo-hoja">
       <p id="hoja-titulo" class="hoja-titulo"></p>
       <div id="hoja-botones"></div>

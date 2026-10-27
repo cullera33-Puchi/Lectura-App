@@ -174,7 +174,7 @@ function aplanarIndice(elementos, nivel = 0, lista = []) {
 
 // opciones: { perfil, ajustes, cfiInicial, ubicaciones, avisos, cancelado }
 // avisos: { alCambiarPosicion(info), alTocarCentro(), alDeslizarAbajo(),
-//           alGenerarUbicaciones(json), alRepaginar() }
+//           alGenerarUbicaciones(json), alRepaginar(), alPasarPagina() }
 // cancelado(): devuelve true si la apertura ya no interesa. Se comprueba tras
 // cada espera; en ese caso se libera todo y se lanza AperturaCancelada.
 export async function abrirLibro(contenedor, datos, opciones) {
@@ -442,6 +442,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
   let ultimoPaso = 0;
 
   function pasar(direccion, arrastre = 0, velocidad = null) {
+    if (direccion !== 0) avisos.alPasarPagina?.();
     const miPaso = ++ultimoPaso;
     const vigente = () => !destruido && miPaso === ultimoPaso;
     const antes = huellaPosicion();
@@ -583,8 +584,15 @@ export async function abrirLibro(contenedor, datos, opciones) {
     // cursor o la barra) ni con un panel u hoja abiertos.
     if (e.target?.closest?.('input, textarea, select')) return;
     if (document.querySelector('[role="dialog"]:not([hidden])')) return;
-    if (e.key === 'ArrowRight') siguiente();
-    else if (e.key === 'ArrowLeft') anterior();
+    // Flechas, Avance y Retroceso de página y espacio (los mandos Bluetooth
+    // para pasar página envían estas teclas).
+    const adelante = e.key === 'ArrowRight' || e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey);
+    const atras = e.key === 'ArrowLeft' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey);
+    if (!adelante && !atras) return;
+    if (e.target?.closest?.('button, a[href]') && e.key === ' ') return; // el espacio pulsa el botón
+    e.preventDefault(); // sin desplazar la página
+    if (adelante) siguiente();
+    else anterior();
   }
 
   rendition.hooks.content.register(instalarEstilos);

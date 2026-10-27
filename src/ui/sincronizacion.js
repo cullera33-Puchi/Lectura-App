@@ -69,7 +69,8 @@ export function sincronizacionAutomaticaActiva() {
   return preferencias().dispositivo.sincronizacionAutomatica !== false;
 }
 
-const HAY_CAMBIOS = (r) => r.subidos || r.nuevos || r.bajas || r.posiciones || r.avisos.length;
+const HAY_CAMBIOS = (r) => r.subidos || r.nuevos || r.bajas || r.posiciones || r.marcadores
+  || r.colecciones || r.objetivos || r.quieroLeer || r.avisos.length;
 let ultimaAutomatica = 0;
 
 // Sincronización automática (v3): al abrir la app, al volver a ella y al
@@ -98,6 +99,13 @@ export async function sincronizarAutomaticamente(motivo) {
   } catch (e) {
     if (e instanceof ErrorDrive && e.estadoHttp === 401) await invalidarToken();
     registrar(`Sincronización automática: ${e.message}`, 'error');
+    // Se avisa de lo que no se arregla solo (Drive lleno, versión más nueva
+    // en el otro dispositivo, archivo dañado...). No de lo pasajero: sin
+    // conexión, red lenta, Drive saturado o sesión caducada (que ya se pide
+    // renovar).
+    const estado = e instanceof ErrorDrive ? e.estadoHttp : null;
+    const pasajero = !navigator.onLine || estado === 0 || estado === 401 || estado === 429 || estado >= 500;
+    if (!pasajero) mostrarAviso(`No se ha podido sincronizar: ${e.message}`, 8000);
     return null;
   } finally {
     botonesOcupados(false);

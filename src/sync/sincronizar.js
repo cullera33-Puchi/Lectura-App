@@ -25,7 +25,7 @@ import {
 import {
   normalizarBiblioteca, normalizarProgreso, fusionarBiblioteca, fusionarProgreso, posicionesNuevas,
   unirBibliotecas, unirProgresos, fusionarExtrasBiblioteca, normalizarSesiones, fusionarSesiones,
-  VERSION_SESIONES, normalizarAnotaciones, fusionarAnotaciones, unirAnotaciones,
+  VERSION_SESIONES, normalizarAnotaciones, fusionarAnotaciones, unirAnotaciones, fusionarColecciones, fusionarObjetivos,
 } from './fusion.js';
 import { todasLasAnotaciones, guardarAnotacionesFusionadas } from '../datos/anotaciones.js';
 import { leerQuieroLeer, guardarQuieroLeerFusionado } from '../datos/quiero-leer.js';
@@ -261,6 +261,9 @@ async function sincronizarSesiones(token, raiz, avisos) {
     }
   }
   await guardarSincronizacion('sesionesRemotas', nuevas);
+  // Sesiones nuevas de otros dispositivos, para el resumen.
+  const cuantas = (c) => Object.values(c).reduce((t, d) => t + (d.sesiones?.length || 0), 0);
+  return Math.max(0, cuantas(nuevas) - cuantas(copias));
 }
 
 // Anotaciones (v4): se leen, se fusionan por id con las locales y se escribe
@@ -268,7 +271,11 @@ async function sincronizarSesiones(token, raiz, avisos) {
 async function sincronizarAnotaciones(token, raiz, avisos) {
   const pendientes = (await listarPendientes()).filter((p) => p.tipo === 'anotaciones');
   const remoto = await leerRemoto(token, raiz, NOMBRE_ANOTACIONES, normalizarAnotaciones, unirAnotaciones, avisos);
-  const fusion = fusionarAnotaciones(await todasLasAnotaciones(), remoto.datos);
+  const antes = await todasLasAnotaciones();
+  const fusion = fusionarAnotaciones(antes, remoto.datos);
+  // Marcadores añadidos o quitados en el otro dispositivo, para el resumen.
+  const recibidos = Object.entries(fusion.anotaciones.anotaciones)
+    .filter(([id, a]) => (a.fecha || '') > (antes[id]?.fecha || '')).length;
   if (fusion.escribirRemoto || remoto.duplicados.length) {
     await escribirJson(token, raiz, remoto.archivo, NOMBRE_ANOTACIONES, fusion.anotaciones);
   }
@@ -284,6 +291,7 @@ async function sincronizarAnotaciones(token, raiz, avisos) {
     if (!recientes[id] || (a.fecha || '') > (recientes[id].fecha || '')) recientes[id] = a;
   }
   await guardarAnotacionesFusionadas(recientes);
+  return recibidos;
 }
 
 const PORTADAS_A_LA_VEZ = 4;
@@ -351,16 +359,18 @@ async function ejecutar(token, alEstado) {
   let fusionBiblioteca;
   let fusionProgreso;
   let progresosLocales;
+  let extrasLocales;
   for (let intento = 1; ; intento += 1) {
     estado('Fusionando...');
     progresosLocales = await listarProgresos();
     fusionBiblioteca = fusionarBiblioteca(librosPublicables(await todosLosLibros(), remotoPorId), remotoBiblioteca.datos);
     // Colecciones y objetivo anual (v2), en la raíz de biblioteca.json.
-    const extras = fusionarExtrasBiblioteca(fusionBiblioteca.biblioteca, remotoBiblioteca.datos, {
+    extrasLocales = {
       colecciones: await leerColecciones({ incluirEliminadas: true }),
       objetivos: await leerObjetivos(),
       quieroLeer: await leerQuieroLeer(),
-    });
+    };
+    const extras = fusionarExtrasBiblioteca(fusionBiblioteca.biblioteca, remotoBiblioteca.datos, extrasLocales);
     fusionBiblioteca = {
       ...fusionBiblioteca,
       biblioteca: extras.biblioteca,
@@ -427,6 +437,12 @@ async function ejecutar(token, alEstado) {
     if (cambio.tipo === 'nuevo' || cambio.tipo === 'recuperado') resumen.nuevos += 1;
     if (cambio.tipo === 'baja') resumen.bajas += 1;
   }
+  // Para el resumen: qué ha llegado del otro dispositivo.
+  const distinto = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
+  const ex = fusionBiblioteca.extras;
+  resumen.colecciones = distinto(ex.colecciones, fusionarColecciones(extrasLocales.colecciones, []));
+  resumen.objetivos = distinto(ex.objetivos, fusionarObjetivos(extrasLocales.objetivos, {}));
+  resumen.quieroLeer = distinto(ex.quieroLeer?.ids, extrasLocales.quieroLeer?.ids);
   await guardarColeccionesFusionadas(fusionBiblioteca.extras.colecciones);
   await guardarObjetivosFusionados(fusionBiblioteca.extras.objetivos);
   await guardarQuieroLeerFusionado(fusionBiblioteca.extras.quieroLeer);
@@ -436,10 +452,12 @@ async function ejecutar(token, alEstado) {
 
   // Archivos distintos en Drive: se sincronizan a la vez.
   estado('Sincronizando las estadísticas y los marcadores...');
-  await Promise.all([
+  const [sesionesRecibidas, marcadoresRecibidos] = await Promise.all([
     sincronizarSesiones(token, carpetas.raiz, resumen.avisos),
     sincronizarAnotaciones(token, carpetas.raiz, resumen.avisos),
   ]);
+  resumen.sesiones = sesionesRecibidas;
+  resumen.marcadores = marcadoresRecibidos;
   await guardarSincronizacion('ultima', new Date().toISOString());
 
   // Copia de seguridad del día (solo en la primera sincronización de cada día).
@@ -490,6 +508,10 @@ export function textoResumen(r) {
   if (r.nuevos) partes.push(plural(r.nuevos, 'libro nuevo', 'libros nuevos'));
   if (r.bajas) partes.push(plural(r.bajas, 'libro eliminado', 'libros eliminados'));
   if (r.posiciones) partes.push(plural(r.posiciones, 'posición actualizada', 'posiciones actualizadas'));
+  if (r.marcadores) partes.push(plural(r.marcadores, 'marcador recibido', 'marcadores recibidos'));
+  const recibido = [r.colecciones && 'colecciones', r.objetivos && 'objetivos', r.quieroLeer && 'Quiero leer'].filter(Boolean);
+  if (recibido.length) partes.push(`cambios en ${recibido.join(', ').replace(/, ([^,]*)$/, ' y $1')}`);
+  if (r.sesiones) partes.push(plural(r.sesiones, 'sesión de lectura recibida', 'sesiones de lectura recibidas'));
   const lineas = partes.length ? [`${partes.join(', ')}.`] : [];
   if (!partes.length && !r.avisos.length) lineas.push('Todo al día.');
   return [...lineas, ...r.avisos].join('\n');

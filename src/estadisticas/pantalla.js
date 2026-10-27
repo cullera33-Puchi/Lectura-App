@@ -132,6 +132,8 @@ function seccionHoy(e) {
   return hoy;
 }
 
+const DIAS_PARA_PREVISION = 30;
+
 function seccionObjetivo(e, ahora) {
   const grupo = el('div', 'grupo tarjeta');
   if (!e.objetivo) {
@@ -147,9 +149,13 @@ function seccionObjetivo(e, ahora) {
     const inicioAnio = new Date(e.anio, 0, 1);
     const diasPasados = Math.max(1, (ahora - inicioAnio) / 86400000);
     const ritmo = Math.round((hechos / diasPasados) * 365);
-    const texto = hechos >= libros
-      ? '¡Objetivo cumplido!'
-      : `A este ritmo terminarás unos ${plural(ritmo, 'libro', 'libros')} este año.`;
+    // Las primeras semanas del año, o sin ningún libro terminado, la
+    // proyección no dice nada útil ("unos 182 libros" el 3 de enero).
+    const hayRitmo = diasPasados >= DIAS_PARA_PREVISION && hechos > 0;
+    let texto;
+    if (hechos >= libros) texto = '¡Objetivo cumplido!';
+    else if (hayRitmo) texto = `A este ritmo terminarás unos ${plural(ritmo, 'libro', 'libros')} este año.`;
+    else texto = `Te ${libros - hechos === 1 ? 'queda 1 libro' : `quedan ${libros - hechos} libros`} para cumplirlo.`;
     grupo.append(el('p', 'tarjeta-texto', texto));
   }
   const boton = el('button', 'fila fila-boton', e.objetivo ? 'Cambiar objetivo' : 'Fijar objetivo');

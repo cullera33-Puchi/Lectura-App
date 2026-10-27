@@ -813,6 +813,10 @@ export async function abrirPantallaLector(id) {
           else controlesVisibles(!capaAbierta($('controles-lector')));
         },
         alDeslizarAbajo: () => alCerrar(),
+        // Como en Libros de Apple: al pasar página se ocultan los controles.
+        alPasarPagina: () => {
+          if (capaAbierta($('controles-lector')) && !hayPanelAbierto()) controlesVisibles(false);
+        },
         alSaltarPorEnlace: (cfi, info) => {
           if (actual === nuevo) anotarSalto(nuevo, cfi, info);
         },

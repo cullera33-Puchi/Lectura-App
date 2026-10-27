@@ -173,7 +173,7 @@ function pintarChips() {
   document.querySelectorAll('.chip').forEach((c) => {
     const activo = c.dataset.filtro === vista.filtro;
     c.classList.toggle('activo', activo);
-    c.setAttribute('aria-selected', String(activo));
+    c.setAttribute('aria-pressed', String(activo)); // botones de un grupo, no pestañas
   });
 }
 
@@ -219,7 +219,18 @@ export async function pintarBiblioteca(libros) {
   if (todos.length === 0) {
     vacia.textContent = 'Todavía no hay libros. Pulsa + para importar un EPUB, o sincroniza para traer los del otro dispositivo.';
   } else if (busqueda) {
-    vacia.textContent = `Ningún libro coincide con "${busqueda}".`;
+    // Si el filtro o el grupo ocultan coincidencias, se dice.
+    const enTotal = todos.filter(coincideBusqueda).length;
+    const acotado = vista.filtro !== 'todos' || vista.grupo;
+    if (acotado && enTotal) {
+      const donde = [
+        vista.filtro !== 'todos' && `el filtro "${document.querySelector(`.chip[data-filtro="${vista.filtro}"]`)?.textContent || vista.filtro}"`,
+        vista.grupo && 'el grupo elegido',
+      ].filter(Boolean).join(' y ');
+      vacia.textContent = `Ningún libro con ${donde} coincide con "${busqueda}". En toda la biblioteca hay ${enTotal === 1 ? '1 que coincide' : `${enTotal} que coinciden`}.`;
+    } else {
+      vacia.textContent = `Ningún libro coincide con "${busqueda}".`;
+    }
   } else {
     vacia.textContent = vista.grupo ? 'No hay libros en este grupo con este filtro.' : 'No hay libros con este filtro.';
   }
