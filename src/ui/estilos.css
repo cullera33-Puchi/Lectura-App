@@ -905,10 +905,21 @@ body[data-perfil="tinta"] .chip.activo {
   margin-bottom: 12px;
 }
 
+/* Dos columnas con el tamaño justo para ver cuatro portadas completas sin
+   desplazar: el alto disponible (pantalla menos barras, título, filtros y
+   textos) se reparte en dos filas y el ancho sale de la proporción 2:3. */
 #lista-libros.rejilla {
+  --ancho-portada: clamp(104px, calc((100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 316px) / 3), 170px);
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 28px 22px;
+  grid-template-columns: repeat(auto-fill, var(--ancho-portada));
+  justify-content: space-evenly;
+  gap: 24px 20px;
+}
+
+@supports (height: 100svh) {
+  #lista-libros.rejilla {
+    --ancho-portada: clamp(104px, calc((100svh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 316px) / 3), 170px);
+  }
 }
 
 .libro {
@@ -943,14 +954,21 @@ body[data-perfil="tinta"] .chip.activo {
   overflow-wrap: anywhere;
 }
 
+.portada-sin-imagen {
+  container-type: inline-size;
+}
+
+/* El texto escala con el ancho de la portada (cqw: % del contenedor). */
 .portada-sin-imagen .p-titulo {
-  font-size: 17px;
+  font-size: 15px;
+  font-size: clamp(9px, 12cqw, 20px);
   font-weight: 700;
   line-height: 1.15;
 }
 
 .portada-sin-imagen .p-autor {
-  font-size: 12px;
+  font-size: 11px;
+  font-size: clamp(8px, 8cqw, 13px);
   opacity: 0.85;
 }
 
@@ -1065,10 +1083,6 @@ body[data-perfil="tinta"] .libro.no-disponible .portada {
 
 .lista .portada-sin-imagen .p-autor {
   display: none;
-}
-
-.lista .portada-sin-imagen .p-titulo {
-  font-size: 10px;
 }
 
 .lista .libro-texto {
