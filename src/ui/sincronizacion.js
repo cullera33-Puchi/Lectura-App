@@ -1,6 +1,9 @@
 // Botón Sincronizar (biblioteca y lector) e indicador de cambios pendientes.
 
-import { asegurarToken, invalidarToken } from '../sync/google.js';
+import {
+  asegurarToken, invalidarToken, tokenVigente, estadoSesion, suscribirSesion,
+} from '../sync/google.js';
+import { preferencias } from '../datos/preferencias.js';
 import { ErrorDrive } from '../sync/drive.js';
 import { sincronizar, sincronizando, textoResumen, MENSAJE_SIN_CONEXION } from '../sync/sincronizar.js';
 import { alCambiarPendientes, avisarCambioPendientes } from '../datos/pendientes.js';
@@ -11,12 +14,23 @@ import { registrar } from './registro.js';
 const botones = () => document.querySelectorAll('.boton-sincronizar');
 let alTerminar = () => {};
 
-function pintarIndicador(n) {
+let pendientes = 0;
+
+// Indicador del botón: número de cambios pendientes y, si la sesión de Google
+// ha caducado, un aviso de que el siguiente toque abrirá la ventana de Google.
+function pintarIndicador(n = pendientes) {
+  pendientes = n;
+  const caducada = Boolean(estadoSesion().token) && !tokenVigente();
   for (const b of botones()) {
     const indicador = b.querySelector('.indicador');
-    indicador.textContent = n > 99 ? '99+' : String(n);
-    indicador.hidden = n === 0;
-    b.setAttribute('aria-label', n ? `Sincronizar (${n} cambios pendientes)` : 'Sincronizar');
+    indicador.textContent = n > 99 ? '99+' : (n ? String(n) : '!');
+    indicador.hidden = n === 0 && !caducada;
+    b.classList.toggle('sesion-caducada', caducada);
+    const partes = [];
+    if (n) partes.push(`${n} cambios pendientes`);
+    if (caducada) partes.push('sesión de Google caducada');
+    b.setAttribute('aria-label', partes.length ? `Sincronizar (${partes.join(', ')})` : 'Sincronizar');
+    b.title = caducada ? 'La sesión de Google ha caducado. Pulsa para renovarla.' : '';
   }
 }
 
@@ -50,6 +64,40 @@ export async function ejecutarSincronizacion(promesaToken) {
   }
 }
 
+export function sincronizacionAutomaticaActiva() {
+  return preferencias().dispositivo.sincronizacionAutomatica !== false;
+}
+
+const HAY_CAMBIOS = (r) => r.subidos || r.nuevos || r.bajas || r.posiciones || r.avisos.length;
+let ultimaAutomatica = 0;
+
+// Sincronización automática (v3): al abrir la app, al volver a ella y al
+// cerrar un libro. Solo si está activada, hay conexión y la sesión de Google
+// sigue vigente (renovarla exige un toque). No muestra nada si no hay cambios.
+export async function sincronizarAutomaticamente(motivo) {
+  if (!sincronizacionAutomaticaActiva() || sincronizando() || !navigator.onLine || !tokenVigente()) return null;
+  ultimaAutomatica = Date.now();
+  botonesOcupados(true);
+  try {
+    const resumen = await sincronizar(await asegurarToken());
+    registrar(`Sincronización automática (${motivo})`);
+    if (HAY_CAMBIOS(resumen)) mostrarAviso(textoResumen(resumen));
+    await alTerminar(resumen);
+    return resumen;
+  } catch (e) {
+    if (e instanceof ErrorDrive && e.estadoHttp === 401) await invalidarToken();
+    registrar(`Sincronización automática: ${e.message}`, 'error');
+    return null;
+  } finally {
+    botonesOcupados(false);
+    avisarCambioPendientes();
+  }
+}
+
+export function minutosDesdeAutomatica() {
+  return (Date.now() - ultimaAutomatica) / 60000;
+}
+
 // Manejador del botón. Todo lo que precede a asegurarToken() es síncrono para
 // que la ventana de Google, si hace falta, se abra dentro del gesto.
 function alPulsar() {
@@ -66,4 +114,10 @@ export function prepararSincronizacion({ terminado }) {
   for (const b of botones()) b.addEventListener('click', alPulsar);
   alCambiarPendientes(pintarIndicador);
   avisarCambioPendientes();
+  // La caducidad no avisa por sí sola: se comprueba cada minuto y al volver a la app.
+  suscribirSesion(() => pintarIndicador());
+  setInterval(() => pintarIndicador(), 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') pintarIndicador();
+  });
 }

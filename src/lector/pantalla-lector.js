@@ -7,7 +7,7 @@
 
 import { abrirLibro, AperturaCancelada, MENSAJE_LIBRO_ILEGIBLE } from './lector.js';
 import { leerLibro, leerArchivo, leerUbicaciones, guardarUbicaciones } from '../datos/libros.js';
-import { leerProgreso, guardarProgreso } from '../datos/progreso.js';
+import { leerProgreso, guardarProgreso, cambiarEstado } from '../datos/progreso.js';
 import { RegistroSesiones } from '../datos/sesiones.js';
 import {
   preferencias, cambiarLectura, nombreDispositivo, idDispositivo, alCambiarPreferencias,
@@ -18,6 +18,7 @@ import {
 import { registrar } from '../ui/registro.js';
 import { leerSincronizacion } from '../datos/pendientes.js';
 import { mostrarHoja } from '../ui/hoja.js';
+import { cargarRitmo, anotarPagina, reiniciarReferencia, tiempoRestante } from './ritmo.js';
 import { abrirCapa, cerrarCapa, capaAbierta } from '../ui/paneles.js';
 import { svgIcono } from '../ui/iconos.js';
 
@@ -60,14 +61,18 @@ function abrirPanel(id) {
   abrirCapa($(id));
 }
 
+// Por ejemplo: "45 %. Capítulo: 3 páginas, 4 min. Libro: 3 h 20 min".
 function textoProgreso(info) {
   const partes = [];
   if (info.porcentaje != null) partes.push(`${Math.round(info.porcentaje * 100)} %`);
+  const queda = tiempoRestante(info);
   if (info.paginasRestantesCapitulo != null) {
     const n = info.paginasRestantesCapitulo;
-    partes.push(n === 0 ? 'última página del capítulo' : `${n} ${n === 1 ? 'página' : 'páginas'} hasta el final del capítulo`);
+    const paginas = n === 0 ? 'última página' : `${n} ${n === 1 ? 'página' : 'páginas'}`;
+    partes.push(`Capítulo: ${paginas}${queda.capitulo ? `, ${queda.capitulo}` : ''}`);
   }
-  return partes.join(', ');
+  if (queda.libro) partes.push(`Libro: ${queda.libro}`);
+  return partes.join('. ');
 }
 
 async function alCambiarPosicion(info) {
@@ -81,13 +86,20 @@ async function alCambiarPosicion(info) {
   const p = a.progreso;
   const porcentaje = info.porcentaje ?? p?.porcentaje ?? null;
   const datos = (cfi, estado) => ({
-    cfi, porcentaje, capitulo: info.capitulo, estado, dispositivo: nombreDispositivo(), dispositivoId: idDispositivo(),
+    cfi,
+    porcentaje,
+    capitulo: info.capitulo,
+    estado,
+    fechaTerminado: estado === 'terminado' ? (p?.fechaTerminado || null) : null,
+    dispositivo: nombreDispositivo(),
+    dispositivoId: idDispositivo(),
   });
 
   // Al abrir y al repaginar por un cambio de ajustes, el punto de lectura no
   // cambia aunque el CFI de inicio de página sí lo haga. No se guarda como
   // avance, para no alterar la posición que recibirá el otro dispositivo.
   const mismaPosicion = Date.now() < a.repaginandoHasta || info.cfi === a.ultimoCfi;
+  anotarPagina(info, { contar: !mismaPosicion });
   if (mismaPosicion) {
     a.ultimoCfi = info.cfi; // referencia para detectar el siguiente paso de página
     // Abrir sin pasar página no es un avance: se guarda sin fecha (provisional)
@@ -106,6 +118,19 @@ async function alCambiarPosicion(info) {
   const estado = p?.estado === 'terminado' ? 'terminado' : 'leyendo';
   a.progreso = await guardarProgreso(a.id, datos(info.cfi, estado));
   if (actual === a) a.sesiones.paginaPasada(); // si se ha cerrado, la sesión ya terminó
+  if (info.final && estado !== 'terminado' && !a.propuestoTerminar && actual === a) proponerTerminar(a);
+}
+
+// Al llegar a la última página se propone marcar el libro como terminado
+// (una vez por apertura).
+async function proponerTerminar(a) {
+  a.propuestoTerminar = true;
+  const eleccion = await mostrarHoja(`Has llegado al final de "${a.titulo}".`, [
+    { id: 'terminar', texto: 'Marcar como terminado' },
+  ]);
+  if (eleccion !== 'terminar' || actual !== a) return;
+  a.progreso = await cambiarEstado(a.id, 'terminado');
+  registrar(`"${a.titulo}" terminado`);
 }
 
 // --- Índice ---
@@ -359,6 +384,7 @@ export async function abrirPantallaLector(id) {
   $('info-capitulo').textContent = libro.titulo;
   $('info-progreso').textContent = '';
 
+  reiniciarReferencia();
   const sesiones = new RegistroSesiones(id, nombreDispositivo());
   const nuevo = {
     id,
@@ -435,6 +461,7 @@ export function lectorAbierto() {
 
 export function prepararPantallaLector({ cerrar }) {
   alCerrar = cerrar;
+  cargarRitmo().catch(() => {});
   $('btn-cerrar-libro').addEventListener('click', () => alCerrar());
   $('btn-menu-lector').addEventListener('click', () => abrirPanel('panel-menu'));
   $('btn-indice').addEventListener('click', abrirIndice);

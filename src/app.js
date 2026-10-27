@@ -10,7 +10,8 @@ import { iniciarSesionGoogle } from './sync/google.js';
 import {
   prepararBiblioteca, pintarBiblioteca, mostrarMensaje, librosParaMostrar, descargando,
 } from './biblioteca/biblioteca.js';
-import { pintarInicio } from './biblioteca/inicio.js';
+import { pintarInicio, configurarInicio } from './biblioteca/inicio.js';
+import { pintarEstadisticas } from './estadisticas/pantalla.js';
 import {
   prepararPantallaLector, abrirPantallaLector, cerrarPantallaLector, lectorAbierto, cerrarPanelAbierto,
   idLibroAbierto,
@@ -22,15 +23,18 @@ import { mostrarAviso } from './ui/aviso.js';
 import { prepararAjustes, pintarAjustes, pintarDiagnostico } from './ui/ajustes.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
 import { prepararHoja, hojaAbierta, cancelarHoja } from './ui/hoja.js';
-import { prepararSincronizacion } from './ui/sincronizacion.js';
+import {
+  prepararSincronizacion, sincronizarAutomaticamente, minutosDesdeAutomatica,
+} from './ui/sincronizacion.js';
 import { pintarIconos } from './ui/iconos.js';
 import { aplicarTemaInterfaz, alCambiarModoSistema } from './ui/temas.js';
 import { registrar } from './ui/registro.js';
 import { pedirPersistencia, estaInstalada } from './ui/diagnostico.js';
 
 const $ = (id) => document.getElementById(id);
-const PANTALLAS = ['bienvenida', 'inicio', 'biblioteca', 'ajustes'];
-const PESTANAS = ['inicio', 'biblioteca'];
+const MINUTOS_ENTRE_AUTOMATICAS = 15;
+const PANTALLAS = ['bienvenida', 'inicio', 'biblioteca', 'estadisticas', 'ajustes'];
+const PESTANAS = ['inicio', 'biblioteca', 'estadisticas'];
 
 let pestanaActual = 'inicio';
 let abriendo = false; // apertura de un libro en curso
@@ -66,7 +70,8 @@ function pestanaVisible() {
 async function pintarPestana(nombre, libros) {
   pestanasPorPintar.delete(nombre);
   if (nombre === 'inicio') await pintarInicio(libros);
-  else await pintarBiblioteca(libros);
+  else if (nombre === 'biblioteca') await pintarBiblioteca(libros);
+  else await pintarEstadisticas();
 }
 
 async function refrescar() {
@@ -116,9 +121,11 @@ async function abrirLibro(id) {
 }
 
 async function alCerrarLector() {
+  const habiaLibro = lectorAbierto();
   await cerrarPantallaLector();
   await refrescar();
   window.scrollTo(0, scrollAntesDeLeer);
+  if (habiaLibro) sincronizarAutomaticamente('al cerrar un libro');
 }
 
 // Si se sincroniza con un libro abierto y el otro dispositivo lo ha eliminado,
@@ -209,6 +216,7 @@ async function iniciar() {
     b.addEventListener('click', () => irAPestana(b.dataset.pestana));
   });
   prepararTitulosGrandes();
+  configurarInicio({ verEstadisticas: () => irAPestana('estadisticas') });
 
   alCambiarPreferencias((_, tipo) => {
     aplicarTema();
@@ -248,6 +256,15 @@ async function iniciar() {
 
   await iniciarSesionGoogle();
   pintarDiagnostico();
+
+  // Sincronización automática al abrir la app y al volver a ella tras un rato
+  // (en el iPhone la app instalada rara vez se cierra del todo).
+  if (preferencias().dispositivo.bienvenidaCompleta) sincronizarAutomaticamente('al abrir la app');
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !lectorAbierto() && minutosDesdeAutomatica() > MINUTOS_ENTRE_AUTOMATICAS) {
+      sincronizarAutomaticamente('al volver a la app');
+    }
+  });
 }
 
 iniciar().catch((e) => {

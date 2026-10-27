@@ -72,11 +72,23 @@ export function alCambiarModoSistema(fn) {
 }
 
 // La interfaz sigue el tema elegido.
+// Color de la barra de estado. Safari en iOS no siempre atiende a un cambio
+// del atributo, así que se sustituye la etiqueta entera.
+function pintarBarraEstado(color) {
+  const actual = document.querySelector('meta[name="theme-color"]');
+  if (actual?.getAttribute('content') === color) return;
+  const nueva = document.createElement('meta');
+  nueva.name = 'theme-color';
+  nueva.content = color;
+  if (actual) actual.replaceWith(nueva);
+  else document.head.appendChild(nueva);
+}
+
 export function aplicarTemaInterfaz(perfil, ajustes) {
   const tema = temaEfectivo(perfil, ajustes);
   document.body.dataset.perfil = perfil;
   document.body.dataset.tema = tema.id;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tema.fondo);
+  pintarBarraEstado(tema.fondo);
   return tema;
 }
 

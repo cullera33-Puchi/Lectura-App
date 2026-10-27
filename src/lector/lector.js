@@ -493,7 +493,10 @@ export async function abrirLibro(contenedor, datos, opciones) {
       seccion: inicioPos.index,
       capitulo: etiquetaCapitulo(inicioPos.index),
       porcentaje: conUbicaciones ? libro.locations.percentageFromCfi(inicioPos.cfi) : null,
+      ubicacion: conUbicaciones ? libro.locations.locationFromCfi(inicioPos.cfi) : null,
+      totalUbicaciones: conUbicaciones ? libro.locations.length() : null,
       paginasRestantesCapitulo: pagina && total ? Math.max(0, total - pagina) : null,
+      final: Boolean(posicion.atEnd),
     };
   }
 

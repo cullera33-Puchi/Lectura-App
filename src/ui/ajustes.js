@@ -77,6 +77,7 @@ export function pintarAjustes() {
     r.checked = r.value === dispositivo.perfil;
   });
   $('nombre-dispositivo').value = dispositivo.dispositivo;
+  $('sincronizacion-automatica').checked = dispositivo.sincronizacionAutomatica !== false;
   pintarSesion();
   pintarDiagnostico();
 }
@@ -120,6 +121,11 @@ export function prepararAjustes() {
     }
     await cambiarDispositivo({ dispositivo: nombre, nombreEditado: true });
     registrar(`Nombre del dispositivo: ${nombre}`);
+  });
+
+  $('sincronizacion-automatica').addEventListener('change', async (e) => {
+    await cambiarDispositivo({ sincronizacionAutomatica: e.target.checked });
+    registrar(`Sincronización automática ${e.target.checked ? 'activada' : 'desactivada'}`);
   });
 
   $('btn-conectar').addEventListener('click', () => {
