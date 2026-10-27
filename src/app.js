@@ -24,6 +24,7 @@ import { prepararAjustes, pintarAjustes, pintarDiagnostico } from './ui/ajustes.
 import { prepararCopias } from './ui/copias.js';
 import { completarEdicionesPendientes } from './biblioteca/importar.js';
 import { prepararFicha, fichaAbierta, cerrarFicha } from './ui/ficha.js';
+import { prepararDeslizarPestanas } from './ui/deslizar-pestanas.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
 import { prepararHoja, hojaAbierta, cancelarHoja } from './ui/hoja.js';
 import {
@@ -231,6 +232,12 @@ async function iniciar() {
     b.addEventListener('click', () => irAPestana(b.dataset.pestana));
   });
   prepararTitulosGrandes();
+  prepararDeslizarPestanas({
+    pestanas: PESTANAS,
+    actual: pestanaVisible,
+    ir: (nombre) => irAPestana(nombre),
+    permitido: () => !lectorAbierto() && !abriendo && !hojaAbierta() && !fichaAbierta(),
+  });
   configurarInicio({ verEstadisticas: () => irAPestana('estadisticas') });
   configurarEstadisticas({ alCambiar: refrescar });
 

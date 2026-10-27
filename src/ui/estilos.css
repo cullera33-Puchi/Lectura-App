@@ -119,6 +119,9 @@ html {
 
 body {
   margin: 0;
+  /* Al cambiar de pestaña deslizando, la pantalla sale por el lado sin
+     provocar desplazamiento horizontal. */
+  overflow-x: hidden;
   background: var(--fondo);
   color: var(--texto);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

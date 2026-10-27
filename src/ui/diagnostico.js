@@ -6,7 +6,7 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.6.4 (movimientos más fluidos)';
+export const VERSION_APP = '0.6.5 (cambiar de pestaña deslizando)';
 
 let resultadoPersistencia = 'sin pedir';
 
