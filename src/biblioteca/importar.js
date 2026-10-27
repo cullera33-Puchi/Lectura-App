@@ -129,6 +129,12 @@ async function miniaturaPortada(zip, ruta) {
   const extension = ruta.split('.').pop().toLowerCase();
   const tipo = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' }[extension];
   const blob = new Blob([await entrada.async('arraybuffer')], { type: tipo || 'image/jpeg' });
+  return reducirPortada(blob);
+}
+
+// Reduce una imagen a la altura de las portadas y la pasa a JPEG. También se
+// usa al cambiar la portada a mano.
+export async function reducirPortada(blob) {
   const img = await cargarImagen(blob);
   const escala = Math.min(1, ALTO_PORTADA / img.naturalHeight);
   const lienzo = document.createElement('canvas');

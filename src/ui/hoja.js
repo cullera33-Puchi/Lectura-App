@@ -42,6 +42,43 @@ export function mostrarHoja(titulo, botones, { alPulsar } = {}) {
   });
 }
 
+// Muestra un formulario en la hoja, encima del botón de guardar. Devuelve true
+// si se pulsa el botón y false si se cancela.
+export async function mostrarFormulario(titulo, elementos, { textoBoton = 'Guardar', enfocar } = {}) {
+  const eleccion = mostrarHoja(titulo, [{ id: 'guardar', texto: textoBoton }]);
+  const formulario = document.createElement('div');
+  formulario.className = 'formulario-hoja';
+  formulario.append(...elementos);
+  formulario.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') $('hoja-botones').querySelector('.fila-hoja:last-child')?.click();
+  });
+  $('hoja-botones').prepend(formulario);
+  if (enfocar) setTimeout(() => enfocar.focus(), 50);
+  return (await eleccion) === 'guardar';
+}
+
+// Pide un texto o un número en la hoja. Devuelve el valor o null si se cancela.
+export async function pedirValor(titulo, valor, { tipo = 'text', min, max, textoBoton = 'Guardar' } = {}) {
+  const campo = document.createElement('input');
+  campo.type = tipo;
+  campo.className = 'campo-hoja';
+  campo.value = valor ?? '';
+  if (tipo === 'number') {
+    campo.inputMode = 'numeric';
+    if (min != null) campo.min = String(min);
+    if (max != null) campo.max = String(max);
+  }
+  campo.setAttribute('aria-label', titulo);
+  if (!(await mostrarFormulario(titulo, [campo], { textoBoton, enfocar: campo }))) return null;
+  return campo.value.trim() || null;
+}
+
+export async function pedirNumero(titulo, valor, { min = 1, max = 9999 } = {}) {
+  const texto = await pedirValor(titulo, valor, { tipo: 'number', min, max });
+  const n = Math.round(Number(texto));
+  return Number.isFinite(n) && n >= min && n <= max ? n : null;
+}
+
 export function hojaAbierta() {
   return Boolean(resolverActual);
 }
