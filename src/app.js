@@ -22,6 +22,7 @@ import { sincronizando } from './sync/sincronizar.js';
 import { mostrarAviso } from './ui/aviso.js';
 import { prepararAjustes, pintarAjustes, pintarDiagnostico } from './ui/ajustes.js';
 import { prepararCopias } from './ui/copias.js';
+import { completarEdicionesPendientes } from './biblioteca/importar.js';
 import { prepararFicha, fichaAbierta, cerrarFicha } from './ui/ficha.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
 import { prepararHoja, hojaAbierta, cancelarHoja } from './ui/hoja.js';
@@ -267,6 +268,8 @@ async function iniciar() {
 
   await iniciarSesionGoogle();
   pintarDiagnostico();
+  // Datos de la edición de los libros importados antes de la 0.6.1.
+  setTimeout(() => completarEdicionesPendientes().catch((e) => registrar(`Datos de la edición: ${e.message}`, 'error')), 8000);
 
   // Al abrir la app y al volver a ella tras un rato (en el iPhone la app
   // instalada rara vez se cierra del todo): sincroniza o pide conectar.

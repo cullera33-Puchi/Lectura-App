@@ -1,7 +1,10 @@
 // Importación de EPUB (punto 7 del diseño). Se lee el archivo con JSZip, sin
 // abrir epub.js, para que importar varios libros sea rápido.
 
-import { leerLibro, guardarLibroImportado } from '../datos/libros.js';
+import {
+  leerLibro, guardarLibroImportado, leerArchivo, guardarEdicion, idsDescargados, todosLosLibros,
+} from '../datos/libros.js';
+import { registrar } from '../ui/registro.js';
 
 export const MENSAJE_ILEGIBLE = 'Este libro no se puede abrir. Puede tener protección DRM.';
 const ALTO_PORTADA = 300;
@@ -166,7 +169,7 @@ async function analizar(datos) {
   if (!opf.getElementsByTagNameNS(NS_OPF, 'itemref').length) throw new ErrorImportacion('el libro no tiene contenido');
 
   const baseOpf = rutaOpf.includes('/') ? rutaOpf.slice(0, rutaOpf.lastIndexOf('/')) : '';
-  const metadatos = leerMetadatos(opf);
+  const metadatos = { ...leerMetadatos(opf), edicion: datosEdicionDeOpf(opf) };
   let portada = null;
   const ruta = rutaPortada(opf, baseOpf);
   if (ruta) {
@@ -188,8 +191,26 @@ function textoPlano(descripcion) {
   return (doc.body.textContent || '').replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// Datos de la edición para la ficha del libro. Se leen del EPUB al abrir la
-// ficha; no se guardan ni se sincronizan.
+// Datos de la edición para la ficha del libro: sinopsis, editorial, fecha de
+// publicación y temas. Se guardan en el registro del libro (campo "edicion")
+// y viajan en biblioteca.json, así la ficha los muestra en el otro
+// dispositivo aunque no tenga el EPUB. La sinopsis se recorta para que
+// biblioteca.json no crezca demasiado.
+const MAX_SINOPSIS = 3000;
+const MAX_TEMAS = 5;
+
+function datosEdicionDeOpf(opf) {
+  const descripcion = textoDc(opf, 'description')[0];
+  let sinopsis = descripcion ? textoPlano(descripcion) : null;
+  if (sinopsis && sinopsis.length > MAX_SINOPSIS) sinopsis = `${sinopsis.slice(0, MAX_SINOPSIS).replace(/\s+\S*$/, '')}...`;
+  return {
+    sinopsis: sinopsis || null,
+    editorial: textoDc(opf, 'publisher')[0] || null,
+    fecha: textoDc(opf, 'date')[0] || null,
+    temas: textoDc(opf, 'subject').slice(0, MAX_TEMAS),
+  };
+}
+
 export async function leerDatosEdicion(datos) {
   const zip = await JSZip.loadAsync(datos);
   const contenedor = archivoZip(zip, 'META-INF/container.xml');
@@ -197,15 +218,34 @@ export async function leerDatosEdicion(datos) {
     .getElementsByTagNameNS(NS_CONTENEDOR, 'rootfile')[0]?.getAttribute('full-path');
   const entradaOpf = rutaOpf && archivoZip(zip, rutaOpf);
   if (!entradaOpf) return {};
-  const opf = xml(await entradaOpf.async('string'));
-  const descripcion = textoDc(opf, 'description')[0];
-  return {
-    sinopsis: descripcion ? textoPlano(descripcion) : null,
-    editorial: textoDc(opf, 'publisher')[0] || null,
-    fecha: textoDc(opf, 'date')[0] || null,
-    idioma: textoDc(opf, 'language')[0] || null,
-    temas: textoDc(opf, 'subject'),
-  };
+  return datosEdicionDeOpf(xml(await entradaOpf.async('string')));
+}
+
+// Completa los datos de la edición de un libro descargado que aún no los tiene
+// (libros importados antes de la 0.6.1). Devuelve los datos.
+export async function completarEdicion(libro) {
+  if (libro.edicion) return libro.edicion;
+  const archivo = await leerArchivo(libro.id);
+  if (!archivo) return null;
+  let edicion = {};
+  try {
+    edicion = await leerDatosEdicion(archivo);
+  } catch (e) {
+    registrar(`No se pudieron leer los datos de la edición de "${libro.titulo}": ${e.message}`, 'error');
+  }
+  await guardarEdicion(libro.id, edicion);
+  return edicion;
+}
+
+// Al arrancar, completa en segundo plano los libros descargados sin datos de edición.
+export async function completarEdicionesPendientes() {
+  const descargados = new Set(await idsDescargados());
+  const libros = (await todosLosLibros()).filter((l) => !l.eliminado && !l.edicion && descargados.has(l.id));
+  for (const libro of libros) {
+    await completarEdicion(libro);
+    await new Promise((r) => { setTimeout(r, 200); }); // sin bloquear la interfaz
+  }
+  if (libros.length) registrar(`Datos de la edición completados en ${libros.length} ${libros.length === 1 ? 'libro' : 'libros'}`);
 }
 
 // Devuelve { resultado: 'importado' | 'duplicado' | 'error', libro?, mensaje? }

@@ -41,7 +41,7 @@ import {
   listarPendientes, borrarPendiente, leerSincronizacion, guardarSincronizacion,
 } from '../datos/pendientes.js';
 import { leer } from '../datos/almacen.js';
-import { huella } from '../biblioteca/importar.js';
+import { huella, completarEdicion } from '../biblioteca/importar.js';
 import { copiaDiaria } from './copias.js';
 import { registrar } from '../ui/registro.js';
 
@@ -485,4 +485,5 @@ export async function descargarLibro(token, libro, alAvanzar) {
   await guardarArchivoDescargado(libro.id, datos);
   if (libro.noDisponible) await actualizarLibro(libro.id, { noDisponible: false });
   registrar(`Descargado "${libro.titulo}"`);
+  if (!libro.edicion) completarEdicion(libro).catch(() => {});
 }

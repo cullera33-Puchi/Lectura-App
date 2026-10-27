@@ -212,3 +212,19 @@ export async function cambiarPortada(id, blob) {
     { almacen: 'pendientes', valor: { clave: `subirPortada:${id}`, tipo: 'subirPortada', id, fecha } },
   ]);
 }
+
+// Datos de la edición leídos del EPUB (sinopsis, editorial...). No cambia
+// fechaModificacion: al fusionar con la misma fecha se completan los campos
+// que faltan, así no se pisa una edición hecha en el otro dispositivo.
+export function guardarEdicion(id, edicion) {
+  const fecha = new Date().toISOString();
+  return leerYEscribir(['libros', 'pendientes'], 'libros', id, (libro) => {
+    if (!libro || libro.eliminado || libro.edicion) return null;
+    return {
+      operaciones: [
+        { almacen: 'libros', valor: { ...libro, edicion } },
+        { almacen: 'pendientes', valor: { clave: `metadatos:${id}`, tipo: 'metadatos', id, fecha } },
+      ],
+    };
+  });
+}

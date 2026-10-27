@@ -1,12 +1,12 @@
 // Ficha del libro: portada y datos, avance, lectura (fechas, tiempo y reparto
-// por dispositivo), sinopsis y datos de la edición. La sinopsis y la edición
-// se leen del EPUB, así que solo están si el libro está en el dispositivo.
+// por dispositivo), sinopsis y datos de la edición. Todo llega sincronizado:
+// las sesiones de los dos dispositivos y los datos de la edición, que se leen
+// del EPUB al importarlo y viajan en biblioteca.json.
 
-import { leerArchivo } from '../datos/libros.js';
 import { leerColecciones } from '../datos/colecciones.js';
 import { todasLasSesiones } from '../estadisticas/datos.js';
 import { resumenLibro, formatoDuracion } from '../estadisticas/calculo.js';
-import { leerDatosEdicion } from './importar.js';
+import { completarEdicion } from './importar.js';
 import { crearPortada, porcentajeDe, textoEstado } from './portadas.js';
 import { abrirFicha, cerrarFicha } from '../ui/ficha.js';
 import { svgIcono } from '../ui/iconos.js';
@@ -59,16 +59,14 @@ function cabecera(texto) {
 
 // acciones: { abrir(libro), editar(libro) }, que se ejecutan dentro del toque.
 export async function mostrarFichaLibro(libro, acciones) {
-  const [sesiones, colecciones, archivo] = await Promise.all([
-    todasLasSesiones(),
-    leerColecciones(),
-    libro.descargado ? leerArchivo(libro.id) : null,
-  ]);
+  const [sesiones, colecciones] = await Promise.all([todasLasSesiones(), leerColecciones()]);
   const lectura = resumenLibro(sesiones.filter((s) => s.libroId === libro.id));
-  let edicion = {};
-  if (archivo) {
+  // Los datos de la edición llegan sincronizados; si faltan y el EPUB está
+  // aquí, se leen ahora y quedan guardados para el otro dispositivo.
+  let edicion = libro.edicion || {};
+  if (!libro.edicion && libro.descargado) {
     try {
-      edicion = await leerDatosEdicion(archivo);
+      edicion = (await completarEdicion(libro)) || {};
     } catch (e) {
       registrar(`Ficha: no se pudieron leer los datos del EPUB (${e.message})`, 'error');
     }
@@ -148,7 +146,7 @@ export async function mostrarFichaLibro(libro, acciones) {
   const datos = filas([
     ['Editorial', edicion.editorial],
     ['Publicación', fechaPublicacion(edicion.fecha)],
-    ['Idioma', idioma(edicion.idioma || libro.idioma)],
+    ['Idioma', idioma(libro.idioma)],
     ['Temas', edicion.temas?.length ? edicion.temas.slice(0, 5).join(', ') : null],
     ['Colecciones', nombresColecciones || null],
     ['En la biblioteca desde', fecha(libro.fechaAlta)],
@@ -157,8 +155,8 @@ export async function mostrarFichaLibro(libro, acciones) {
   ]);
   partes.push(cabecera('Datos del libro'));
   if (datos) partes.push(datos);
-  if (!libro.descargado) {
-    partes.push(el('p', 'pie-grupo', 'Descarga el libro para ver la sinopsis y los datos de la edición.'));
+  if (!libro.edicion && !libro.descargado) {
+    partes.push(el('p', 'pie-grupo', 'La sinopsis y los datos de la edición aparecerán cuando el libro se abra en un dispositivo que lo tenga descargado y se sincronice.'));
   }
 
   abrirFicha('Ficha del libro', partes);

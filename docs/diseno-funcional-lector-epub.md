@@ -395,7 +395,7 @@ Regla: cada dispositivo solo escribe su propio archivo de sesiones, también al 
 | Mejora | Detalle |
 |---|---|
 | Dos páginas en horizontal | Con la pantalla en horizontal y al menos 700 x 500 px (la tablet girada), el lector muestra doble página. En el iPhone girado no cabe y se mantiene una. Se puede desactivar en "Aa". La posición se sigue guardando como CFI |
-| Ficha del libro | Desde el botón de acciones: portada, serie, avance, fechas de inicio, fin y última lectura, tiempo, sesiones, páginas y reparto por dispositivo, sinopsis y datos de la edición (editorial, publicación, idioma y temas). La sinopsis y la edición se leen del EPUB, así que necesitan el libro descargado; no se guardan ni se sincronizan |
+| Ficha del libro | Desde el botón de acciones: portada, serie, avance, fechas de inicio, fin y última lectura, tiempo, sesiones, páginas y reparto por dispositivo, sinopsis y datos de la edición (editorial, publicación, idioma y temas). Todo se sincroniza: las sesiones de los dos dispositivos y los datos de la edición, que se leen del EPUB al importarlo (o al abrir la ficha en un dispositivo que lo tenga, para los libros anteriores) y viajan en `biblioteca.json` en el campo `edicion`, con la sinopsis recortada a 3.000 caracteres |
 | Resumen del año | Desde Estadísticas, para el año en curso y los anteriores: libros terminados, tiempo, páginas, días con lectura, racha más larga, media por día, mes y día de la semana con más lectura, franja horaria habitual, libro con más tiempo, sesión más larga, reparto por dispositivo y lista de terminados |
 
 ### v4. Lectura activa
