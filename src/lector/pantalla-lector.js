@@ -477,7 +477,7 @@ export function prepararPantallaLector({ cerrar }) {
   $('btn-aa').addEventListener('click', abrirPanelAa);
   $('btn-sincronizar-lector').addEventListener('click', cerrarPaneles);
   $('fondo-panel').addEventListener('click', cerrarPaneles);
-  for (const id of PANELES) cerrarDeslizando($(id), cerrarPaneles);
+  for (const id of PANELES) cerrarDeslizando($(id), cerrarPaneles, $('fondo-panel'));
   alCambiarPreferencias((_, tipo) => {
     if (tipo === 'lectura') aplicarPreferencias();
   });

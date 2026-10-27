@@ -18,7 +18,7 @@ const { URL_APP, EPUBS: S, ok } = require('../lib/entorno.js');
         await p.waitForTimeout(espera);
       }
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-      await p.waitForTimeout(500);
+      await p.waitForTimeout(800); // la hoja baja a la velocidad del dedo: hasta medio segundo
     };
     await p.goto(URL_APP); await p.waitForTimeout(600);
     await p.click(`.opcion-grande[data-perfil=${perfil}]`); await p.click('#bienvenida-omitir'); await p.waitForTimeout(300);

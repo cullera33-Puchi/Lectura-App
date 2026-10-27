@@ -16,10 +16,14 @@
 // pintarlo: se eliminan y, además, una política CSP impide ejecutarlos.
 
 import { registrar } from '../ui/registro.js';
+import { curvaDesde } from '../ui/paneles.js';
 import { cssLibro, temaEfectivo, proporcionMargenes, cambioRepagina } from '../ui/temas.js';
 import { MENSAJE_ILEGIBLE } from '../biblioteca/importar.js';
 
 const DURACION_ANIMACION_MS = 260;
+// Al soltar un arrastre, la página sigue a la velocidad del dedo y frena.
+const PENDIENTE_SALIDA = 2;
+const MUESTRAS_GESTO_MS = 100;
 const UMBRAL_DESLIZAR_PX = 40;
 const UMBRAL_MOVIMIENTO_PX = 10;
 const MAX_DURACION_TOQUE_MS = 600;
@@ -278,7 +282,8 @@ export async function abrirLibro(contenedor, datos, opciones) {
     terminarAnimacion?.();
   }
 
-  function animarVistas(desde, hasta) {
+  // velocidad: px por ms del dedo al soltar (si la página venía arrastrada).
+  function animarVistas(desde, hasta, velocidad = null) {
     acabarAnimacionYa();
     const d = contenedorDesplazable();
     if (!d || desde === hasta) {
@@ -286,11 +291,17 @@ export async function abrirLibro(contenedor, datos, opciones) {
       if (d && hasta) d.scrollLeft += hasta;
       return Promise.resolve();
     }
-    const proporcion = Math.min(1, Math.abs(hasta - desde) / anchoPagina());
-    const duracion = Math.max(120, DURACION_ANIMACION_MS * proporcion);
+    const distancia = Math.abs(hasta - desde);
+    let duracion = Math.max(120, DURACION_ANIMACION_MS * Math.min(1, distancia / anchoPagina()));
+    let curva = 'cubic-bezier(0.2, 0.7, 0.3, 1)';
+    if (velocidad) {
+      const v = Math.max(velocidad, 0.4);
+      duracion = Math.min(320, Math.max(140, (PENDIENTE_SALIDA * distancia) / v));
+      curva = curvaDesde(v, distancia, duracion);
+    }
     const animaciones = vistas().map((v) => v.animate(
       [{ transform: `translateX(${-desde}px)` }, { transform: `translateX(${-hasta}px)` }],
-      { duration: duracion, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'forwards' },
+      { duration: duracion, easing: curva, fill: 'forwards' },
     ));
     return new Promise((resolver) => {
       let terminada = false;
@@ -321,7 +332,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   // Lleva la página a la siguiente (1), la anterior (-1) o la de partida (0).
   // arrastre: lo que el dedo ya ha desplazado la página (perfil Móvil).
-  function completarPaso(direccion, arrastre = 0) {
+  function completarPaso(direccion, arrastre = 0, velocidad = null) {
     if (!movil) {
       if (direccion === 0) return Promise.resolve();
       return direccion > 0 ? rendition.next() : rendition.prev();
@@ -329,9 +340,9 @@ export async function abrirLibro(contenedor, datos, opciones) {
     if (direccion !== 0 && !hayMasContenido(direccion)) {
       // Capítulo siguiente o anterior aún sin cargar: se recoloca la página y
       // se pasa sin animación.
-      return animarVistas(arrastre, 0).then(() => (direccion > 0 ? rendition.next() : rendition.prev()));
+      return animarVistas(arrastre, 0, velocidad).then(() => (direccion > 0 ? rendition.next() : rendition.prev()));
     }
-    return animarVistas(arrastre, direccion * anchoPagina());
+    return animarVistas(arrastre, direccion * anchoPagina(), velocidad);
   }
 
   function traza(texto) {
@@ -361,7 +372,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
   // comprobación de este paso ya no vale y se descarta.
   let ultimoPaso = 0;
 
-  function pasar(direccion, arrastre = 0) {
+  function pasar(direccion, arrastre = 0, velocidad = null) {
     const miPaso = ++ultimoPaso;
     const vigente = () => !destruido && miPaso === ultimoPaso;
     const antes = huellaPosicion();
@@ -369,7 +380,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
       .catch((e) => traza(`error al pasar página: ${e.message}`))
       .then(() => new Promise((r) => setTimeout(r, ESPERA_COMPROBACION_MS)))
       .then(() => { if (vigente()) accion(); });
-    despues(completarPaso(direccion, arrastre), () => {
+    despues(completarPaso(direccion, arrastre, velocidad), () => {
       if (huellaPosicion() !== antes) return;
       traza('la página no se ha movido. Se usa el paso de respaldo');
       const antesRespaldo = huellaPosicion();
@@ -430,6 +441,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
         xVisor: xEnVisor(t, contents),
         arrastrando: false,
         movido: false,
+        muestras: [{ x: t.screenX, t: performance.now() }],
       };
     }, { passive: true });
 
@@ -443,6 +455,9 @@ export async function abrirLibro(contenedor, datos, opciones) {
         gesto.arrastrando = true;
       }
       if (gesto.movido) e.preventDefault();
+      const ahora = performance.now();
+      gesto.muestras.push({ x: t.screenX, t: ahora });
+      while (gesto.muestras.length > 2 && ahora - gesto.muestras[0].t > MUESTRAS_GESTO_MS) gesto.muestras.shift();
       if (gesto.arrastrando && movil) {
         // Sin más contenido en esa dirección, el arrastre se frena.
         const direccion = dx < 0 ? 1 : -1;
@@ -467,8 +482,12 @@ export async function abrirLibro(contenedor, datos, opciones) {
       if (g.arrastrando) {
         const velocidad = Math.abs(dx) / Math.max(duracion, 1);
         const pasa = Math.abs(dx) > UMBRAL_DESLIZAR_PX || velocidad > 0.3;
-        if (!pasa) completarPaso(0, g.arrastre || 0);
-        else pasar(dx < 0 ? 1 : -1, g.arrastre || 0);
+        // Velocidad del dedo justo al soltar, para continuar el movimiento.
+        const primera = g.muestras[0];
+        const ultima = g.muestras[g.muestras.length - 1];
+        const alSoltar = Math.abs(ultima.x - primera.x) / Math.max(1, ultima.t - primera.t);
+        if (!pasa) completarPaso(0, g.arrastre || 0, alSoltar);
+        else pasar(dx < 0 ? 1 : -1, g.arrastre || 0, alSoltar);
         return;
       }
       if (!g.movido && duracion < MAX_DURACION_TOQUE_MS) {

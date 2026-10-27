@@ -1370,11 +1370,12 @@ body[data-perfil="tinta"] .barra-descarga span {
   z-index: 20;
   background: rgba(0, 0, 0, 0.3);
   opacity: 0;
-  transition: opacity var(--transicion);
+  transition: opacity 0.3s ease;
 }
 
 .fondo.abierta {
   opacity: 1;
+  transition: opacity 0.45s ease;
 }
 
 body[data-perfil="tinta"] .fondo {
@@ -1398,11 +1399,15 @@ body[data-perfil="tinta"] .fondo {
   border-radius: 12px 12px 0 0;
   box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.12);
   transform: translateY(100%);
-  transition: transform var(--transicion);
+  will-change: transform;
+  /* Al cerrar: acelera suave y sale. Al abrir: la curva de las hojas de iOS,
+     que entra rápida y se asienta despacio, sin frenazo. */
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.7, 1);
 }
 
 .hoja.abierta {
   transform: translateY(0);
+  transition: transform 0.45s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 body[data-perfil="tinta"] .hoja {
@@ -1485,20 +1490,24 @@ body[data-perfil="tinta"] .asa {
   gap: 8px;
 }
 
+/* Sin desenfoque: en el iPhone, desenfocar lo de detrás en cada fotograma
+   hace que la hoja se mueva a saltos. */
 .grupo-hoja {
-  background: var(--barra);
-  -webkit-backdrop-filter: var(--desenfoque);
-  backdrop-filter: var(--desenfoque);
+  background: #f9f9f9;
   border-radius: 14px;
   overflow: hidden;
 }
 
 body[data-tema="claro"] .grupo-hoja {
-  background: rgba(250, 250, 250, 0.92);
+  background: #fafafa;
 }
 
 body[data-tema="sepia"] .grupo-hoja {
-  background: rgba(251, 246, 236, 0.95);
+  background: #fbf6ec;
+}
+
+body[data-tema="oscuro"] .grupo-hoja {
+  background: #2c2c2e;
 }
 
 body[data-perfil="tinta"] .grupo-hoja {

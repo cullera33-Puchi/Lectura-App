@@ -26,5 +26,5 @@ export function fichaAbierta() {
 export function prepararFicha() {
   $('btn-cerrar-ficha').addEventListener('click', cerrarFicha);
   $('fondo-ficha').addEventListener('click', cerrarFicha);
-  cerrarDeslizando($('panel-ficha'), cerrarFicha);
+  cerrarDeslizando($('panel-ficha'), cerrarFicha, $('fondo-ficha'));
 }

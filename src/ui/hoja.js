@@ -91,5 +91,5 @@ export function cancelarHoja() {
 export function prepararHoja() {
   $('fondo-hoja').addEventListener('click', () => cerrar(null));
   $('hoja-cancelar').addEventListener('click', () => cerrar(null));
-  cerrarDeslizando($('hoja-acciones'), () => cerrar(null));
+  cerrarDeslizando($('hoja-acciones'), () => cerrar(null), $('fondo-hoja'));
 }
