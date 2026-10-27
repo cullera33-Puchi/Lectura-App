@@ -357,7 +357,7 @@ Impacto en el diseño:
 
 1. `biblioteca.json` incorpora una lista de colecciones y, por libro, `colecciones`, `serie` y `numeroSerie`.
 2. Las sesiones se sincronizan en un archivo por dispositivo (`sesiones-<dispositivo>.json`). Cada dispositivo solo escribe el suyo, así no hay conflictos, y las estadísticas se calculan sumando ambos.
-3. Nueva pantalla "Estadísticas" accesible desde la biblioteca. En el perfil Tinta electrónica, gráficos en blanco y negro sin degradados.
+3. Nueva pestaña "Estadísticas", con un resumen en "Leyendo ahora". En el perfil Tinta electrónica, gráficos en blanco y negro sin degradados.
 
 Criterios de aceptación de la v2:
 
@@ -388,14 +388,6 @@ Criterios de aceptación de la v2:
 Impacto en el diseño: nuevo archivo `anotaciones.json` en Drive, con cada subrayado anclado por un rango CFI. Se fusiona por identificador de anotación, con borrados marcados igual que los libros.
 
 En el perfil Tinta electrónica, los colores de subrayado se sustituyen por subrayado simple o fondo gris, según cómo se vean en la pantalla de la tablet.
-
-### v5. Lectura en voz alta
-
-| Mejora | Qué aporta | Esfuerzo |
-|---|---|---|
-| Lectura en voz alta | El navegador lee el texto con la voz del sistema, pasa de página solo y permite pausar y ajustar la velocidad | Medio |
-
-La calidad depende de las voces del dispositivo. Hay que validar qué voces en español ofrece la tablet.
 
 ### Ideas a valorar (sin fecha)
 

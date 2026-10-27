@@ -10,6 +10,9 @@ Lector EPUB personal para iPhone y tablet de tinta electrónica, con biblioteca 
 - Fase 0 (prototipo de riesgos): validada en el iPhone y en la tablet. Queda pendiente la prueba de renovación de la sesión tras más de una hora.
 - Fase 1 (biblioteca y lector local): importar EPUB, biblioteca, lector con gestos, índice, panel "Aa" y temas por perfil. Funciona sin conexión.
 - Fase 2 (sincronización): subida de libros y portadas a Drive, fusión de `biblioteca.json` y `progreso.json`, aviso de posición al abrir, estados de libro, quitar del dispositivo y descargar todos.
+- Fase 3 (rediseño): interfaz al estilo de Libros de Apple en el iPhone, más sencilla en la tablet, y revisión general del código.
+- v2 (organización y estadísticas): colecciones, series, pestaña Estadísticas, objetivo anual y sesiones sincronizadas por dispositivo (`sesiones-<id>.json`).
+- v3 (ajustes rápidos): sincronización automática opcional, tiempo restante del capítulo y del libro, búsqueda en la biblioteca y edición de datos y portada.
 
 ## Configuración
 
