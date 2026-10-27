@@ -25,7 +25,7 @@ import { prepararCopias } from './ui/copias.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
 import { prepararHoja, hojaAbierta, cancelarHoja } from './ui/hoja.js';
 import {
-  prepararSincronizacion, sincronizarAutomaticamente, minutosDesdeAutomatica,
+  prepararSincronizacion, sincronizarAutomaticamente, alEntrarEnLaApp,
 } from './ui/sincronizacion.js';
 import { pintarIconos } from './ui/iconos.js';
 import { aplicarTemaInterfaz, alCambiarModoSistema } from './ui/temas.js';
@@ -33,7 +33,8 @@ import { registrar } from './ui/registro.js';
 import { pedirPersistencia, estaInstalada } from './ui/diagnostico.js';
 
 const $ = (id) => document.getElementById(id);
-const MINUTOS_ENTRE_AUTOMATICAS = 15;
+// Tiempo fuera de la app a partir del cual volver cuenta como entrar de nuevo.
+const MINUTOS_FUERA = 5;
 const PANTALLAS = ['bienvenida', 'inicio', 'biblioteca', 'estadisticas', 'ajustes'];
 const PESTANAS = ['inicio', 'biblioteca', 'estadisticas'];
 
@@ -260,12 +261,18 @@ async function iniciar() {
   await iniciarSesionGoogle();
   pintarDiagnostico();
 
-  // Sincronización automática al abrir la app y al volver a ella tras un rato
-  // (en el iPhone la app instalada rara vez se cierra del todo).
-  if (preferencias().dispositivo.bienvenidaCompleta) sincronizarAutomaticamente('al abrir la app');
+  // Al abrir la app y al volver a ella tras un rato (en el iPhone la app
+  // instalada rara vez se cierra del todo): sincroniza o pide conectar.
+  if (preferencias().dispositivo.bienvenidaCompleta) alEntrarEnLaApp('al abrir la app');
+  let ocultaDesde = 0;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && !lectorAbierto() && minutosDesdeAutomatica() > MINUTOS_ENTRE_AUTOMATICAS) {
-      sincronizarAutomaticamente('al volver a la app');
+    if (document.visibilityState === 'hidden') {
+      ocultaDesde = Date.now();
+      return;
+    }
+    const minutosFuera = ocultaDesde ? (Date.now() - ocultaDesde) / 60000 : 0;
+    if (minutosFuera >= MINUTOS_FUERA && !lectorAbierto() && $('pantalla-bienvenida').hidden) {
+      alEntrarEnLaApp('al volver a la app');
     }
   });
 }

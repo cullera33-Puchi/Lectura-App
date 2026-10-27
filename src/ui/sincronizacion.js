@@ -8,6 +8,7 @@ import { ErrorDrive } from '../sync/drive.js';
 import { sincronizar, sincronizando, textoResumen, MENSAJE_SIN_CONEXION } from '../sync/sincronizar.js';
 import { alCambiarPendientes, avisarCambioPendientes } from '../datos/pendientes.js';
 import { mostrarAviso } from './aviso.js';
+import { mostrarHoja, hojaAbierta } from './hoja.js';
 import { registrar } from './registro.js';
 
 // Botones Sincronizar: barras de "Leyendo ahora" y Biblioteca, y menú del lector.
@@ -102,6 +103,37 @@ export async function sincronizarAutomaticamente(motivo) {
     botonesOcupados(false);
     avisarCambioPendientes();
   }
+}
+
+let propuestaAbierta = false;
+
+// Al entrar en la app sin sesión vigente se pide conectar. La ventana de
+// Google solo se puede abrir tras un toque, así que se muestra una hoja y el
+// toque en "Conectar y sincronizar" la abre (Google no permite renovar la
+// sesión sin intervención en una app sin servidor).
+export async function proponerConexion(motivo) {
+  if (!sincronizacionAutomaticaActiva() || tokenVigente() || !navigator.onLine) return;
+  if (sincronizando() || hojaAbierta() || propuestaAbierta) return;
+  propuestaAbierta = true;
+  const caducada = Boolean(estadoSesion().token);
+  registrar(`Se pide conectar con Google (${motivo}): ${caducada ? 'sesión caducada' : 'sin sesión'}`);
+  try {
+    const eleccion = await mostrarHoja(
+      `${caducada ? 'La sesión de Google ha caducado.' : 'No estás conectado a Google.'}\nConecta para sincronizar avances y estadísticas con el otro dispositivo.`,
+      [{ id: 'conectar', texto: 'Conectar y sincronizar' }],
+      { alPulsar: (id) => { if (id === 'conectar') ejecutarSincronizacion(asegurarToken()); } },
+    );
+    if (eleccion !== 'conectar') registrar('Conexión con Google pospuesta');
+  } finally {
+    propuestaAbierta = false;
+  }
+}
+
+// Al abrir la app o volver a ella: con sesión vigente se sincroniza sola; sin
+// ella, se pide conectar.
+export function alEntrarEnLaApp(motivo) {
+  if (tokenVigente()) sincronizarAutomaticamente(motivo);
+  else proponerConexion(motivo);
 }
 
 export function ultimaSincronizacionAutomatica() {
