@@ -101,3 +101,51 @@ export function guardarUbicaciones(id, json) {
 export function borrarUbicaciones(id) {
   return borrar('ubicaciones', id);
 }
+
+// Todos los registros, incluidos los eliminados (para la sincronización).
+export function todosLosLibros() {
+  return leerTodos('libros');
+}
+
+export async function actualizarLibro(id, cambios) {
+  const libro = await leer('libros', id);
+  if (!libro) return null;
+  const nuevo = { ...libro, ...cambios };
+  await escribirVarios([{ almacen: 'libros', valor: nuevo }]);
+  return nuevo;
+}
+
+// Aplica en local un registro llegado de Drive, conservando los campos locales.
+export async function aplicarLibroRemoto(registro) {
+  const local = await leer('libros', registro.id);
+  const nuevo = { ...(local || {}), ...registro };
+  const operaciones = [{ almacen: 'libros', valor: nuevo }];
+  if (registro.eliminado) {
+    olvidarPortada(registro.id);
+    operaciones.push(
+      { almacen: 'archivos', clave: registro.id, borrar: true },
+      { almacen: 'portadas', clave: registro.id, borrar: true },
+      { almacen: 'ubicaciones', clave: registro.id, borrar: true },
+      { almacen: 'pendientes', clave: `subirLibro:${registro.id}`, borrar: true },
+    );
+  }
+  await escribirVarios(operaciones);
+  return nuevo;
+}
+
+export async function guardarArchivoDescargado(id, datos) {
+  await escribirVarios([{ almacen: 'archivos', valor: datos, clave: id }]);
+}
+
+export async function guardarPortadaDescargada(id, blob) {
+  olvidarPortada(id);
+  await escribirVarios([{ almacen: 'portadas', valor: blob, clave: id }]);
+}
+
+// Quitar de este dispositivo: el libro sigue en Drive y en el otro dispositivo.
+export async function quitarArchivoLocal(id) {
+  await escribirVarios([
+    { almacen: 'archivos', clave: id, borrar: true },
+    { almacen: 'ubicaciones', clave: id, borrar: true },
+  ]);
+}

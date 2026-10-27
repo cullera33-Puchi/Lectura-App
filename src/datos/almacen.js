@@ -17,6 +17,17 @@ const NOMBRE_BD = 'lector-epub';
 const VERSION_BD = 2;
 
 let bdPromesa = null;
+const oyentesEscritura = new Set();
+
+// Aviso tras cada escritura, con los almacenes afectados.
+export function alEscribir(fn) {
+  oyentesEscritura.add(fn);
+}
+
+function avisarEscritura(almacenes) {
+  const lista = Array.isArray(almacenes) ? almacenes : [almacenes];
+  oyentesEscritura.forEach((fn) => fn(lista));
+}
 
 function abrir() {
   if (bdPromesa) return bdPromesa;
@@ -54,7 +65,10 @@ async function operar(almacenes, modo, accion) {
     const valor = accion(tx);
     if (valor && 'onsuccess' in valor) valor.onsuccess = () => { resultado = valor.result; };
     else resultado = valor;
-    tx.oncomplete = () => resolver(resultado);
+    tx.oncomplete = () => {
+      if (modo === 'readwrite') avisarEscritura(almacenes);
+      resolver(resultado);
+    };
     tx.onerror = () => rechazar(tx.error);
     tx.onabort = () => rechazar(tx.error || new Error('Operación cancelada'));
   });

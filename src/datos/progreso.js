@@ -1,6 +1,6 @@
 // Posición de lectura local. Siempre como CFI, nunca como número de página.
 
-import { leer, escribirVarios } from './almacen.js';
+import { leer, leerTodos, escribirVarios } from './almacen.js';
 
 export function leerProgreso(id) {
   return leer('progreso', id);
@@ -22,4 +22,8 @@ export async function guardarProgreso(id, datos, { mantenerFecha = false } = {})
 export async function cambiarEstado(id, estado, dispositivo) {
   const actual = (await leerProgreso(id)) || { cfi: null, porcentaje: 0, capitulo: null };
   return guardarProgreso(id, { ...actual, estado, dispositivo });
+}
+
+export function listarProgresos() {
+  return leerTodos('progreso');
 }
