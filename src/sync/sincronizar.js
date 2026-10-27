@@ -19,17 +19,23 @@
 import {
   localizarCarpeta, localizarSubcarpeta, buscarArchivos, leerJson, crearJson, actualizarJson,
   subirArchivo, descargarArchivo, enviarAPapelera, nombresEnCarpeta, obtenerMetadatos, renombrar,
-  ErrorDrive, ErrorJsonIlegible,
+  buscarPorPrefijo, ErrorDrive, ErrorJsonIlegible,
 } from './drive.js';
 import {
   normalizarBiblioteca, normalizarProgreso, fusionarBiblioteca, fusionarProgreso, posicionesNuevas,
-  unirBibliotecas, unirProgresos,
+  unirBibliotecas, unirProgresos, fusionarExtrasBiblioteca, normalizarSesiones, fusionarSesiones,
+  VERSION_SESIONES,
 } from './fusion.js';
 import {
   todosLosLibros, leerLibro, leerArchivo, leerPortada, actualizarLibro, aplicarLibroRemoto,
   guardarPortadaDescargada, guardarArchivoDescargado, idsConPortada, idsDescargados, volverASubir,
 } from '../datos/libros.js';
 import { listarProgresos } from '../datos/progreso.js';
+import { listarSesiones } from '../datos/sesiones.js';
+import {
+  leerColecciones, leerObjetivos, guardarColeccionesFusionadas, guardarObjetivosFusionados,
+} from '../datos/colecciones.js';
+import { idDispositivo, nombreDispositivo } from '../datos/preferencias.js';
 import {
   listarPendientes, borrarPendiente, leerSincronizacion, guardarSincronizacion,
 } from '../datos/pendientes.js';
@@ -139,6 +145,26 @@ async function subirLibro(token, carpetas, pendiente, remotoPorId, nombresLibros
   return 'subido';
 }
 
+// Portada cambiada a mano (v3): se sube como archivo nuevo y el registro del
+// libro apunta a él. La anterior se envía a la papelera cuando biblioteca.json
+// ya apunta a la nueva. Devuelve los id de Drive que dejan de usarse.
+async function subirPortadaCambiada(token, carpetas, pendiente, remotoPorId, recienSubidos, portadasLocales) {
+  const libro = await leerLibro(pendiente.id);
+  const portada = await leerPortada(pendiente.id);
+  // Si el libro aún no está en Drive, o se acaba de subir, ya lleva la portada nueva.
+  if (!libro || libro.eliminado || !portada || !libro.archivoDriveId || recienSubidos.has(libro.id)) {
+    await borrarPendiente(pendiente.clave);
+    return [];
+  }
+  const nueva = (await subirArchivo(token, carpetas.portadas, `${libro.id}.jpg`, portada, 'image/jpeg', { libro: libro.id })).id;
+  const viejas = [libro.portadaDriveId, remotoPorId.get(libro.id)?.portadaDriveId].filter((id) => id && id !== nueva);
+  await actualizarLibro(libro.id, { portadaDriveId: nueva, fechaModificacion: new Date().toISOString() });
+  portadasLocales[libro.id] = nueva;
+  const actual = await leer('pendientes', pendiente.clave);
+  if (actual && actual.fecha === pendiente.fecha) await borrarPendiente(pendiente.clave);
+  return viejas;
+}
+
 async function darDeBaja(token, pendiente, remotoPorId) {
   const local = await leerLibro(pendiente.id);
   // Si el libro se ha vuelto a importar, ya no está eliminado: no se borra nada.
@@ -176,6 +202,64 @@ function librosPublicables(locales, remotoPorId) {
   return locales.filter((l) => l.eliminado || l.archivoDriveId || remotoPorId.has(l.id));
 }
 
+// Sesiones de lectura (v2). Cada dispositivo escribe solo su propio archivo,
+// sesiones-<id del dispositivo>.json, después de leerlo y fusionarlo. Los de
+// los demás dispositivos solo se leen, y se guarda una copia para las
+// estadísticas. Así no hay conflictos ni doble conteo.
+const PREFIJO_SESIONES = 'sesiones-';
+
+async function sincronizarSesiones(token, raiz, avisos) {
+  const propio = idDispositivo();
+  const nombrePropio = `${PREFIJO_SESIONES}${propio}.json`;
+  const archivos = await buscarPorPrefijo(token, raiz, PREFIJO_SESIONES);
+
+  // Este dispositivo: todo su histórico local, desde la v1.
+  const locales = (await listarSesiones()).map((s) => ({
+    id: `${propio}:${s.clave}`, libroId: s.libroId, inicio: s.inicio, fin: s.fin, paginas: s.paginas || 0,
+  }));
+  const propios = archivos.filter((a) => a.name === nombrePropio);
+  const legibles = [];
+  let remoto = normalizarSesiones(null);
+  for (const a of propios) {
+    try {
+      const otro = normalizarSesiones(await leerJson(token, a.id));
+      remoto = { ...remoto, sesiones: fusionarSesiones(remoto.sesiones, otro).sesiones };
+      legibles.push(a);
+    } catch (e) {
+      if (!(e instanceof ErrorJsonIlegible)) throw e;
+      await renombrar(token, a.id, nombrePropio.replace('.json', `.danado-${new Date().toISOString().slice(0, 10)}.json`));
+      avisos.push('El archivo de estadísticas de este dispositivo estaba dañado en Drive. Se ha rehecho.');
+    }
+  }
+  const fusion = fusionarSesiones(locales, remoto);
+  if (fusion.escribirRemoto || legibles.length !== 1) {
+    const datos = { version: VERSION_SESIONES, dispositivoId: propio, dispositivo: nombreDispositivo(), sesiones: fusion.sesiones };
+    await escribirJson(token, raiz, legibles[0] || null, nombrePropio, datos);
+    for (const sobrante of legibles.slice(1)) await enviarAPapelera(token, sobrante.id);
+  }
+
+  // Los demás dispositivos: solo se vuelven a leer si han cambiado.
+  const copias = (await leerSincronizacion('sesionesRemotas')) || {};
+  const nuevas = {};
+  for (const a of archivos) {
+    if (a.name === nombrePropio || !a.name.endsWith('.json') || a.name.includes('.danado-')) continue;
+    const id = a.name.slice(PREFIJO_SESIONES.length, -'.json'.length);
+    if (copias[id]?.modifiedTime === a.modifiedTime) {
+      nuevas[id] = copias[id];
+      continue;
+    }
+    try {
+      const datos = normalizarSesiones(await leerJson(token, a.id));
+      nuevas[id] = { dispositivo: datos.dispositivo || id, modifiedTime: a.modifiedTime, sesiones: datos.sesiones };
+    } catch (e) {
+      if (!(e instanceof ErrorJsonIlegible)) throw e;
+      registrar(`Sesiones de otro dispositivo ilegibles (${a.name})`, 'error');
+      if (copias[id]) nuevas[id] = copias[id];
+    }
+  }
+  await guardarSincronizacion('sesionesRemotas', nuevas);
+}
+
 async function ejecutar(token, alEstado) {
   const estado = (texto) => alEstado?.(texto);
   const resumen = { subidos: 0, nuevos: 0, bajas: 0, posiciones: 0, avisos: [] };
@@ -196,13 +280,17 @@ async function ejecutar(token, alEstado) {
   const pendientes = await listarPendientes();
 
   const paraSubir = pendientes.filter((p) => p.tipo === 'subirLibro');
+  const recienSubidos = new Set();
   let n = 0;
   for (const p of paraSubir) {
     n += 1;
     estado(`Subiendo libros (${n} de ${paraSubir.length})...`);
     try {
       const resultado = await subirLibro(token, carpetas, p, remotoPorId, nombresLibros);
-      if (resultado === 'subido') resumen.subidos += 1;
+      if (resultado === 'subido') {
+        resumen.subidos += 1;
+        recienSubidos.add(p.id);
+      }
       if (resultado !== 'sin-archivo') await borrarPendiente(p.clave);
     } catch (e) {
       if (e instanceof ErrorDrive && e.motivo === 'storageQuotaExceeded') {
@@ -218,6 +306,14 @@ async function ejecutar(token, alEstado) {
     await borrarPendiente(p.clave);
   }
 
+  // id de Drive de la portada que tiene cada libro en este dispositivo.
+  const portadasLocales = (await leerSincronizacion('portadasLocales')) || {};
+  const portadasViejas = [];
+  for (const p of pendientes.filter((x) => x.tipo === 'subirPortada')) {
+    estado('Subiendo portadas...');
+    portadasViejas.push(...await subirPortadaCambiada(token, carpetas, p, remotoPorId, recienSubidos, portadasLocales));
+  }
+
   // Fusión y escritura. Si alguien ha escrito los JSON mientras se subían los
   // libros, se vuelven a leer y se fusiona otra vez (una sola vez).
   let fusionBiblioteca;
@@ -227,6 +323,17 @@ async function ejecutar(token, alEstado) {
     estado('Fusionando...');
     progresosLocales = await listarProgresos();
     fusionBiblioteca = fusionarBiblioteca(librosPublicables(await todosLosLibros(), remotoPorId), remotoBiblioteca.datos);
+    // Colecciones y objetivo anual (v2), en la raíz de biblioteca.json.
+    const extras = fusionarExtrasBiblioteca(fusionBiblioteca.biblioteca, remotoBiblioteca.datos, {
+      colecciones: await leerColecciones({ incluirEliminadas: true }),
+      objetivos: await leerObjetivos(),
+    });
+    fusionBiblioteca = {
+      ...fusionBiblioteca,
+      biblioteca: extras.biblioteca,
+      escribirRemoto: fusionBiblioteca.escribirRemoto || extras.cambio,
+      extras,
+    };
     fusionProgreso = fusionarProgreso(progresosLocales, remotoProgreso.datos);
 
     const cambiados = await Promise.all([remotoBiblioteca.archivo, remotoProgreso.archivo].map(async (a) => {
@@ -254,10 +361,20 @@ async function ejecutar(token, alEstado) {
   }
   // Las copias duplicadas ya están fusionadas en el archivo principal.
   for (const d of duplicados) await enviarAPapelera(token, d.id);
+  // Portadas sustituidas, salvo que la fusión haya mantenido alguna.
+  const enUso = new Set(fusionBiblioteca.biblioteca.libros.map((l) => l.portadaDriveId));
+  for (const id of new Set(portadasViejas)) {
+    if (enUso.has(id)) continue;
+    try {
+      await enviarAPapelera(token, id);
+    } catch (e) {
+      registrar(`No se pudo enviar a la papelera una portada antigua: ${e.message}`, 'error');
+    }
+  }
 
   // Cambios de progreso ya enviados. Si alguno ha cambiado durante la
   // sincronización, se queda en la cola para la próxima.
-  for (const p of pendientes.filter((x) => x.tipo === 'progreso')) {
+  for (const p of pendientes.filter((x) => ['progreso', 'extras', 'metadatos'].includes(x.tipo))) {
     const actual = await leer('pendientes', p.clave);
     if (actual && actual.fecha === p.fecha) await borrarPendiente(p.clave);
   }
@@ -269,22 +386,40 @@ async function ejecutar(token, alEstado) {
     if (cambio.tipo === 'nuevo' || cambio.tipo === 'recuperado') resumen.nuevos += 1;
     if (cambio.tipo === 'baja') resumen.bajas += 1;
   }
+  await guardarColeccionesFusionadas(fusionBiblioteca.extras.colecciones);
+  await guardarObjetivosFusionados(fusionBiblioteca.extras.objetivos);
   await guardarSincronizacion('progresoRemoto', fusionProgreso.progreso);
+  const bibliotecaAnterior = await leerSincronizacion('bibliotecaRemota');
   await guardarSincronizacion('bibliotecaRemota', fusionBiblioteca.biblioteca);
+
+  estado('Sincronizando las estadísticas...');
+  await sincronizarSesiones(token, carpetas.raiz, resumen.avisos);
   await guardarSincronizacion('ultima', new Date().toISOString());
 
-  // Portadas de los libros que este dispositivo aún no tiene.
+  // Portadas que este dispositivo no tiene o que han cambiado en el otro.
+  // Para los libros que ya tenían portada antes de existir portadasLocales, se
+  // toma como conocida la de la sincronización anterior.
   const conPortada = new Set(await idsConPortada());
-  const sinPortada = fusionBiblioteca.biblioteca.libros
-    .filter((l) => !l.eliminado && l.portadaDriveId && !conPortada.has(l.id));
-  for (const libro of sinPortada) {
+  const portadaAnterior = new Map((bibliotecaAnterior?.libros || []).map((l) => [l.id, l.portadaDriveId]));
+  const cambiandoAqui = new Set((await listarPendientes()).filter((p) => p.tipo === 'subirPortada').map((p) => p.id));
+  for (const libro of fusionBiblioteca.biblioteca.libros) {
+    if (libro.eliminado || !libro.portadaDriveId || cambiandoAqui.has(libro.id)) continue;
+    if (conPortada.has(libro.id)) {
+      const conocida = portadasLocales[libro.id] ?? portadaAnterior.get(libro.id) ?? libro.portadaDriveId;
+      if (conocida === libro.portadaDriveId) {
+        portadasLocales[libro.id] = conocida;
+        continue;
+      }
+    }
     try {
       const datos = await descargarArchivo(token, libro.portadaDriveId);
       await guardarPortadaDescargada(libro.id, new Blob([datos], { type: 'image/jpeg' }));
+      portadasLocales[libro.id] = libro.portadaDriveId;
     } catch (e) {
       registrar(`No se pudo descargar la portada de "${libro.titulo}": ${e.message}`, 'error');
     }
   }
+  await guardarSincronizacion('portadasLocales', portadasLocales);
   return resumen;
 }
 

@@ -38,7 +38,11 @@ export async function progresoMasReciente(id) {
 }
 
 // Cambia solo el estado, conservando la posición más reciente conocida.
+// Al terminar un libro se guarda la fecha, que usan las estadísticas.
 export async function cambiarEstado(id, estado) {
   const base = (await progresoMasReciente(id)) || { cfi: null, porcentaje: null, capitulo: null };
-  return guardarProgreso(id, { ...base, estado, dispositivo: nombreDispositivo(), dispositivoId: idDispositivo() });
+  const fechaTerminado = estado === 'terminado' ? (base.fechaTerminado || new Date().toISOString()) : null;
+  return guardarProgreso(id, {
+    ...base, estado, fechaTerminado, dispositivo: nombreDispositivo(), dispositivoId: idDispositivo(),
+  });
 }

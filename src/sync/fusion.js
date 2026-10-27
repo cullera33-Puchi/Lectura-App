@@ -14,7 +14,7 @@ const CAMPOS_LIBRO = [
   'id', 'titulo', 'autor', 'idioma', 'identificadorEpub', 'serie', 'numeroSerie',
   'archivoDriveId', 'portadaDriveId', 'tamanoBytes', 'fechaAlta', 'eliminado', 'fechaModificacion',
 ];
-const CAMPOS_PROGRESO = ['cfi', 'porcentaje', 'capitulo', 'estado', 'dispositivo', 'dispositivoId', 'fecha'];
+const CAMPOS_PROGRESO = ['cfi', 'porcentaje', 'capitulo', 'estado', 'fechaTerminado', 'dispositivo', 'dispositivoId', 'fecha'];
 
 const esObjeto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 
@@ -163,4 +163,65 @@ export function unirProgresos(lista) {
     const locales = Object.entries(acumulado.progreso).map(([id, p]) => ({ ...p, id }));
     return fusionarProgreso(locales, otro).progreso;
   }, normalizarProgreso(null));
+}
+
+// --- v2: colecciones, objetivo anual y sesiones ---
+
+// Colecciones: [{ id, nombre, fechaModificacion, eliminado }]. Por id, gana la
+// fechaModificacion más reciente (así se propagan las bajas).
+export function fusionarColecciones(local = [], remoto = []) {
+  const porId = new Map();
+  for (const c of [...remoto, ...local]) {
+    if (!esObjeto(c) || !c.id) continue;
+    const actual = porId.get(c.id);
+    if (!actual || (c.fechaModificacion || '') > (actual.fechaModificacion || '')) porId.set(c.id, { ...c });
+  }
+  return [...porId.values()].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es') || a.id.localeCompare(b.id));
+}
+
+// Objetivos por año: { "2026": { libros, fecha } }. Por año, gana la fecha más reciente.
+export function fusionarObjetivos(local = {}, remoto = {}) {
+  const resultado = {};
+  for (const fuente of [remoto, local]) {
+    for (const [anio, o] of Object.entries(esObjeto(fuente) ? fuente : {})) {
+      if (!esObjeto(o)) continue;
+      if (!resultado[anio] || (o.fecha || '') > (resultado[anio].fecha || '')) resultado[anio] = { ...o };
+    }
+  }
+  return ordenarClaves(resultado);
+}
+
+// Añade a la biblioteca fusionada las colecciones y los objetivos. Devuelve
+// también si eso obliga a escribir el archivo remoto.
+export function fusionarExtrasBiblioteca(biblioteca, remoto, extrasLocales) {
+  const colecciones = fusionarColecciones(extrasLocales.colecciones, remoto.colecciones);
+  const objetivos = fusionarObjetivos(extrasLocales.objetivos, remoto.objetivos);
+  const cambio = !igual(colecciones, fusionarColecciones([], remoto.colecciones))
+    || !igual(objetivos, fusionarObjetivos({}, remoto.objetivos))
+    || !Array.isArray(remoto.colecciones) || !esObjeto(remoto.objetivos);
+  return { biblioteca: { ...biblioteca, colecciones, objetivos }, cambio, colecciones, objetivos };
+}
+
+export const VERSION_SESIONES = 1;
+
+export function normalizarSesiones(datos) {
+  if (!esObjeto(datos)) return { version: VERSION_SESIONES, sesiones: [] };
+  if ((Number(datos.version) || 1) > VERSION_SESIONES) throw versionNoSoportada('El archivo de sesiones');
+  const sesiones = (Array.isArray(datos.sesiones) ? datos.sesiones : [])
+    .filter((s) => esObjeto(s) && s.id && s.inicio);
+  return { ...datos, version: VERSION_SESIONES, sesiones };
+}
+
+// Sesiones de este dispositivo: unión por id; si una sesión está en los dos
+// lados, gana la que termina más tarde (una sesión crece mientras se lee).
+export function fusionarSesiones(locales, remoto) {
+  const porId = new Map();
+  for (const s of [...remoto.sesiones, ...locales]) {
+    const actual = porId.get(s.id);
+    if (!actual || (s.fin || '') > (actual.fin || '')) porId.set(s.id, ordenarClaves({ ...s }));
+  }
+  const sesiones = [...porId.values()].sort((a, b) => a.inicio.localeCompare(b.inicio) || a.id.localeCompare(b.id));
+  const remotoOrdenado = [...remoto.sesiones].map((s) => ordenarClaves({ ...s }))
+    .sort((a, b) => a.inicio.localeCompare(b.inicio) || a.id.localeCompare(b.id));
+  return { sesiones, escribirRemoto: !igual(sesiones, remotoOrdenado) };
 }

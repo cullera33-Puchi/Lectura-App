@@ -303,3 +303,9 @@ export async function enviarAPapelera(token, archivoId) {
     if (e.estadoHttp !== 404) throw e;
   }
 }
+
+// Archivos de una carpeta cuyo nombre empieza por el prefijo indicado.
+export async function buscarPorPrefijo(token, carpetaId, prefijo) {
+  const consulta = `name contains ${literal(prefijo)} and ${literal(carpetaId)} in parents and trashed = false`;
+  return (await buscar(token, consulta)).filter((a) => a.name.startsWith(prefijo));
+}

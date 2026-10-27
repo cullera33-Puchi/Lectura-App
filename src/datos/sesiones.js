@@ -3,7 +3,7 @@
 // cerrarlo o tras 5 minutos sin pasar página. El registro se actualiza en cada
 // página, así no se pierde si el sistema cierra la app.
 
-import { guardar, borrar } from './almacen.js';
+import { guardar, borrar, leerTodos } from './almacen.js';
 import { idDispositivo } from './preferencias.js';
 
 const INACTIVIDAD_MS = 5 * 60 * 1000;
@@ -75,4 +75,8 @@ export class RegistroSesiones {
     sesion.fin = new Date(fin).toISOString();
     await guardar('sesiones', sesion);
   }
+}
+
+export function listarSesiones() {
+  return leerTodos('sesiones');
 }

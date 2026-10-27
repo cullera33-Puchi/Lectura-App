@@ -185,3 +185,30 @@ export async function volverASubir(id) {
     };
   });
 }
+
+// Cambia los datos de un libro editados a mano. Quedan pendientes de enviar a
+// biblioteca.json.
+export function editarMetadatos(id, cambios) {
+  const fecha = new Date().toISOString();
+  return leerYEscribir(['libros', 'pendientes'], 'libros', id, (libro) => {
+    if (!libro) return null;
+    const nuevo = { ...libro, ...cambios, fechaModificacion: fecha };
+    return {
+      operaciones: [
+        { almacen: 'libros', valor: nuevo },
+        { almacen: 'pendientes', valor: { clave: `metadatos:${id}`, tipo: 'metadatos', id, fecha } },
+      ],
+      resultado: nuevo,
+    };
+  });
+}
+
+// Portada cambiada a mano: se guarda en local y queda pendiente de subir.
+export async function cambiarPortada(id, blob) {
+  olvidarPortada(id);
+  const fecha = new Date().toISOString();
+  await escribirVarios([
+    { almacen: 'portadas', valor: blob, clave: id },
+    { almacen: 'pendientes', valor: { clave: `subirPortada:${id}`, tipo: 'subirPortada', id, fecha } },
+  ]);
+}
