@@ -18,7 +18,7 @@ const OFUSCACION_FUENTES = new Set([
 
 export class ErrorImportacion extends Error {}
 
-async function huella(datos) {
+export async function huella(datos) {
   const resumen = await crypto.subtle.digest('SHA-256', datos);
   return Array.from(new Uint8Array(resumen), (b) => b.toString(16).padStart(2, '0')).join('');
 }
