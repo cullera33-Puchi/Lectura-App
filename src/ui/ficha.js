@@ -1,6 +1,8 @@
 // Panel de contenido que sube desde abajo: ficha del libro y resumen del año.
 
-import { abrirCapa, cerrarCapa, capaAbierta } from './paneles.js';
+import {
+  abrirCapa, cerrarCapa, capaAbierta, cerrarDeslizando,
+} from './paneles.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,4 +26,5 @@ export function fichaAbierta() {
 export function prepararFicha() {
   $('btn-cerrar-ficha').addEventListener('click', cerrarFicha);
   $('fondo-ficha').addEventListener('click', cerrarFicha);
+  cerrarDeslizando($('panel-ficha'), cerrarFicha);
 }

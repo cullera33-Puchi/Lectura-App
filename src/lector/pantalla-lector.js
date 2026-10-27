@@ -19,7 +19,9 @@ import { registrar } from '../ui/registro.js';
 import { leerSincronizacion } from '../datos/pendientes.js';
 import { mostrarHoja } from '../ui/hoja.js';
 import { cargarRitmo, anotarPagina, reiniciarReferencia, tiempoRestante } from './ritmo.js';
-import { abrirCapa, cerrarCapa, capaAbierta } from '../ui/paneles.js';
+import {
+  abrirCapa, cerrarCapa, capaAbierta, cerrarDeslizando,
+} from '../ui/paneles.js';
 import { svgIcono } from '../ui/iconos.js';
 
 const $ = (id) => document.getElementById(id);
@@ -475,6 +477,7 @@ export function prepararPantallaLector({ cerrar }) {
   $('btn-aa').addEventListener('click', abrirPanelAa);
   $('btn-sincronizar-lector').addEventListener('click', cerrarPaneles);
   $('fondo-panel').addEventListener('click', cerrarPaneles);
+  for (const id of PANELES) cerrarDeslizando($(id), cerrarPaneles);
   alCambiarPreferencias((_, tipo) => {
     if (tipo === 'lectura') aplicarPreferencias();
   });

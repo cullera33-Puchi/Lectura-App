@@ -1,7 +1,7 @@
 // Hoja de acciones inferior, como las de iOS. Devuelve el id del botón pulsado
 // o null si se cancela.
 
-import { abrirCapa, cerrarCapa } from './paneles.js';
+import { abrirCapa, cerrarCapa, cerrarDeslizando } from './paneles.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -91,4 +91,5 @@ export function cancelarHoja() {
 export function prepararHoja() {
   $('fondo-hoja').addEventListener('click', () => cerrar(null));
   $('hoja-cancelar').addEventListener('click', () => cerrar(null));
+  cerrarDeslizando($('hoja-acciones'), () => cerrar(null));
 }

@@ -1558,6 +1558,8 @@ body[data-perfil="tinta"] .fila-hoja:active {
 }
 
 .aviso {
+  /* Solo informa: deja pasar los toques a lo que hay debajo. */
+  pointer-events: none;
   position: fixed;
   left: 50%;
   top: calc(env(safe-area-inset-top) + 52px);
