@@ -34,7 +34,7 @@ let alCerrar = () => {};
 // ya no es el turno vigente (otro toque, o se cerró mientras se abría) se descarta.
 let turno = 0;
 
-const PANELES = ['panel-menu', 'panel-indice', 'panel-aa'];
+const PANELES = ['panel-menu', 'panel-indice', 'panel-buscar', 'panel-aa'];
 
 function controlesVisibles(visibles) {
   if (visibles) abrirCapa($('controles-lector'));
@@ -180,6 +180,83 @@ function abrirIndice() {
   const marcado = pintarIndice();
   abrirPanel('panel-indice');
   if (marcado >= 0) $('lista-indice').children[marcado]?.scrollIntoView({ block: 'center' });
+}
+
+// --- Buscar en el libro (v4) ---
+
+const busqueda = { texto: '', numero: 0, libro: null };
+let temporizadorBusqueda = null;
+
+function fragmento(r) {
+  const li = document.createElement('li');
+  const b = document.createElement('button');
+  b.type = 'button';
+  const capitulo = document.createElement('span');
+  capitulo.className = 'resultado-capitulo';
+  capitulo.textContent = r.capitulo || '';
+  const texto = document.createElement('span');
+  texto.className = 'resultado-texto';
+  const marca = document.createElement('mark');
+  marca.textContent = r.coincidencia;
+  texto.append(`${r.cortadoAntes ? '...' : ''}${r.antes}`, marca, `${r.despues}${r.cortadoDespues ? '...' : ''}`);
+  b.append(capitulo, texto);
+  b.addEventListener('click', async () => {
+    const a = actual;
+    if (!a) return;
+    cerrarPaneles();
+    controlesVisibles(false);
+    await a.motor.irA(r.cfi);
+    if (actual === a) a.motor.resaltar(r.cfi);
+  });
+  li.appendChild(b);
+  return li;
+}
+
+async function lanzarBusqueda() {
+  const a = actual;
+  if (!a) return;
+  const texto = $('buscar-en-libro').value.trim();
+  if (texto === busqueda.texto && busqueda.libro === a.id) return;
+  const numero = ++busqueda.numero;
+  busqueda.texto = texto;
+  busqueda.libro = a.id;
+  const lista = $('lista-busqueda');
+  const estado = $('estado-busqueda');
+  lista.replaceChildren();
+  if (texto.length < 2) {
+    estado.textContent = texto ? 'Escribe al menos dos letras.' : '';
+    return;
+  }
+  const vigente = () => numero === busqueda.numero && actual === a;
+  let total = 0;
+  estado.textContent = 'Buscando...';
+  await a.motor.buscar(texto, {
+    cancelado: () => !vigente(),
+    alAvanzar: (i, n) => {
+      if (vigente()) estado.textContent = `Buscando... capítulo ${i} de ${n}. ${total ? `${total} encontrados` : ''}`;
+    },
+    alResultados: (resultados) => {
+      total += resultados.length;
+      lista.append(...resultados.map(fragmento));
+    },
+  });
+  if (!vigente()) return;
+  estado.textContent = total
+    ? (total >= 300 ? 'Más de 300 resultados: se muestran los 300 primeros.' : `${total === 1 ? '1 resultado' : `${total} resultados`}`)
+    : `No se ha encontrado "${texto}".`;
+  registrar(`Búsqueda en el libro: "${texto}", ${total} resultados`);
+}
+
+function abrirBuscar() {
+  // Al cambiar de libro, la búsqueda anterior no vale.
+  if (busqueda.libro !== actual?.id) {
+    $('buscar-en-libro').value = '';
+    $('lista-busqueda').replaceChildren();
+    $('estado-busqueda').textContent = '';
+    busqueda.texto = '';
+  }
+  abrirPanel('panel-buscar');
+  setTimeout(() => $('buscar-en-libro').focus(), 350);
 }
 
 // --- Temas y ajustes ("Aa") ---
@@ -474,6 +551,18 @@ export function prepararPantallaLector({ cerrar }) {
   $('btn-menu-lector').addEventListener('click', () => abrirPanel('panel-menu'));
   $('btn-indice').addEventListener('click', abrirIndice);
   $('btn-cerrar-indice').addEventListener('click', cerrarPaneles);
+  $('btn-buscar-libro').addEventListener('click', abrirBuscar);
+  $('btn-cerrar-buscar').addEventListener('click', cerrarPaneles);
+  $('buscar-en-libro').addEventListener('input', () => {
+    clearTimeout(temporizadorBusqueda);
+    temporizadorBusqueda = setTimeout(lanzarBusqueda, 450);
+  });
+  $('buscar-en-libro').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    clearTimeout(temporizadorBusqueda);
+    $('buscar-en-libro').blur(); // cierra el teclado para ver los resultados
+    lanzarBusqueda();
+  });
   $('btn-aa').addEventListener('click', abrirPanelAa);
   $('btn-sincronizar-lector').addEventListener('click', cerrarPaneles);
   $('fondo-panel').addEventListener('click', cerrarPaneles);

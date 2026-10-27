@@ -258,6 +258,7 @@
       <p id="menu-titulo" class="hoja-cabecera-texto"></p>
       <div class="grupo">
         <button type="button" id="btn-indice" class="fila fila-menu"><span>Contenido</span><i data-icono="indice"></i></button>
+        <button type="button" id="btn-buscar-libro" class="fila fila-menu"><span>Buscar en el libro</span><i data-icono="buscar"></i></button>
         <button type="button" id="btn-aa" class="fila fila-menu"><span>Temas y ajustes</span><span class="icono-aa">Aa</span></button>
         <button type="button" id="btn-sincronizar-lector" class="fila fila-menu boton-sincronizar"><span>Sincronizar</span><span class="indicador" hidden></span><i data-icono="sincronizar"></i></button>
       </div>
@@ -270,6 +271,20 @@
         <button type="button" id="btn-cerrar-indice" class="boton-redondo pequeno" aria-label="Cerrar"><i data-icono="cerrar"></i></button>
       </div>
       <ol id="lista-indice"></ol>
+    </div>
+
+    <div id="panel-buscar" class="hoja hoja-alta" role="dialog" aria-label="Buscar en el libro" hidden>
+      <div class="asa"></div>
+      <div class="hoja-cabecera">
+        <h2>Buscar en el libro</h2>
+        <button type="button" id="btn-cerrar-buscar" class="boton-redondo pequeno" aria-label="Cerrar"><i data-icono="cerrar"></i></button>
+      </div>
+      <div class="caja-busqueda caja-busqueda-libro">
+        <i data-icono="buscar"></i>
+        <input type="search" id="buscar-en-libro" placeholder="Palabra o frase" aria-label="Buscar en el libro" autocomplete="off" enterkeyhint="search">
+      </div>
+      <p id="estado-busqueda" class="estado-busqueda" role="status"></p>
+      <ol id="lista-busqueda" class="lista-panel"></ol>
     </div>
 
     <div id="panel-aa" class="hoja" role="dialog" aria-label="Temas y ajustes" hidden></div>

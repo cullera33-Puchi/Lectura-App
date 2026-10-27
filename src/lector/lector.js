@@ -33,6 +33,69 @@ const ESPERA_COMPROBACION_MS = 400;
 const LIMITE_APERTURA_MS = 20000;
 const LIMITE_PINTADO_MS = 15000;
 const URL_FUENTES = new URL('../../fonts/fuentes.css', import.meta.url).href;
+const MAX_RESULTADOS = 300;
+const ESPERA_RESALTADO_MS = 800;
+const CONTEXTO_FRAGMENTO = 45; // caracteres antes y después de la coincidencia
+
+// Texto sin tildes y en minúsculas, con la posición original de cada carácter,
+// para buscar sin distinguir tildes y poder señalar la coincidencia exacta.
+function normalizarConPosiciones(texto) {
+  let normal = '';
+  const posiciones = [];
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (let k = 0; k < c.length; k++) {
+      normal += c[k];
+      posiciones.push(i);
+    }
+  }
+  return { normal, posiciones };
+}
+
+export function normalizarBusqueda(texto) {
+  return normalizarConPosiciones((texto || '').trim().replace(/\s+/g, ' ')).normal;
+}
+
+// Coincidencias dentro de cada nodo de texto de un capítulo cargado. Cada una
+// lleva su CFI y un fragmento con el texto de alrededor.
+function buscarEnSeccion(seccion, buscado, maximo) {
+  const doc = seccion.document;
+  const cuerpo = doc?.body || doc?.documentElement;
+  if (!cuerpo) return [];
+  const resultados = [];
+  const recorrido = doc.createTreeWalker(cuerpo, 4); // NodeFilter.SHOW_TEXT
+  for (let nodo = recorrido.nextNode(); nodo && resultados.length < maximo; nodo = recorrido.nextNode()) {
+    const original = nodo.nodeValue;
+    if (!original || original.length < buscado.length) continue;
+    const { normal, posiciones } = normalizarConPosiciones(original);
+    let desde = 0;
+    for (let i = normal.indexOf(buscado, desde); i >= 0 && resultados.length < maximo; i = normal.indexOf(buscado, desde)) {
+      const inicio = posiciones[i];
+      const fin = posiciones[i + buscado.length - 1] + 1;
+      const rango = doc.createRange();
+      rango.setStart(nodo, inicio);
+      rango.setEnd(nodo, fin);
+      let cfi = null;
+      try {
+        cfi = seccion.cfiFromRange(rango);
+      } catch {
+        cfi = null;
+      }
+      if (cfi) {
+        resultados.push({
+          cfi,
+          antes: original.slice(Math.max(0, inicio - CONTEXTO_FRAGMENTO), inicio).replace(/\s+/g, ' ').trimStart(),
+          coincidencia: original.slice(inicio, fin),
+          despues: original.slice(fin, fin + CONTEXTO_FRAGMENTO).replace(/\s+/g, ' ').trimEnd(),
+          cortadoAntes: inicio > CONTEXTO_FRAGMENTO,
+          cortadoDespues: fin + CONTEXTO_FRAGMENTO < original.length,
+        });
+      }
+      desde = i + buscado.length;
+    }
+  }
+  return resultados;
+}
 
 export const MENSAJE_LIBRO_ILEGIBLE = MENSAJE_ILEGIBLE;
 
@@ -595,12 +658,64 @@ export async function abrirLibro(contenedor, datos, opciones) {
     }, 2500);
   }
 
+  // --- Búsqueda dentro del libro (v4) ---
+  // Recorre los capítulos sin pintarlos y entrega los resultados por tandas,
+  // capítulo a capítulo. No distingue mayúsculas ni tildes.
+
+  async function buscar(texto, { alResultados, alAvanzar, cancelado = () => false } = {}) {
+    const buscado = normalizarBusqueda(texto);
+    if (buscado.length < 2) return 0;
+    const secciones = libro.spine.spineItems;
+    let total = 0;
+    for (let i = 0; i < secciones.length && total < MAX_RESULTADOS; i++) {
+      if (cancelado() || destruido) break;
+      const seccion = secciones[i];
+      alAvanzar?.(i + 1, secciones.length);
+      try {
+        await seccion.load(libro.load.bind(libro));
+        const encontrados = buscarEnSeccion(seccion, buscado, MAX_RESULTADOS - total)
+          .map((r) => ({ ...r, capitulo: etiquetaCapitulo(seccion.index) }));
+        total += encontrados.length;
+        if (encontrados.length && !cancelado()) alResultados?.(encontrados);
+      } catch (e) {
+        registrar(`Búsqueda: no se pudo leer el capítulo ${i + 1} (${e.message})`, 'error');
+      } finally {
+        seccion.unload();
+      }
+    }
+    return total;
+  }
+
+  // Resalta un resultado hasta el siguiente paso de página. En Tinta, subrayado.
+  let resaltado = null;
+  function quitarResaltado() {
+    if (!resaltado) return;
+    rendition.annotations.remove(resaltado.cfi, resaltado.tipo);
+    resaltado = null;
+  }
+  function resaltar(cfi) {
+    quitarResaltado();
+    const tipo = perfil === 'tinta' ? 'underline' : 'highlight';
+    const estilos = perfil === 'tinta'
+      ? { stroke: '#000000', 'stroke-opacity': '1', 'stroke-width': '3' }
+      : { fill: '#ffcc33', 'fill-opacity': '0.45', 'mix-blend-mode': 'multiply' };
+    rendition.annotations.add(tipo, cfi, {}, null, 'resultado-busqueda', estilos);
+    resaltado = { cfi, tipo, desde: Date.now() };
+  }
+  rendition.on('relocated', () => {
+    // El salto al resultado también avisa de la nueva posición, a veces un
+    // instante después: solo un paso de página posterior quita el resaltado.
+    if (resaltado && Date.now() - resaltado.desde > ESPERA_RESALTADO_MS) quitarResaltado();
+  });
+
   return {
     titulo: metadatos.title || 'Sin título',
     indice,
     siguiente,
     anterior,
     aplicarAjustes,
+    buscar,
+    resaltar,
     irA(destino) {
       return rendition.display(destino);
     },

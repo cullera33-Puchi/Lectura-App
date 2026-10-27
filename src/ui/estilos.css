@@ -2512,3 +2512,97 @@ body[data-perfil="tinta"] .resumen-anio-cifras {
 .resumen-intro {
   margin: 0 0 14px;
 }
+
+/* ---------- Buscar en el libro ---------- */
+
+.caja-busqueda-libro {
+  margin: 0 0 6px;
+}
+
+.estado-busqueda {
+  min-height: 18px;
+  margin: 4px 4px 8px;
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.lista-panel {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--celda);
+  border-radius: var(--radio-grupo);
+}
+
+.lista-panel:empty {
+  background: transparent;
+}
+
+.lista-panel li + li button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 0;
+  height: var(--grosor);
+  background: var(--separador);
+}
+
+.lista-panel button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 11px 16px;
+  text-align: left;
+}
+
+.resultado-capitulo {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--texto-2);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.resultado-texto {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.resultado-texto mark {
+  background: rgba(255, 204, 51, 0.55);
+  color: inherit;
+  border-radius: 2px;
+}
+
+body[data-perfil="tinta"] .lista-panel {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+}
+
+body[data-perfil="tinta"] .lista-panel:empty {
+  border: 0;
+}
+
+body[data-perfil="tinta"] .lista-panel li + li button::before {
+  left: 0;
+  height: 2px;
+  background: var(--texto);
+}
+
+body[data-perfil="tinta"] .resultado-capitulo,
+body[data-perfil="tinta"] .estado-busqueda {
+  color: var(--texto);
+}
+
+body[data-perfil="tinta"] .resultado-texto mark {
+  background: transparent;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
