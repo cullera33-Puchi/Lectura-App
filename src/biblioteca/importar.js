@@ -1,6 +1,7 @@
 // Importación de EPUB (punto 7 del diseño). Se lee el archivo con JSZip, sin
 // abrir epub.js, para que importar varios libros sea rápido.
 
+import { cargarJSZip } from '../lector/librerias.js';
 import {
   leerLibro, guardarLibroImportado, leerArchivo, guardarEdicion, idsDescargados, todosLosLibros,
 } from '../datos/libros.js';
@@ -151,6 +152,7 @@ export async function reducirPortada(blob) {
 }
 
 async function analizar(datos) {
+  await cargarJSZip();
   let zip;
   try {
     zip = await JSZip.loadAsync(datos);
@@ -212,6 +214,7 @@ function datosEdicionDeOpf(opf) {
 }
 
 export async function leerDatosEdicion(datos) {
+  await cargarJSZip();
   const zip = await JSZip.loadAsync(datos);
   const contenedor = archivoZip(zip, 'META-INF/container.xml');
   const rutaOpf = contenedor && xml(await contenedor.async('string'))

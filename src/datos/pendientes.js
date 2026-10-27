@@ -1,6 +1,6 @@
 // Cola de cambios pendientes de sincronizar y datos de la última sincronización.
 
-import { leer, leerTodos, guardar, borrar, contar, alEscribir } from './almacen.js';
+import { leer, leerTodos, leerClaves, guardar, borrar, alEscribir } from './almacen.js';
 
 const oyentes = new Set();
 
@@ -12,8 +12,19 @@ export async function borrarPendiente(clave) {
   await borrar('pendientes', clave);
 }
 
-export function contarPendientes() {
-  return contar('pendientes');
+// Claves pendientes en el último recuento. Sirve para no recontar cuando se
+// reescribe un pendiente que ya estaba (cada página pasada reescribe el de
+// progreso del libro).
+let clavesContadas = null;
+
+export async function contarPendientes() {
+  const claves = await leerClaves('pendientes');
+  clavesContadas = new Set(claves);
+  return claves.length;
+}
+
+export function pendienteYaContado(clave) {
+  return Boolean(clavesContadas?.has(clave));
 }
 
 // La interfaz pinta el indicador del botón Sincronizar al recibir este aviso.

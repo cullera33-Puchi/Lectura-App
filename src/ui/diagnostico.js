@@ -6,7 +6,7 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.8.0 (correcciones del repaso)';
+export const VERSION_APP = '0.8.1 (rendimiento)';
 
 let resultadoPersistencia = 'sin pedir';
 

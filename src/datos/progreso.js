@@ -1,7 +1,7 @@
 // Posición de lectura local. Siempre como CFI, nunca como número de página.
 
 import { leer, leerTodos, escribirVarios } from './almacen.js';
-import { leerSincronizacion } from './pendientes.js';
+import { leerSincronizacion, pendienteYaContado } from './pendientes.js';
 import { nombreDispositivo, idDispositivo } from './preferencias.js';
 
 export function leerProgreso(id) {
@@ -24,8 +24,10 @@ export async function guardarProgreso(id, datos, { mantenerFecha = false, provis
   else if (mantenerFecha && datos.fecha) fecha = datos.fecha;
   const registro = { ...datos, id, fecha };
   const operaciones = [{ almacen: 'progreso', valor: registro }];
-  if (fecha) operaciones.push({ almacen: 'pendientes', valor: { clave: `progreso:${id}`, tipo: 'progreso', id, fecha } });
-  await escribirVarios(operaciones);
+  const clave = `progreso:${id}`;
+  if (fecha) operaciones.push({ almacen: 'pendientes', valor: { clave, tipo: 'progreso', id, fecha } });
+  // Si el pendiente ya existía, el número de cambios no varía: sin recuento.
+  await escribirVarios(operaciones, { sinAviso: pendienteYaContado(clave) ? ['pendientes'] : [] });
   return registro;
 }
 

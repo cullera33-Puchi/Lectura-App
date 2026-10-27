@@ -7,9 +7,29 @@ import { leerSincronizacion } from '../datos/pendientes.js';
 import { leerObjetivos } from '../datos/colecciones.js';
 import { idDispositivo, nombreDispositivo } from '../datos/preferencias.js';
 import { calcularEstadisticas } from './calculo.js';
+import { alEscribir } from '../datos/almacen.js';
 
-// Sesiones de todos los dispositivos, con el nombre de cada uno.
-export async function todasLasSesiones() {
+// Sesiones de todos los dispositivos, con el nombre de cada uno. Se guardan en
+// memoria hasta que cambian las sesiones o llega una sincronización: Leyendo
+// ahora, Estadísticas y la ficha las piden a menudo y con mucho histórico la
+// lectura completa se nota. El resultado no se debe modificar.
+let enMemoria = null; // { nombre, promesa }
+
+alEscribir((almacenes) => {
+  if (almacenes.includes('sesiones') || almacenes.includes('sincronizacion')) enMemoria = null;
+});
+
+export function todasLasSesiones() {
+  const nombre = nombreDispositivo();
+  if (!enMemoria || enMemoria.nombre !== nombre) {
+    const promesa = leerTodasLasSesiones();
+    enMemoria = { nombre, promesa };
+    promesa.catch(() => { if (enMemoria?.promesa === promesa) enMemoria = null; });
+  }
+  return enMemoria.promesa;
+}
+
+async function leerTodasLasSesiones() {
   const [propias, remotas] = await Promise.all([listarSesiones(), leerSincronizacion('sesionesRemotas')]);
   const propio = idDispositivo();
   const sesiones = propias.map((s) => ({ ...s, dispositivo: nombreDispositivo() }));

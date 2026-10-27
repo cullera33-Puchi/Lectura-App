@@ -11,6 +11,7 @@ const MINIMO_MS = 1500; // menos: está pasando páginas sin leer
 const MAXIMO_MS = 5 * 60 * 1000; // más: ha hecho una pausa
 const MAXIMO_UBICACIONES = 4; // más: ha saltado (índice, enlace)
 const MUESTRAS_MINIMAS = 8;
+const GUARDAR_CADA = 5;
 
 let ritmo = { msPorPagina: null, ubicacionesPorPagina: null, muestras: 0 };
 let anterior = null; // { fecha, ubicacion }
@@ -40,7 +41,9 @@ export function anotarPagina(info, { contar = true } = {}) {
     ubicacionesPorPagina: media(ritmo.ubicacionesPorPagina, avance),
     muestras: ritmo.muestras + 1,
   };
-  guardarAjuste('ritmoLectura', ritmo).catch(() => {});
+  // Se guarda cada pocas páginas, no en todas: perder alguna muestra al
+  // cerrar no cambia la media.
+  if (ritmo.muestras % GUARDAR_CADA === 0) guardarAjuste('ritmoLectura', ritmo).catch(() => {});
   const n = ritmo.muestras;
   if (n === 1 || n === MUESTRAS_MINIMAS || n % 25 === 0) {
     registrar(`Ritmo de lectura: ${resumenRitmo()}${n === MUESTRAS_MINIMAS ? '. Ya se muestra el tiempo restante' : ''}`);

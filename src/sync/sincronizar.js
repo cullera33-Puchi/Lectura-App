@@ -286,6 +286,17 @@ async function sincronizarAnotaciones(token, raiz, avisos) {
   await guardarAnotacionesFusionadas(recientes);
 }
 
+const PORTADAS_A_LA_VEZ = 4;
+
+// Ejecuta fn sobre cada elemento con, como mucho, n en curso a la vez.
+async function enParalelo(elementos, n, fn) {
+  let siguiente = 0;
+  const trabajador = async () => {
+    while (siguiente < elementos.length) await fn(elementos[siguiente++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(n, elementos.length) }, trabajador));
+}
+
 async function ejecutar(token, alEstado) {
   const estado = (texto) => alEstado?.(texto);
   const resumen = { subidos: 0, nuevos: 0, bajas: 0, posiciones: 0, avisos: [] };
@@ -423,10 +434,12 @@ async function ejecutar(token, alEstado) {
   const bibliotecaAnterior = await leerSincronizacion('bibliotecaRemota');
   await guardarSincronizacion('bibliotecaRemota', fusionBiblioteca.biblioteca);
 
-  estado('Sincronizando las estadísticas...');
-  await sincronizarSesiones(token, carpetas.raiz, resumen.avisos);
-  estado('Sincronizando los marcadores...');
-  await sincronizarAnotaciones(token, carpetas.raiz, resumen.avisos);
+  // Archivos distintos en Drive: se sincronizan a la vez.
+  estado('Sincronizando las estadísticas y los marcadores...');
+  await Promise.all([
+    sincronizarSesiones(token, carpetas.raiz, resumen.avisos),
+    sincronizarAnotaciones(token, carpetas.raiz, resumen.avisos),
+  ]);
   await guardarSincronizacion('ultima', new Date().toISOString());
 
   // Copia de seguridad del día (solo en la primera sincronización de cada día).
@@ -442,6 +455,7 @@ async function ejecutar(token, alEstado) {
   const conPortada = new Set(await idsConPortada());
   const portadaAnterior = new Map((bibliotecaAnterior?.libros || []).map((l) => [l.id, l.portadaDriveId]));
   const cambiandoAqui = new Set((await listarPendientes()).filter((p) => p.tipo === 'subirPortada').map((p) => p.id));
+  const porDescargar = [];
   for (const libro of fusionBiblioteca.biblioteca.libros) {
     if (libro.eliminado || !libro.portadaDriveId || cambiandoAqui.has(libro.id)) continue;
     if (conPortada.has(libro.id)) {
@@ -451,6 +465,12 @@ async function ejecutar(token, alEstado) {
         continue;
       }
     }
+    porDescargar.push(libro);
+  }
+  // Varias a la vez: en un dispositivo nuevo con muchos libros, la espera de
+  // cada petición es lo que más tarda.
+  if (porDescargar.length) estado(`Descargando portadas (${porDescargar.length})...`);
+  await enParalelo(porDescargar, PORTADAS_A_LA_VEZ, async (libro) => {
     try {
       const datos = await descargarArchivo(token, libro.portadaDriveId);
       await guardarPortadaDescargada(libro.id, new Blob([datos], { type: 'image/jpeg' }));
@@ -458,7 +478,7 @@ async function ejecutar(token, alEstado) {
     } catch (e) {
       registrar(`No se pudo descargar la portada de "${libro.titulo}": ${e.message}`, 'error');
     }
-  }
+  });
   await guardarSincronizacion('portadasLocales', portadasLocales);
   return resumen;
 }

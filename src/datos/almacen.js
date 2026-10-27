@@ -76,7 +76,7 @@ function abrir() {
   return bdPromesa;
 }
 
-function ejecutar(bd, almacenes, modo, accion) {
+function ejecutar(bd, almacenes, modo, accion, avisados = almacenes) {
   return new Promise((resolver, rechazar) => {
     const tx = bd.transaction(almacenes, modo);
     // accion devuelve una petición (su resultado), una función que da el
@@ -86,7 +86,7 @@ function ejecutar(bd, almacenes, modo, accion) {
     if (valor && 'onsuccess' in valor) valor.onsuccess = () => { resultado = valor.result; };
     else resultado = valor;
     tx.oncomplete = () => {
-      if (modo === 'readwrite') avisarEscritura(almacenes);
+      if (modo === 'readwrite' && avisados.length) avisarEscritura(avisados);
       resolver(typeof resultado === 'function' ? resultado() : resultado);
     };
     tx.onerror = () => rechazar(tx.error);
@@ -94,16 +94,16 @@ function ejecutar(bd, almacenes, modo, accion) {
   });
 }
 
-async function operar(almacenes, modo, accion) {
+async function operar(almacenes, modo, accion, avisados) {
   let bd = await abrir();
   try {
-    return await ejecutar(bd, almacenes, modo, accion);
+    return await ejecutar(bd, almacenes, modo, accion, avisados);
   } catch (e) {
     // Conexión cerrada por el sistema: se reabre y se reintenta una vez.
     if (e?.name !== 'InvalidStateError' && e?.name !== 'UnknownError') throw e;
     olvidarConexion();
     bd = await abrir();
-    return ejecutar(bd, almacenes, modo, accion);
+    return ejecutar(bd, almacenes, modo, accion, avisados);
   }
 }
 
@@ -136,8 +136,11 @@ export function borrar(almacen, clave) {
 }
 
 // Varias escrituras en una sola transacción: [{ almacen, valor, clave, borrar }]
-export function escribirVarios(operaciones) {
+// sinAviso: almacenes cuya escritura no hace falta avisar (por ejemplo, un
+// pendiente que ya existía y solo cambia de fecha).
+export function escribirVarios(operaciones, { sinAviso = [] } = {}) {
   const almacenes = [...new Set(operaciones.map((o) => o.almacen))];
+  const avisados = almacenes.filter((a) => !sinAviso.includes(a));
   return operar(almacenes, 'readwrite', (tx) => {
     for (const o of operaciones) {
       const a = tx.objectStore(o.almacen);
@@ -146,7 +149,7 @@ export function escribirVarios(operaciones) {
       else a.put(o.valor, o.clave);
     }
     return null;
-  });
+  }, avisados);
 }
 
 // Lee un registro y escribe su nueva versión en la misma transacción, para que

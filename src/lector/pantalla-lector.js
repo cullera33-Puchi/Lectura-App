@@ -493,7 +493,7 @@ function boton(texto, clase, alPulsar) {
 }
 
 // Fila con etiqueta encima y control segmentado de iOS a todo el ancho.
-function filaSegmentada(titulo, opciones, valorActual, alElegir) {
+function filaSegmentada(titulo, opciones, valorActual, alElegir, clave) {
   const fila = document.createElement('div');
   fila.className = 'fila fila-columna';
   const etiqueta = document.createElement('span');
@@ -506,6 +506,10 @@ function filaSegmentada(titulo, opciones, valorActual, alElegir) {
   for (const o of opciones) {
     const b = boton(o.nombre, '', () => alElegir(o.id));
     b.setAttribute('aria-pressed', String(o.id === valorActual));
+    if (clave) {
+      b.dataset.ajuste = clave;
+      b.dataset.valor = o.id;
+    }
     control.appendChild(b);
   }
   fila.append(etiqueta, control);
@@ -555,10 +559,12 @@ function pintarPanelAa() {
   const menor = boton('', '', () => cambiarTamano(-1));
   menor.innerHTML = '<span style="font-size:15px">A</span>';
   menor.setAttribute('aria-label', 'Letra más pequeña');
+  menor.dataset.tamano = 'menos';
   menor.disabled = posicion <= 0;
   const mayor = boton('', '', () => cambiarTamano(1));
   mayor.innerHTML = '<span style="font-size:24px">A</span>';
   mayor.setAttribute('aria-label', 'Letra más grande');
+  mayor.dataset.tamano = 'mas';
   mayor.disabled = posicion >= TAMANOS.length - 1;
   pastilla.append(menor, mayor);
   const valor = document.createElement('span');
@@ -575,6 +581,8 @@ function pintarPanelAa() {
   for (const tema of TEMAS[perfil]) {
     const muestra = boton('', 'muestra', () => cambiarLectura({ [claveTema]: tema.id }));
     muestra.setAttribute('aria-pressed', String(tema.id === temaActual));
+    muestra.dataset.ajuste = 'tema';
+    muestra.dataset.valor = tema.id;
     const caja = document.createElement('span');
     caja.className = 'm-caja';
     caja.textContent = 'Aa';
@@ -597,6 +605,8 @@ function pintarPanelAa() {
   for (const f of FUENTES) {
     const fila = boton('', 'fila fila-fuente', () => cambiarLectura({ fuente: f.id }));
     fila.setAttribute('aria-pressed', String(f.id === lectura.fuente));
+    fila.dataset.ajuste = 'fuente';
+    fila.dataset.valor = f.id;
     const nombre = document.createElement('span');
     nombre.textContent = f.id === 'original' ? 'Original del libro' : f.nombre;
     if (f.familia) nombre.style.fontFamily = f.familia;
@@ -609,15 +619,15 @@ function pintarPanelAa() {
   const formato = document.createElement('div');
   formato.className = 'grupo';
   formato.append(
-    filaSegmentada('Interlineado', INTERLINEADOS, lectura.interlineado, (id) => cambiarLectura({ interlineado: id })),
-    filaSegmentada('Márgenes', MARGENES, lectura.margenes, (id) => cambiarLectura({ margenes: id })),
-    filaSegmentada('Justificación', JUSTIFICACIONES, lectura.justificacion, (id) => cambiarLectura({ justificacion: id })),
+    filaSegmentada('Interlineado', INTERLINEADOS, lectura.interlineado, (id) => cambiarLectura({ interlineado: id }), 'interlineado'),
+    filaSegmentada('Márgenes', MARGENES, lectura.margenes, (id) => cambiarLectura({ margenes: id }), 'margenes'),
+    filaSegmentada('Justificación', JUSTIFICACIONES, lectura.justificacion, (id) => cambiarLectura({ justificacion: id }), 'justificacion'),
   );
   // Doble página con la pantalla en horizontal: solo en pantallas grandes.
   if (Math.min(window.screen.width, window.screen.height) >= 500) {
     formato.appendChild(filaSegmentada('Dos páginas en horizontal', [
       { id: 'si', nombre: 'Sí' }, { id: 'no', nombre: 'No' },
-    ], lectura.dosPaginas === false ? 'no' : 'si', (id) => cambiarLectura({ dosPaginas: id === 'si' })));
+    ], lectura.dosPaginas === false ? 'no' : 'si', (id) => cambiarLectura({ dosPaginas: id === 'si' }), 'dosPaginas'));
   }
   panel.appendChild(formato);
 
@@ -643,10 +653,53 @@ function pintarPanelAa() {
     propio.appendChild(fila);
     const pie = document.createElement('p');
     pie.className = 'pie-grupo';
-    pie.textContent = interruptor.checked
-      ? 'Tamaño, letra, interlineado, márgenes y justificación se aplican solo a este libro. El tema es común.'
-      : 'Actívalo para que este libro tenga su propio tamaño, letra, interlineado, márgenes y justificación.';
+    pie.id = 'pie-ajustes-propios';
+    pie.textContent = textoAjustesPropios(interruptor.checked);
     panel.append(propio, pie);
+  }
+}
+
+function textoAjustesPropios(activos) {
+  return activos
+    ? 'Tamaño, letra, interlineado, márgenes y justificación se aplican solo a este libro. El tema es común.'
+    : 'Actívalo para que este libro tenga su propio tamaño, letra, interlineado, márgenes y justificación.';
+}
+
+// Con el panel abierto, cada toque cambia solo lo que corresponde, sin
+// rehacer el panel: en tinta electrónica no se redibuja entero y un toque
+// rápido no cae en un botón que se está sustituyendo.
+function actualizarPanelAa() {
+  const panel = $('panel-aa');
+  if (!panel.querySelector('[data-ajuste]')) {
+    pintarPanelAa();
+    return;
+  }
+  const lectura = lecturaActual();
+  const valores = {
+    tema: idTemaElegido(preferencias().dispositivo.perfil, lectura),
+    fuente: lectura.fuente,
+    interlineado: lectura.interlineado,
+    margenes: lectura.margenes,
+    justificacion: lectura.justificacion,
+    dosPaginas: lectura.dosPaginas === false ? 'no' : 'si',
+  };
+  for (const b of panel.querySelectorAll('[data-ajuste]')) {
+    const marcado = String(valores[b.dataset.ajuste]) === b.dataset.valor;
+    if (b.getAttribute('aria-pressed') !== String(marcado)) b.setAttribute('aria-pressed', String(marcado));
+    if (b.dataset.ajuste === 'fuente') {
+      const marca = b.querySelector('.icono');
+      if (marcado && !marca) b.insertAdjacentHTML('beforeend', svgIcono('check'));
+      else if (!marcado && marca) marca.remove();
+    }
+  }
+  const i = TAMANOS.indexOf(lectura.tamano);
+  panel.querySelector('[data-tamano="menos"]').disabled = i <= 0;
+  panel.querySelector('[data-tamano="mas"]').disabled = i >= TAMANOS.length - 1;
+  panel.querySelector('.aa-valor').textContent = `${lectura.tamano} %`;
+  const interruptor = $('ajustes-propios');
+  if (interruptor && actual) {
+    interruptor.checked = tieneAjustesPropios(actual.id);
+    $('pie-ajustes-propios').textContent = textoAjustesPropios(interruptor.checked);
   }
 }
 
@@ -661,7 +714,7 @@ let temporizadorAjustes = null;
 
 function aplicarPreferencias() {
   if (!actual) return;
-  if (capaAbierta($('panel-aa'))) pintarPanelAa();
+  if (capaAbierta($('panel-aa'))) actualizarPanelAa();
   clearTimeout(temporizadorAjustes);
   temporizadorAjustes = setTimeout(() => {
     if (!actual?.motor) return;

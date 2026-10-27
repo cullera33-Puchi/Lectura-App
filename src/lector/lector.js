@@ -15,6 +15,7 @@
 // allowScriptedContent y se neutralizan los scripts del propio libro antes de
 // pintarlo: se eliminan y, además, una política CSP impide ejecutarlos.
 
+import { cargarEpub } from './librerias.js';
 import { registrar } from '../ui/registro.js';
 import { curvaDesde } from '../ui/paneles.js';
 import { cssLibro, temaEfectivo, proporcionMargenes, cambioRepagina } from '../ui/temas.js';
@@ -67,6 +68,9 @@ function buscarEnSeccion(seccion, buscado, maximo) {
   for (let nodo = recorrido.nextNode(); nodo && resultados.length < maximo; nodo = recorrido.nextNode()) {
     const original = nodo.nodeValue;
     if (!original || original.length < buscado.length) continue;
+    // Descarte rápido: casi ningún nodo contiene lo buscado, y el mapa de
+    // posiciones (carácter a carácter) solo se construye para los que sí.
+    if (!original.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(buscado)) continue;
     const { normal, posiciones } = normalizarConPosiciones(original);
     let desde = 0;
     for (let i = normal.indexOf(buscado, desde); i >= 0 && resultados.length < maximo; i = normal.indexOf(buscado, desde)) {
@@ -179,6 +183,8 @@ export async function abrirLibro(contenedor, datos, opciones) {
   const cancelado = opciones.cancelado || (() => false);
   const movil = perfil === 'movil';
   const inicio = performance.now();
+  await cargarEpub();
+  if (cancelado()) throw new AperturaCancelada();
   const libro = ePub(datos);
   libro.spine.hooks.content.register(neutralizarScripts);
 
