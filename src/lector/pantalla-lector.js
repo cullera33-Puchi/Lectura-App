@@ -1,5 +1,9 @@
 // Pantalla del lector (punto 8 del diseño): controles, índice, panel "Aa",
 // guardado de la posición y registro de sesiones.
+//
+// Controles al estilo de Libros de Apple: al tocar el centro aparecen botones
+// flotantes (cerrar arriba y menú abajo). El menú abre Contenido, Temas y
+// ajustes, y Sincronizar.
 
 import { abrirLibro, MENSAJE_LIBRO_ILEGIBLE } from './lector.js';
 import { leerLibro, leerArchivo, leerUbicaciones, guardarUbicaciones } from '../datos/libros.js';
@@ -14,6 +18,8 @@ import {
 import { registrar } from '../ui/registro.js';
 import { leerSincronizacion } from '../datos/pendientes.js';
 import { mostrarHoja } from '../ui/hoja.js';
+import { abrirCapa, cerrarCapa, capaAbierta } from '../ui/paneles.js';
+import { svgIcono } from '../ui/iconos.js';
 
 const $ = (id) => document.getElementById(id);
 const MARGEN_REPAGINADO_MS = 2000;
@@ -21,25 +27,36 @@ const MARGEN_REPAGINADO_MS = 2000;
 let actual = null; // { id, motor, sesiones, progreso, ultimoCfi, repaginandoHasta }
 let alCerrar = () => {};
 
+const PANELES = ['panel-menu', 'panel-indice', 'panel-aa'];
+
 function controlesVisibles(visibles) {
-  $('barra-superior').hidden = !visibles;
-  $('barra-inferior').hidden = !visibles;
+  if (visibles) abrirCapa($('controles-lector'));
+  else cerrarCapa($('controles-lector'));
+}
+
+function hayPanelAbierto() {
+  return PANELES.some((id) => !$(id).hidden);
 }
 
 function cerrarPaneles() {
-  $('panel-indice').hidden = true;
-  $('panel-aa').hidden = true;
-  $('fondo-panel').hidden = true;
+  PANELES.forEach((id) => cerrarCapa($(id)));
+  cerrarCapa($('fondo-panel'));
+}
+
+function abrirPanel(id) {
+  PANELES.filter((p) => p !== id).forEach((p) => cerrarCapa($(p)));
+  abrirCapa($('fondo-panel'));
+  abrirCapa($(id));
 }
 
 function textoProgreso(info) {
   const partes = [];
-  if (info.porcentaje != null) partes.push(`${Math.round(info.porcentaje * 100)} % del libro`);
+  if (info.porcentaje != null) partes.push(`${Math.round(info.porcentaje * 100)} %`);
   if (info.paginasRestantesCapitulo != null) {
     const n = info.paginasRestantesCapitulo;
-    partes.push(n === 0 ? 'Última página del capítulo' : `${n} ${n === 1 ? 'página' : 'páginas'} hasta el final del capítulo`);
+    partes.push(n === 0 ? 'última página del capítulo' : `${n} ${n === 1 ? 'página' : 'páginas'} hasta el final del capítulo`);
   }
-  return partes.join('. ');
+  return partes.join(', ');
 }
 
 async function alCambiarPosicion(info) {
@@ -93,11 +110,14 @@ function pintarIndice() {
     const li = document.createElement('li');
     const boton = document.createElement('button');
     boton.type = 'button';
-    boton.textContent = entrada.etiqueta;
-    boton.style.paddingLeft = `${4 + entrada.nivel * 18}px`;
+    const texto = document.createElement('span');
+    texto.textContent = entrada.etiqueta;
+    boton.appendChild(texto);
+    boton.style.paddingLeft = `${16 + entrada.nivel * 18}px`;
     if (i === marcado) {
       boton.classList.add('actual');
       boton.setAttribute('aria-current', 'true');
+      boton.insertAdjacentHTML('beforeend', svgIcono('check'));
     }
     boton.addEventListener('click', async () => {
       cerrarPaneles();
@@ -109,6 +129,7 @@ function pintarIndice() {
   });
   if (!actual.motor.indice.length) {
     const li = document.createElement('li');
+    li.className = 'fila';
     li.textContent = 'Este libro no tiene índice.';
     lista.appendChild(li);
   }
@@ -117,30 +138,38 @@ function pintarIndice() {
 
 function abrirIndice() {
   const marcado = pintarIndice();
-  $('fondo-panel').hidden = false;
-  $('panel-indice').hidden = false;
+  abrirPanel('panel-indice');
   if (marcado >= 0) $('lista-indice').children[marcado]?.scrollIntoView({ block: 'center' });
 }
 
-// --- Panel "Aa" ---
+// --- Temas y ajustes ("Aa") ---
 
-function grupo(titulo, opciones, valorActual, alElegir, extra) {
+function boton(texto, clase, alPulsar) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  if (clase) b.className = clase;
+  b.textContent = texto;
+  b.addEventListener('click', alPulsar);
+  return b;
+}
+
+// Fila con etiqueta encima y control segmentado de iOS a todo el ancho.
+function filaSegmentada(titulo, opciones, valorActual, alElegir) {
   const fila = document.createElement('div');
-  fila.className = 'ajuste-fila';
+  fila.className = 'fila fila-columna';
   const etiqueta = document.createElement('span');
+  etiqueta.className = 'etiqueta-ajuste';
   etiqueta.textContent = titulo;
-  const segmentos = document.createElement('div');
-  segmentos.className = 'segmentos';
+  const control = document.createElement('div');
+  control.className = 'segmentado';
+  control.setAttribute('role', 'group');
+  control.setAttribute('aria-label', titulo);
   for (const o of opciones) {
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.textContent = o.nombre;
-    boton.setAttribute('aria-pressed', String(o.id === valorActual));
-    extra?.(boton, o);
-    boton.addEventListener('click', () => alElegir(o.id));
-    segmentos.appendChild(boton);
+    const b = boton(o.nombre, '', () => alElegir(o.id));
+    b.setAttribute('aria-pressed', String(o.id === valorActual));
+    control.appendChild(b);
   }
-  fila.append(etiqueta, segmentos);
+  fila.append(etiqueta, control);
   return fila;
 }
 
@@ -150,54 +179,91 @@ function pintarPanelAa() {
   const panel = $('panel-aa');
   panel.replaceChildren();
 
-  const claveTema = perfil === 'tinta' ? 'temaTinta' : 'temaMovil';
-  panel.appendChild(grupo('Tema', TEMAS[perfil], idTemaElegido(perfil, lectura),
-    (id) => cambiarLectura({ [claveTema]: id }),
-    (boton, tema) => {
-      if (tema.fondo) {
-        boton.classList.add('muestra-tema');
-        boton.style.background = tema.fondo;
-        boton.style.color = tema.texto;
-      }
-    }));
+  const asa = document.createElement('div');
+  asa.className = 'asa';
+  const cabecera = document.createElement('div');
+  cabecera.className = 'hoja-cabecera';
+  const h = document.createElement('h2');
+  h.textContent = 'Temas y ajustes';
+  const cerrar = boton('', 'boton-redondo pequeno', cerrarPaneles);
+  cerrar.innerHTML = svgIcono('cerrar');
+  cerrar.setAttribute('aria-label', 'Cerrar');
+  cabecera.append(h, cerrar);
+  panel.append(asa, cabecera);
 
-  const filaTamano = document.createElement('div');
-  filaTamano.className = 'ajuste-fila';
-  const etiquetaTamano = document.createElement('span');
-  etiquetaTamano.textContent = 'Tamaño de letra';
-  const controles = document.createElement('div');
-  controles.className = 'tamano-letra segmentos';
+  // Tamaño de letra
   const posicion = TAMANOS.indexOf(lectura.tamano);
-  const menor = document.createElement('button');
-  menor.type = 'button';
-  menor.innerHTML = '<span style="font-size:14px">A</span>';
+  const filaTamano = document.createElement('div');
+  filaTamano.className = 'aa-tamano';
+  const pastilla = document.createElement('div');
+  pastilla.className = 'pastilla';
+  const menor = boton('', '', () => cambiarLectura({ tamano: TAMANOS[Math.max(0, posicion - 1)] }));
+  menor.innerHTML = '<span style="font-size:15px">A</span>';
   menor.setAttribute('aria-label', 'Letra más pequeña');
   menor.disabled = posicion <= 0;
-  menor.addEventListener('click', () => cambiarLectura({ tamano: TAMANOS[Math.max(0, posicion - 1)] }));
-  const valor = document.createElement('span');
-  valor.className = 'tamano-valor';
-  valor.textContent = `${lectura.tamano} %`;
-  const mayor = document.createElement('button');
-  mayor.type = 'button';
+  const mayor = boton('', '', () => cambiarLectura({ tamano: TAMANOS[Math.min(TAMANOS.length - 1, posicion + 1)] }));
   mayor.innerHTML = '<span style="font-size:24px">A</span>';
   mayor.setAttribute('aria-label', 'Letra más grande');
   mayor.disabled = posicion >= TAMANOS.length - 1;
-  mayor.addEventListener('click', () => cambiarLectura({ tamano: TAMANOS[Math.min(TAMANOS.length - 1, posicion + 1)] }));
-  controles.append(menor, valor, mayor);
-  filaTamano.append(etiquetaTamano, controles);
+  pastilla.append(menor, mayor);
+  const valor = document.createElement('span');
+  valor.className = 'aa-valor';
+  valor.textContent = `${lectura.tamano} %`;
+  filaTamano.append(pastilla, valor);
   panel.appendChild(filaTamano);
 
-  panel.appendChild(grupo('Fuente', FUENTES, lectura.fuente, (id) => cambiarLectura({ fuente: id }),
-    (boton, f) => { if (f.familia) boton.style.fontFamily = f.familia; }));
-  panel.appendChild(grupo('Interlineado', INTERLINEADOS, lectura.interlineado, (id) => cambiarLectura({ interlineado: id })));
-  panel.appendChild(grupo('Márgenes', MARGENES, lectura.margenes, (id) => cambiarLectura({ margenes: id })));
-  panel.appendChild(grupo('Justificación', JUSTIFICACIONES, lectura.justificacion, (id) => cambiarLectura({ justificacion: id })));
+  // Temas como muestras de color
+  const claveTema = perfil === 'tinta' ? 'temaTinta' : 'temaMovil';
+  const temaActual = idTemaElegido(perfil, lectura);
+  const temas = document.createElement('div');
+  temas.className = 'aa-temas';
+  for (const tema of TEMAS[perfil]) {
+    const muestra = boton('', 'muestra', () => cambiarLectura({ [claveTema]: tema.id }));
+    muestra.setAttribute('aria-pressed', String(tema.id === temaActual));
+    const caja = document.createElement('span');
+    caja.className = 'm-caja';
+    caja.textContent = 'Aa';
+    if (tema.fondo) {
+      caja.style.background = tema.fondo;
+      caja.style.color = tema.texto;
+    } else {
+      caja.classList.add('automatica');
+    }
+    const nombre = document.createElement('span');
+    nombre.textContent = tema.nombre;
+    muestra.append(caja, nombre);
+    temas.appendChild(muestra);
+  }
+  panel.appendChild(temas);
+
+  // Fuentes, con cada nombre en su tipo de letra
+  const fuentes = document.createElement('div');
+  fuentes.className = 'grupo';
+  for (const f of FUENTES) {
+    const fila = boton('', 'fila fila-fuente', () => cambiarLectura({ fuente: f.id }));
+    fila.setAttribute('aria-pressed', String(f.id === lectura.fuente));
+    const nombre = document.createElement('span');
+    nombre.textContent = f.id === 'original' ? 'Original del libro' : f.nombre;
+    if (f.familia) nombre.style.fontFamily = f.familia;
+    fila.appendChild(nombre);
+    if (f.id === lectura.fuente) fila.insertAdjacentHTML('beforeend', svgIcono('check'));
+    fuentes.appendChild(fila);
+  }
+  panel.appendChild(fuentes);
+
+  const formato = document.createElement('div');
+  formato.className = 'grupo';
+  formato.append(
+    filaSegmentada('Interlineado', INTERLINEADOS, lectura.interlineado, (id) => cambiarLectura({ interlineado: id })),
+    filaSegmentada('Márgenes', MARGENES, lectura.margenes, (id) => cambiarLectura({ margenes: id })),
+    filaSegmentada('Justificación', JUSTIFICACIONES, lectura.justificacion, (id) => cambiarLectura({ justificacion: id })),
+  );
+  panel.appendChild(formato);
 }
 
 function abrirPanelAa() {
   pintarPanelAa();
-  $('fondo-panel').hidden = false;
-  $('panel-aa').hidden = false;
+  abrirPanel('panel-aa');
 }
 
 function aplicarPreferencias() {
@@ -205,7 +271,7 @@ function aplicarPreferencias() {
   const { dispositivo, lectura } = preferencias();
   actual.repaginandoHasta = Date.now() + MARGEN_REPAGINADO_MS;
   actual.motor.aplicarAjustes(dispositivo.perfil, lectura);
-  if (!$('panel-aa').hidden) pintarPanelAa();
+  if (capaAbierta($('panel-aa'))) pintarPanelAa();
 }
 
 // --- Abrir y cerrar ---
@@ -252,9 +318,11 @@ export async function abrirPantallaLector(id) {
 
   document.body.classList.add('leyendo');
   $('lector').hidden = false;
-  controlesVisibles(false);
+  $('controles-lector').hidden = true;
+  $('controles-lector').classList.remove('abierta');
   cerrarPaneles();
   $('titulo-libro').textContent = libro.titulo;
+  $('menu-titulo').textContent = libro.titulo;
   $('info-capitulo').textContent = libro.titulo;
   $('info-progreso').textContent = '';
 
@@ -279,8 +347,8 @@ export async function abrirPantallaLector(id) {
       avisos: {
         alCambiarPosicion,
         alTocarCentro: () => {
-          if (!$('panel-aa').hidden || !$('panel-indice').hidden) cerrarPaneles();
-          else controlesVisibles($('barra-superior').hidden);
+          if (hayPanelAbierto()) cerrarPaneles();
+          else controlesVisibles($('controles-lector').hidden);
         },
         alDeslizarAbajo: () => alCerrar(),
         alGenerarUbicaciones: (json) => guardarUbicaciones(id, json),
@@ -302,6 +370,7 @@ export async function cerrarPantallaLector() {
   const cerrado = actual;
   actual = null;
   cerrarPaneles();
+  $('controles-lector').hidden = true;
   cerrado.motor?.destruir();
   $('visor').replaceChildren();
   $('lector').hidden = true;
@@ -317,9 +386,11 @@ export function lectorAbierto() {
 export function prepararPantallaLector({ cerrar }) {
   alCerrar = cerrar;
   $('btn-cerrar-libro').addEventListener('click', () => alCerrar());
+  $('btn-menu-lector').addEventListener('click', () => abrirPanel('panel-menu'));
   $('btn-indice').addEventListener('click', abrirIndice);
   $('btn-cerrar-indice').addEventListener('click', cerrarPaneles);
   $('btn-aa').addEventListener('click', abrirPanelAa);
+  $('btn-sincronizar-lector').addEventListener('click', cerrarPaneles);
   $('fondo-panel').addEventListener('click', cerrarPaneles);
   alCambiarPreferencias((_, tipo) => {
     if (tipo === 'lectura') aplicarPreferencias();
