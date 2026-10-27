@@ -6,7 +6,7 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.4.2 (v2 y v3, registro ampliado)';
+export const VERSION_APP = '0.5.0 (copia de seguridad)';
 
 let resultadoPersistencia = 'sin pedir';
 
@@ -82,7 +82,7 @@ export async function datosDiagnostico() {
   }
   const sw = navigator.serviceWorker?.controller ? 'activo' : 'no controla esta página';
   const hora = (f) => (f ? new Date(f).toLocaleString('es-ES') : 'nunca');
-  const [ultima, pendientes] = await Promise.all([leerSincronizacion('ultima'), contarPendientes()]);
+  const [ultima, pendientes, ultimaCopia] = await Promise.all([leerSincronizacion('ultima'), contarPendientes(), leerSincronizacion('ultimaCopia')]);
   const automatica = sincronizacionAutomaticaActiva()
     ? `activada. Última en esta sesión de la app: ${hora(ultimaSincronizacionAutomatica())}`
     : 'desactivada';
@@ -106,6 +106,7 @@ export async function datosDiagnostico() {
     ['Última sincronización correcta', hora(ultima)],
     ['Sincronización automática', automatica],
     ['Cambios pendientes de sincronizar', String(pendientes)],
+    ['Última copia de seguridad en Drive', ultimaCopia || 'ninguna'],
     ['Ritmo de lectura', resumenRitmo()],
   ];
 }

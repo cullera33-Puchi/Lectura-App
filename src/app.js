@@ -21,6 +21,7 @@ import { leerLibro } from './datos/libros.js';
 import { sincronizando } from './sync/sincronizar.js';
 import { mostrarAviso } from './ui/aviso.js';
 import { prepararAjustes, pintarAjustes, pintarDiagnostico } from './ui/ajustes.js';
+import { prepararCopias } from './ui/copias.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
 import { prepararHoja, hojaAbierta, cancelarHoja } from './ui/hoja.js';
 import {
@@ -201,6 +202,7 @@ async function iniciar() {
 
   prepararHoja();
   prepararAjustes();
+  prepararCopias({ restaurado: refrescar });
   prepararBienvenida({ terminado: () => irAPestana('inicio') });
   await prepararBiblioteca({ abrirLibro, refrescar });
   prepararPantallaLector({ cerrar: () => volverDesde('lector') });

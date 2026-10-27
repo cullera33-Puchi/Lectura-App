@@ -12,3 +12,8 @@ export function mostrarAviso(texto, duracion = DURACION_MS) {
     aviso.hidden = true;
   }, duracion);
 }
+
+export function ocultarAviso() {
+  clearTimeout(temporizador);
+  document.getElementById('aviso').hidden = true;
+}

@@ -164,6 +164,14 @@
       </div>
       <p class="pie-grupo">Al abrir la app, al volver a ella y al cerrar un libro, si hay conexión y la sesión de Google está activa. La sesión dura una hora: cuando caduca, el botón Sincronizar muestra "!" y al pulsarlo se renueva.</p>
 
+      <h2 class="cabecera-grupo">Copia de seguridad</h2>
+      <div class="grupo">
+        <button type="button" id="btn-descargar-copia" class="fila fila-boton">Descargar copia de seguridad</button>
+        <button type="button" id="btn-restaurar-copia" class="fila fila-boton">Restaurar una copia</button>
+      </div>
+      <p class="pie-grupo">Cada día, en la primera sincronización, se guarda en Drive una copia de avances, estadísticas, colecciones y objetivos de los dos dispositivos. No incluye los EPUB. Se conservan las 30 últimas diarias y una por mes durante un año. <span id="ultima-copia"></span></p>
+      <input type="file" id="archivo-copia" class="oculto-accesible" accept=".json,application/json">
+
       <h2 class="cabecera-grupo">Cuenta de Google</h2>
       <div class="grupo">
         <div class="fila"><span id="estado-sesion"></span></div>

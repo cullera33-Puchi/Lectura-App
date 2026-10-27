@@ -9,6 +9,7 @@ import { ErrorDrive } from '../sync/drive.js';
 import { prepararCarpeta } from '../sync/carpeta.js';
 import { registrar, suscribirRegistro, entradasRegistro, horaCorta, registroComoTexto } from './registro.js';
 import { datosDiagnostico, diagnosticoComoTexto, pedirPersistencia } from './diagnostico.js';
+import { pintarCopias } from './copias.js';
 
 const $ = (id) => document.getElementById(id);
 const MAX_LINEAS_REGISTRO = 150;
@@ -79,6 +80,7 @@ export function pintarAjustes() {
   $('nombre-dispositivo').value = dispositivo.dispositivo;
   $('sincronizacion-automatica').checked = dispositivo.sincronizacionAutomatica !== false;
   pintarSesion();
+  pintarCopias().catch(() => {});
   pintarDiagnostico();
 }
 
