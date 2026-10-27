@@ -12,6 +12,8 @@ import {
   TEMAS, TAMANOS, FUENTES, INTERLINEADOS, MARGENES, JUSTIFICACIONES, idTemaElegido, alCambiarModoSistema,
 } from '../ui/temas.js';
 import { registrar } from '../ui/registro.js';
+import { leerSincronizacion } from '../datos/pendientes.js';
+import { mostrarHoja } from '../ui/hoja.js';
 
 const $ = (id) => document.getElementById(id);
 const MARGEN_REPAGINADO_MS = 2000;
@@ -208,12 +210,45 @@ function aplicarPreferencias() {
 
 // --- Abrir y cerrar ---
 
+// Punto 8.3 del diseño: si la última posición sincronizada de otro dispositivo
+// es más reciente y distinta, se ofrece ir allí. Devuelve el progreso con el
+// que abrir el libro.
+async function decidirPosicion(id, local) {
+  const remota = (await leerSincronizacion('progresoRemoto'))?.progreso?.[id];
+  const esDeOtro = remota?.cfi && remota.dispositivo && remota.dispositivo !== nombreDispositivo();
+  const masReciente = remota && (remota.fecha || '') > (local?.fecha || '');
+  if (!esDeOtro || !masReciente || remota.cfi === local?.cfi) return local;
+
+  const porcentaje = remota.porcentaje != null ? ` (${Math.round(remota.porcentaje * 100)} %)` : '';
+  const donde = remota.capitulo ? `hasta "${remota.capitulo}"` : 'más adelante';
+  const fecha = new Date(remota.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
+  const eleccion = await mostrarHoja(
+    `Leíste ${donde}${porcentaje} en el ${remota.dispositivo} el ${fecha}. ¿Continuar allí?`,
+    [
+      { id: 'ir', texto: 'Ir allí' },
+      { id: 'quedarme', texto: 'Quedarme aquí', secundario: true },
+    ],
+  );
+  if (eleccion === 'ir') {
+    registrar(`Posición del ${remota.dispositivo} aceptada`);
+    // Se conserva la fecha remota: es la misma lectura, no un avance nuevo.
+    return guardarProgreso(id, { ...remota }, { mantenerFecha: true });
+  }
+  if (local) {
+    // La posición local pasa a ser la más reciente para que gane al sincronizar.
+    registrar('Se mantiene la posición de este dispositivo');
+    return guardarProgreso(id, { ...local, dispositivo: nombreDispositivo() });
+  }
+  return null;
+}
+
 export async function abrirPantallaLector(id) {
   if (actual) await cerrarPantallaLector();
-  const [libro, datos, progreso, ubicaciones] = await Promise.all([
+  const [libro, datos, progresoLocal, ubicaciones] = await Promise.all([
     leerLibro(id), leerArchivo(id), leerProgreso(id), leerUbicaciones(id),
   ]);
   if (!libro || !datos) throw new Error('El archivo de este libro no está en el dispositivo.');
+  const progreso = await decidirPosicion(id, progresoLocal);
 
   document.body.classList.add('leyendo');
   $('lector').hidden = false;
