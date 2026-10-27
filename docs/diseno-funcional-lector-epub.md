@@ -439,7 +439,9 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.8.2 | Usabilidad: controles ocultos al pasar página, teclas y mandos para pasar página, avisos de fallos de sincronización, resumen de sincronización completo, zonas de toque de 44 px, búsqueda vacía con el filtro activo, previsión del objetivo anual y accesibilidad |
 | 0.8.3 | Sincronización sin cambios con 3 peticiones a Drive a la vez (antes, unas 12 una tras otra): la carpeta se recuerda, se lista una sola vez y los JSON que no han cambiado no se descargan. Antes de escribir se sigue leyendo y fusionando |
 
-Pendiente del repaso:
+### Mejoras pendientes (numeradas)
+
+Del repaso de la app y nuevas funciones. La numeración se mantiene para poder elegirlas.
 
 | Nº | Mejora | Esfuerzo |
 |---|---|---|
@@ -448,13 +450,13 @@ Pendiente del repaso:
 | 18 | Reloj atrasado en un dispositivo: la posición leída en él puede perder frente a una anterior del otro | Bajo |
 | 19 | Capítulo dañado que bloquea el lector y libros muy ilustrados que superan el tiempo de apertura en la tablet | Medio |
 | 20 | iPhone en horizontal: rebote al deslizar en la penúltima página de un capítulo (pendiente de reproducir) | Bajo |
+| 21 | Detalle de un mes en Estadísticas: al tocar la barra de un mes, una hoja con los libros leídos ese mes, el tiempo dedicado a cada uno y los terminados, sumando los dos dispositivos. Los datos ya existen (sesiones por libro y fechas de fin) | Bajo |
+| 22 | Notas al pie emergentes: al tocar la llamada de una nota, se muestra su texto en una hoja sin salir de la página. Hay que reconocer las notas en los distintos formatos de EPUB (EPUB 3 con `epub:type="noteref"`, Calibre y conversiones de Kindle, notas en otro archivo del libro) y dejar el salto normal cuando no se reconozca | Medio |
 
 ### Ideas a valorar (sin fecha)
 
 | Idea | Comentario |
 |---|---|
-| Detalle de un mes en Estadísticas | Al tocar una barra del gráfico de meses, mostrar los libros leídos ese mes con el tiempo dedicado a cada uno (y los terminados), sumando los dos dispositivos |
-| Notas al pie emergentes | Mostrar la nota en una hoja al tocar la llamada, sin saltar al final del capítulo |
 | Exportar estadísticas a Excel | Sesiones y libros terminados en un archivo para analizarlos fuera de la app |
 | Biblioteca grande | Revisar rendimiento y memoria con varios cientos de libros (portadas, búsqueda y sincronización) |
 | Añadir libros desde Drive | Importar EPUB que ya están en una carpeta de Drive sin descargarlos antes al dispositivo |
