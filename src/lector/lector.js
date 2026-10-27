@@ -1,4 +1,4 @@
-// Lector paginado con epub.js (fase 0).
+// Motor de lectura con epub.js.
 //
 // Perfil Móvil: gestor "continuous" de epub.js. El deslizamiento sigue al dedo
 // y el paso de página (toque o deslizamiento) se anima desplazando el
@@ -11,12 +11,15 @@
 // Los toques se capturan dentro del iframe del libro con el hook de contenido.
 
 import { registrar } from '../ui/registro.js';
+import { cssLibro, temaEfectivo, proporcionMargenes } from '../ui/temas.js';
 
 const DURACION_ANIMACION_MS = 260;
 const UMBRAL_DESLIZAR_PX = 40;
 const UMBRAL_MOVIMIENTO_PX = 10;
 const MAX_DURACION_TOQUE_MS = 600;
 const VENTANA_CLIC_TRAS_TOQUE_MS = 800;
+const CARACTERES_POR_UBICACION = 1600;
+const URL_FUENTES = new URL('../../fonts/fuentes.css', import.meta.url).href;
 
 export const MENSAJE_LIBRO_ILEGIBLE = 'Este libro no se puede abrir. Puede tener protección DRM.';
 
@@ -31,9 +34,19 @@ function suavizado(t) {
   return 1 - Math.pow(1 - t, 3);
 }
 
-// contenedor: elemento donde se pinta el libro.
-// avisos: { alCambiarPosicion(info), alTocarCentro(), alDeslizarAbajo() }
-export async function abrirLibro(contenedor, datos, perfil, avisos = {}) {
+function aplanarIndice(elementos, nivel = 0, lista = []) {
+  for (const e of elementos || []) {
+    lista.push({ etiqueta: (e.label || '').trim() || 'Sin título', href: e.href, nivel });
+    aplanarIndice(e.subitems, nivel + 1, lista);
+  }
+  return lista;
+}
+
+// opciones: { perfil, ajustes, cfiInicial, ubicaciones, avisos }
+// avisos: { alCambiarPosicion(info), alTocarCentro(), alDeslizarAbajo(), alGenerarUbicaciones(json) }
+export async function abrirLibro(contenedor, datos, opciones) {
+  let { perfil, ajustes } = opciones;
+  const avisos = opciones.avisos || {};
   const movil = perfil === 'movil';
   const inicio = performance.now();
   const libro = ePub(datos);
@@ -47,28 +60,82 @@ export async function abrirLibro(contenedor, datos, perfil, avisos = {}) {
   }
 
   const metadatos = libro.packaging.metadata;
-  registrar(`EPUB abierto: "${metadatos.title}" de ${metadatos.creator || 'autor desconocido'}`);
+
+  // Índice y etiqueta de capítulo por sección del spine.
+  const indice = aplanarIndice(libro.navigation?.toc).map((e) => ({
+    ...e,
+    seccion: libro.spine.get(e.href)?.index ?? null,
+  }));
+  const etiquetaPorSeccion = new Map();
+  for (const e of indice) {
+    if (e.seccion !== null && !etiquetaPorSeccion.has(e.seccion)) etiquetaPorSeccion.set(e.seccion, e.etiqueta);
+  }
+  function etiquetaCapitulo(indiceSeccion) {
+    for (let i = indiceSeccion; i >= 0; i--) {
+      if (etiquetaPorSeccion.has(i)) return etiquetaPorSeccion.get(i);
+    }
+    return null;
+  }
+
+  let css = cssLibro(perfil, ajustes);
+
+  function calcularHueco() {
+    const hueco = Math.round(contenedor.clientWidth * proporcionMargenes(ajustes));
+    return hueco % 2 ? hueco + 1 : hueco;
+  }
+
+  function pintarFondo() {
+    contenedor.style.background = temaEfectivo(perfil, ajustes).fondo;
+  }
+  pintarFondo();
 
   const rendition = libro.renderTo(contenedor, {
     width: '100%',
     height: '100%',
     flow: 'paginated',
     spread: 'none',
+    gap: calcularHueco(),
     manager: movil ? 'continuous' : 'default',
     allowScriptedContent: false,
   });
 
-  rendition.themes.default({
-    html: { '-webkit-text-size-adjust': '100%' },
-    body: {
-      color: perfil === 'tinta' ? '#000000 !important' : '#1A1A1A',
-      background: '#FFFFFF !important',
-      '-webkit-tap-highlight-color': 'transparent',
-    },
-  });
-
   let ultimoToque = 0;
   let animando = false;
+  let ultimaPosicion = null;
+
+  // --- Estilos dentro del libro ---
+
+  function instalarEstilos(contents) {
+    const doc = contents.document;
+    const enlace = doc.createElement('link');
+    enlace.rel = 'stylesheet';
+    enlace.href = URL_FUENTES;
+    doc.head.appendChild(enlace);
+    const estilo = doc.createElement('style');
+    estilo.id = 'lector-ajustes';
+    estilo.textContent = css;
+    doc.head.appendChild(estilo);
+  }
+
+  // Aplica los ajustes "Aa" y vuelve a paginar manteniendo la posición.
+  function aplicarAjustes(nuevoPerfil, nuevosAjustes) {
+    perfil = nuevoPerfil;
+    ajustes = nuevosAjustes;
+    css = cssLibro(perfil, ajustes);
+    pintarFondo();
+    for (const c of rendition.getContents()) {
+      const estilo = c.document.getElementById('lector-ajustes');
+      if (estilo) estilo.textContent = css;
+    }
+    const manager = rendition.manager;
+    if (!manager) return;
+    manager.settings.gap = calcularHueco();
+    rendition.settings.gap = manager.settings.gap;
+    // Forzar el repaginado aunque el tamaño del visor no cambie. epub.js
+    // vuelve a pintar la posición actual al terminar.
+    manager._stageSize = undefined;
+    rendition.resize();
+  }
 
   // --- Paso de página ---
 
@@ -117,6 +184,7 @@ export async function abrirLibro(contenedor, datos, perfil, avisos = {}) {
   // Lleva la página hasta la posición alineada en la dirección indicada.
   function completarPaso(direccion) {
     if (!movil) {
+      if (direccion === 0) return Promise.resolve();
       return direccion > 0 ? rendition.next() : rendition.prev();
     }
     const d = contenedorDesplazable();
@@ -126,7 +194,6 @@ export async function abrirLibro(contenedor, datos, perfil, avisos = {}) {
     let destino = base;
     if (direccion > 0 && d.scrollLeft >= base - 1) destino = base + ancho;
     if (direccion < 0 && d.scrollLeft <= base + 1) destino = base - ancho;
-    if (direccion === 0) destino = base;
     if (direccion !== 0 && !hayMasContenido(direccion) && Math.abs(d.scrollLeft - base) < 1) {
       // Capítulo siguiente o anterior aún sin cargar: paso sin animación.
       return direccion > 0 ? rendition.next() : rendition.prev();
@@ -192,12 +259,10 @@ export async function abrirLibro(contenedor, datos, perfil, avisos = {}) {
       if (!gesto.arrastrando && Math.abs(dx) > UMBRAL_MOVIMIENTO_PX && Math.abs(dx) > Math.abs(dy)) {
         gesto.arrastrando = true;
       }
-      if (gesto.arrastrando) {
-        e.preventDefault();
-        if (movil) {
-          const d = contenedorDesplazable();
-          if (d) d.scrollLeft -= t.screenX - gesto.ultimoX;
-        }
+      if (gesto.movido) e.preventDefault();
+      if (gesto.arrastrando && movil) {
+        const d = contenedorDesplazable();
+        if (d) d.scrollLeft -= t.screenX - gesto.ultimoX;
       }
       gesto.ultimoX = t.screenX;
     }, { passive: false });
@@ -243,28 +308,78 @@ export async function abrirLibro(contenedor, datos, perfil, avisos = {}) {
     else if (e.key === 'ArrowLeft') anterior();
   }
 
+  rendition.hooks.content.register(instalarEstilos);
   rendition.hooks.content.register(instalarGestos);
   document.addEventListener('keydown', alPulsarTecla);
 
+  // --- Posición ---
+
+  function infoPosicion(posicion) {
+    const inicioPos = posicion.start;
+    const pagina = inicioPos.displayed?.page;
+    const total = inicioPos.displayed?.total;
+    const conUbicaciones = libro.locations.length() > 0;
+    return {
+      cfi: inicioPos.cfi,
+      href: inicioPos.href,
+      seccion: inicioPos.index,
+      capitulo: etiquetaCapitulo(inicioPos.index),
+      porcentaje: conUbicaciones ? libro.locations.percentageFromCfi(inicioPos.cfi) : null,
+      paginasRestantesCapitulo: pagina && total ? Math.max(0, total - pagina) : null,
+      final: Boolean(posicion.atEnd),
+    };
+  }
+
   rendition.on('relocated', (posicion) => {
-    const seccion = libro.navigation?.get?.(posicion.start.href);
-    avisos.alCambiarPosicion?.({
-      cfi: posicion.start.cfi,
-      href: posicion.start.href,
-      capitulo: seccion?.label?.trim() || posicion.start.href,
-      pagina: posicion.start.displayed?.page,
-      paginasCapitulo: posicion.start.displayed?.total,
-    });
+    ultimaPosicion = posicion;
+    avisos.alCambiarPosicion?.(infoPosicion(posicion));
   });
 
-  await rendition.display();
-  registrar(`Primera página pintada en ${Math.round(performance.now() - inicio)} ms (gestor ${movil ? 'continuous' : 'default'})`);
+  rendition.on('resized', () => registrar('Libro repaginado'));
+
+  let visualizado = false;
+  try {
+    await rendition.display(opciones.cfiInicial || undefined);
+    visualizado = true;
+  } catch (e) {
+    registrar(`No se pudo ir a la posición guardada (${e.message}). Se abre al principio.`, 'error');
+  }
+  if (!visualizado) await rendition.display();
+  registrar(`"${metadatos.title}" abierto en ${Math.round(performance.now() - inicio)} ms (gestor ${movil ? 'continuous' : 'default'})`);
+
+  // Ubicaciones para el porcentaje: de la caché o generadas en segundo plano.
+  let destruido = false;
+  let generando = null;
+  if (opciones.ubicaciones) {
+    libro.locations.load(opciones.ubicaciones);
+    if (ultimaPosicion) avisos.alCambiarPosicion?.(infoPosicion(ultimaPosicion));
+  } else {
+    generando = setTimeout(async () => {
+      const t0 = performance.now();
+      try {
+        await libro.locations.generate(CARACTERES_POR_UBICACION);
+        if (destruido) return;
+        registrar(`Ubicaciones generadas en ${Math.round(performance.now() - t0)} ms`);
+        avisos.alGenerarUbicaciones?.(libro.locations.save());
+        if (ultimaPosicion) avisos.alCambiarPosicion?.(infoPosicion(ultimaPosicion));
+      } catch (e) {
+        if (!destruido) registrar(`No se pudieron generar las ubicaciones: ${e.message}`, 'error');
+      }
+    }, 800);
+  }
 
   return {
     titulo: metadatos.title || 'Sin título',
+    indice,
     siguiente,
     anterior,
+    aplicarAjustes,
+    irA(destino) {
+      return rendition.display(destino);
+    },
     destruir() {
+      destruido = true;
+      clearTimeout(generando);
       document.removeEventListener('keydown', alPulsarTecla);
       rendition.destroy();
       libro.destroy();
