@@ -1,9 +1,9 @@
-// Pantalla de diagnóstico de la fase 0.
+// Diagnóstico del dispositivo, accesible desde Ajustes.
 
-import { estadoSesion, tokenVigente, urlRedireccion } from '../sync/google.js';
+import { estadoSesion, tokenVigente } from '../sync/google.js';
 import { CONFIG } from '../../config.js';
 
-export const VERSION_APP = '0.0.1 (fase 0)';
+export const VERSION_APP = '0.1.0 (fase 1)';
 
 let resultadoPersistencia = 'sin pedir';
 
@@ -57,14 +57,13 @@ function textoSesion(sesion) {
   if (!CONFIG.clientId) return 'falta el ID de cliente en config.js';
   if (!sesion.token) return 'sin conectar';
   const quien = sesion.email ? ` como ${sesion.email}` : '';
-  const metodo = sesion.metodo === 'redireccion' ? 'redirección' : 'ventana emergente';
-  return `${tokenVigente() ? 'conectada' : 'token caducado'}${quien} (${metodo})`;
+  return `${tokenVigente() ? 'conectada' : 'token caducado'}${quien}`;
 }
 
 function textoUltimoIntento(intento) {
   if (!intento) return 'ninguno';
   const fecha = new Date(intento.fecha).toLocaleString('es-ES');
-  return `${fecha}, ${intento.metodo === 'redireccion' ? 'redirección' : 'ventana'}: ${intento.resultado}`;
+  return `${fecha}: ${intento.resultado}`;
 }
 
 export async function datosDiagnostico() {
@@ -95,7 +94,6 @@ export async function datosDiagnostico() {
     ['Service worker', sw],
     ['Conexión', navigator.onLine ? 'en línea' : 'sin conexión'],
     ['Pantalla', `${innerWidth} x ${innerHeight} px, densidad ${devicePixelRatio}`],
-    ['URI de redirección (plan B)', urlRedireccion()],
   ];
 }
 
