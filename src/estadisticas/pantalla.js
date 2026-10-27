@@ -5,7 +5,7 @@
 import { obtenerEstadisticas } from './datos.js';
 import { mostrarResumenAnual } from './resumen.js';
 import { formatoDuracion } from './calculo.js';
-import { fijarObjetivo } from '../datos/colecciones.js';
+import { fijarObjetivo, fijarMetaDiaria } from '../datos/colecciones.js';
 import { pedirNumero } from '../ui/hoja.js';
 import { registrar } from '../ui/registro.js';
 import { svgIcono } from '../ui/iconos.js';
@@ -93,6 +93,45 @@ async function cambiarObjetivo(anio, actual) {
   await alCambiarDatos();
 }
 
+async function cambiarMetaDiaria(actual) {
+  const n = await pedirNumero('Minutos de lectura al día (0 para quitar la meta)', actual ?? 30, { min: 0, max: 600 });
+  if (n == null) return;
+  await fijarMetaDiaria(n);
+  registrar(n ? `Meta diaria: ${n} min` : 'Meta diaria quitada');
+  await alCambiarDatos();
+}
+
+function barraAvance(fraccion) {
+  const avance = el('div', 'avance');
+  const relleno = el('span');
+  relleno.style.width = `${Math.min(100, fraccion * 100)}%`;
+  avance.appendChild(relleno);
+  return avance;
+}
+
+function seccionHoy(e) {
+  const hoy = el('div', 'grupo tarjeta');
+  const cifras = el('div', 'tarjeta-cifras');
+  cifras.append(
+    cifra(formatoDuracion(e.hoy.ms), plural(e.hoy.paginas, 'página', 'páginas')),
+    cifra(plural(e.racha.actual, 'día', 'días'), `seguidos. Récord: ${plural(e.racha.record, 'día', 'días')}`),
+  );
+  hoy.appendChild(cifras);
+  const meta = e.metaDiaria;
+  if (meta) {
+    hoy.appendChild(barraAvance(e.hoy.ms / (meta.minutos * 60000)));
+    const falta = Math.max(1, Math.ceil(meta.minutos - e.hoy.ms / 60000));
+    hoy.appendChild(el('p', 'tarjeta-texto', meta.cumplida
+      ? `Meta de hoy cumplida (${meta.minutos} min).`
+      : `Meta diaria: ${meta.minutos} min. Te faltan ${falta} min.`));
+  }
+  const boton = el('button', 'fila fila-boton', meta ? 'Cambiar meta diaria' : 'Fijar meta diaria');
+  boton.type = 'button';
+  boton.addEventListener('click', () => cambiarMetaDiaria(meta?.minutos));
+  hoy.appendChild(boton);
+  return hoy;
+}
+
 function seccionObjetivo(e, ahora) {
   const grupo = el('div', 'grupo tarjeta');
   if (!e.objetivo) {
@@ -126,13 +165,7 @@ export async function pintarEstadisticas() {
   const partes = [];
 
   // Hoy y racha
-  partes.push(cabecera('Hoy'));
-  const hoy = el('div', 'grupo tarjeta tarjeta-cifras');
-  hoy.append(
-    cifra(formatoDuracion(e.hoy.ms), plural(e.hoy.paginas, 'página', 'páginas')),
-    cifra(plural(e.racha.actual, 'día', 'días'), `seguidos. Récord: ${plural(e.racha.record, 'día', 'días')}`),
-  );
-  partes.push(hoy);
+  partes.push(cabecera('Hoy'), seccionHoy(e));
 
   partes.push(cabecera(`Objetivo de ${e.anio}`), seccionObjetivo(e, ahora));
 
@@ -219,7 +252,7 @@ export async function crearResumenObjetivos(alPulsar) {
     return c;
   };
   celdas.append(
-    celda(formatoDuracion(e.hoy.ms), 'Hoy'),
+    celda(formatoDuracion(e.hoy.ms), e.metaDiaria ? (e.metaDiaria.cumplida ? 'Meta cumplida' : `Hoy, de ${e.metaDiaria.minutos} min`) : 'Hoy'),
     celda(plural(e.racha.actual, 'día', 'días'), 'Racha'),
     e.objetivo
       ? celda(`${e.objetivo.hechos} de ${e.objetivo.libros}`, `Objetivo ${e.anio}`)

@@ -179,7 +179,8 @@ export function fusionarColecciones(local = [], remoto = []) {
   return [...porId.values()].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es') || a.id.localeCompare(b.id));
 }
 
-// Objetivos por año: { "2026": { libros, fecha } }. Por año, gana la fecha más reciente.
+// Objetivos por año: { "2026": { libros, fecha } }, y la meta diaria en
+// "diario": { minutos, fecha }. Por clave, gana la fecha más reciente.
 export function fusionarObjetivos(local = {}, remoto = {}) {
   const resultado = {};
   for (const fuente of [remoto, local]) {

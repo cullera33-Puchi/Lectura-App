@@ -38,5 +38,7 @@ export async function librosTerminados() {
 export async function obtenerEstadisticas(ahora = new Date()) {
   const [sesiones, terminados, objetivos] = await Promise.all([todasLasSesiones(), librosTerminados(), leerObjetivos()]);
   const anio = ahora.getFullYear();
-  return calcularEstadisticas({ sesiones, terminados, objetivo: objetivos?.[anio]?.libros || null, ahora });
+  return calcularEstadisticas({
+    sesiones, terminados, objetivo: objetivos?.[anio]?.libros || null, metaDiaria: objetivos?.diario?.minutos || null, ahora,
+  });
 }

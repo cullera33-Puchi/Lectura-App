@@ -11,6 +11,7 @@ import {
 } from '../datos/libros.js';
 import { leerProgreso, guardarProgreso, cambiarEstado } from '../datos/progreso.js';
 import { RegistroSesiones } from '../datos/sesiones.js';
+import { comprobarMetaDiaria } from '../estadisticas/meta-diaria.js';
 import { anotacionesDeLibro, crearMarcador, eliminarAnotacion } from '../datos/anotaciones.js';
 import { mostrarAviso } from '../ui/aviso.js';
 import {
@@ -301,7 +302,7 @@ async function alCambiarPosicion(info) {
   contarPasoParaVolver(a);
   const estado = p?.estado === 'terminado' ? 'terminado' : 'leyendo';
   a.progreso = await guardarProgreso(a.id, datos(info.cfi, estado));
-  if (actual === a) a.sesiones.paginaPasada(); // si se ha cerrado, la sesión ya terminó
+  if (actual === a) a.sesiones.paginaPasada().then(comprobarMetaDiaria); // si se ha cerrado, la sesión ya terminó
   if (info.final && estado !== 'terminado' && !a.propuestoTerminar && actual === a) proponerTerminar(a);
 }
 

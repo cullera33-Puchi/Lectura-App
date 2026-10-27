@@ -75,6 +75,7 @@ export async function pedirValor(titulo, valor, { tipo = 'text', min, max, texto
 
 export async function pedirNumero(titulo, valor, { min = 1, max = 9999 } = {}) {
   const texto = await pedirValor(titulo, valor, { tipo: 'number', min, max });
+  if (texto == null) return null; // cancelado (con min 0, Number(null) sería válido)
   const n = Math.round(Number(texto));
   return Number.isFinite(n) && n >= min && n <= max ? n : null;
 }

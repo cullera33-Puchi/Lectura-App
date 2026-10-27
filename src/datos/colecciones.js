@@ -87,3 +87,11 @@ export async function fijarObjetivo(anio, libros) {
   const objetivos = { ...(await leerObjetivos()), [anio]: { libros, fecha } };
   await escribirVarios([{ almacen: 'ajustes', valor: objetivos, clave: 'objetivos' }, pendiente(fecha)]);
 }
+
+// Meta diaria de minutos: va con los objetivos, en la clave "diario", y se
+// fusiona igual (gana la fecha más reciente). minutos null la quita.
+export async function fijarMetaDiaria(minutos) {
+  const fecha = new Date().toISOString();
+  const objetivos = { ...(await leerObjetivos()), diario: { minutos: minutos || null, fecha } };
+  await escribirVarios([{ almacen: 'ajustes', valor: objetivos, clave: 'objetivos' }, pendiente(fecha)]);
+}

@@ -60,7 +60,7 @@ function rachas(diasConLectura, hoy) {
   return { actual, record: Math.max(record, actual) };
 }
 
-export function calcularEstadisticas({ sesiones, terminados, objetivo, ahora = new Date() }) {
+export function calcularEstadisticas({ sesiones, terminados, objetivo, metaDiaria = null, ahora = new Date() }) {
   const hoy = claveDia(ahora);
   const anio = ahora.getFullYear();
   const dias = new Map();
@@ -111,8 +111,10 @@ export function calcularEstadisticas({ sesiones, terminados, objetivo, ahora = n
   const delAnio = porAnio.get(anio) || { ms: 0, paginas: 0, terminados: 0 };
   const diasConLectura = [...dias.entries()].filter(([, d]) => d.ms >= 60 * 1000 || d.paginas > 0).map(([k]) => k);
 
+  const deHoy = dias.get(hoy) || { ms: 0, paginas: 0 };
   return {
-    hoy: dias.get(hoy) || { ms: 0, paginas: 0 },
+    hoy: deHoy,
+    metaDiaria: metaDiaria ? { minutos: metaDiaria, cumplida: deHoy.ms >= metaDiaria * 60000 } : null,
     racha: rachas(diasConLectura, hoy),
     semana,
     totalSemanaMs: semana.reduce((t, d) => t + d.ms, 0),
