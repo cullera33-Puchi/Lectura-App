@@ -1708,10 +1708,43 @@ body[data-perfil="tinta"] .boton-redondo.pequeno {
 }
 
 /* Hueco simétrico al botón de cerrar para centrar el título */
-.flotante-arriba::after {
-  content: "";
-  width: 44px;
+/* Marcador: relleno cuando la página visible tiene uno. */
+#btn-marcador[aria-pressed="true"] .icono path {
+  fill: currentColor;
+}
+
+#btn-marcador[aria-pressed="true"] {
+  color: var(--acento);
+}
+
+body[data-perfil="tinta"] #btn-marcador[aria-pressed="true"] {
+  color: var(--texto);
+}
+
+.marcador-fila {
+  display: flex;
+  align-items: stretch;
+}
+
+.marcador-fila > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.lista-panel .marcador-quitar {
   flex: none;
+  width: 52px;
+  align-items: center;
+  justify-content: center;
+  color: var(--texto-2);
+}
+
+.lista-panel .marcador-quitar::before {
+  display: none;
+}
+
+body[data-perfil="tinta"] .lista-panel .marcador-quitar {
+  color: var(--texto);
 }
 
 .info-lectura {

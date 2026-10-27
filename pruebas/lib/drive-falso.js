@@ -89,7 +89,7 @@ function estado() {
   const vivos = [...archivos.values()].filter((a) => !a.trashed);
   const json = (nombre) => { const a = vivos.find((x) => x.name === nombre); return a ? JSON.parse(a.contenido.toString()) : null; };
   const sesiones = vivos.filter((x) => x.name.startsWith('sesiones-')).map((x) => JSON.parse(x.contenido.toString()));
-  return { sesiones, vivos: vivos.map((a) => a.name), papelera: [...archivos.values()].filter((a) => a.trashed).map((a) => a.name), biblioteca: json('biblioteca.json'), progreso: json('progreso.json') };
+  return { sesiones, vivos: vivos.map((a) => a.name), papelera: [...archivos.values()].filter((a) => a.trashed).map((a) => a.name), biblioteca: json('biblioteca.json'), progreso: json('progreso.json'), anotaciones: json('anotaciones.json') };
 }
 module.exports = { instalar, estado };
 module.exports.danar = (nombre) => { for (const a of archivos.values()) if (a.name === nombre && !a.trashed) a.contenido = Buffer.from('{ esto no es json'); };

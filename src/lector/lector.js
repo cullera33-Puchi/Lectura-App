@@ -716,6 +716,41 @@ export async function abrirLibro(contenedor, datos, opciones) {
     aplicarAjustes,
     buscar,
     resaltar,
+    // Marcadores: si un CFI cae en la página visible y el texto de la página.
+    enPaginaActual(cfi) {
+      const inicioPagina = ultimaPosicion?.start?.cfi;
+      const finPagina = ultimaPosicion?.end?.cfi;
+      if (!inicioPagina || !finPagina || !cfi) return false;
+      const comparar = new ePub.CFI();
+      try {
+        return comparar.compare(cfi, inicioPagina) >= 0 && comparar.compare(cfi, finPagina) <= 0;
+      } catch {
+        return false;
+      }
+    },
+    datosPaginaActual() {
+      const pos = ultimaPosicion;
+      if (!pos) return null;
+      let texto = '';
+      try {
+        const contenido = rendition.getContents().find((c) => c.sectionIndex === pos.start.index) || rendition.getContents()[0];
+        const desde = contenido.range(pos.start.cfi);
+        const hasta = pos.end.index === pos.start.index ? contenido.range(pos.end.cfi) : null;
+        const rango = contenido.document.createRange();
+        rango.setStart(desde.startContainer, desde.startOffset);
+        if (hasta) rango.setEnd(hasta.endContainer, hasta.endOffset);
+        else rango.setEndAfter(contenido.document.body.lastChild);
+        // Cada bloque (título, párrafo) separado por un espacio, no pegado.
+        const copia = contenido.document.createElement('div');
+        copia.appendChild(rango.cloneContents());
+        copia.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, div, blockquote, br').forEach((e) => e.after(' '));
+        texto = copia.textContent.replace(/\s+/g, ' ').trim().slice(0, 140);
+      } catch {
+        texto = '';
+      }
+      const info = infoPosicion(pos);
+      return { cfi: pos.start.cfi, capitulo: info.capitulo, porcentaje: info.porcentaje, texto };
+    },
     // Barra para recorrer el libro: necesita las ubicaciones (porcentaje).
     hayUbicaciones() {
       return libro.locations.length() > 0;

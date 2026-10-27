@@ -26,6 +26,8 @@ import {
 } from '../datos/colecciones.js';
 import { leerSincronizacion, guardarSincronizacion } from '../datos/pendientes.js';
 import { idDispositivo, nombreDispositivo } from '../datos/preferencias.js';
+import { todasLasAnotaciones, guardarAnotacionesFusionadas } from '../datos/anotaciones.js';
+import { fusionarAnotaciones, normalizarAnotaciones } from './fusion.js';
 import { registrar } from '../ui/registro.js';
 
 export const TIPO_COPIA = 'lector-epub-copia';
@@ -82,7 +84,7 @@ export function copiasABorrar(archivos, hoy = diaLocal()) {
 // Copia con lo que sabe este dispositivo: sus datos locales y la última copia
 // de Drive del otro dispositivo.
 export async function construirCopia() {
-  const [libros, colecciones, objetivos, progresos, progresoRemoto, propias, remotas] = await Promise.all([
+  const [libros, colecciones, objetivos, progresos, progresoRemoto, propias, remotas, anotaciones] = await Promise.all([
     todosLosLibros(),
     leerColecciones({ incluirEliminadas: true }),
     leerObjetivos(),
@@ -90,6 +92,7 @@ export async function construirCopia() {
     leerSincronizacion('progresoRemoto'),
     sesionesParaExportar(),
     leerSincronizacion('sesionesRemotas'),
+    todasLasAnotaciones(),
   ]);
   const progreso = fusionarProgreso(progresos, normalizarProgreso(progresoRemoto)).progreso.progreso;
   const propio = idDispositivo();
@@ -107,6 +110,7 @@ export async function construirCopia() {
     objetivos,
     progreso,
     sesiones,
+    anotaciones,
   };
 }
 
@@ -137,6 +141,7 @@ export function normalizarCopia(datos) {
     objetivos: esObjeto(datos.objetivos) ? datos.objetivos : {},
     progreso: esObjeto(datos.progreso) ? datos.progreso : {},
     sesiones,
+    anotaciones: normalizarAnotaciones({ version: 1, anotaciones: datos.anotaciones || {} }).anotaciones,
   };
 }
 
@@ -175,6 +180,15 @@ export async function restaurarCopia(datos) {
     r.posiciones += 1;
   }
 
+  // Marcadores: por id, gana la fecha más reciente.
+  const anotacionesActuales = await todasLasAnotaciones();
+  const fusion = fusionarAnotaciones(copia.anotaciones, { version: 1, anotaciones: anotacionesActuales });
+  if (fusion.escribirRemoto) {
+    await guardarAnotacionesFusionadas(fusion.anotaciones.anotaciones);
+    await marcarExtrasPendientes(); // fuerza la sincronización
+    r.marcadores = true;
+  }
+
   const propio = idDispositivo();
   for (const [id, d] of Object.entries(copia.sesiones)) {
     if (id === propio) r.sesiones += await restaurarSesiones(d.sesiones, nombreDispositivo());
@@ -190,6 +204,7 @@ export function textoRestauracion(r) {
   if (r.posiciones) partes.push(`${r.posiciones} ${r.posiciones === 1 ? 'posición' : 'posiciones'}`);
   if (r.sesiones) partes.push(`${r.sesiones} ${r.sesiones === 1 ? 'sesión de lectura' : 'sesiones de lectura'}`);
   if (r.extras) partes.push('colecciones u objetivos');
+  if (r.marcadores) partes.push('marcadores');
   const lineas = [partes.length
     ? `Recuperado: ${partes.join(', ')}. Sincroniza para enviarlo a Drive.`
     : 'No había nada que recuperar: los datos actuales ya incluyen todo lo de la copia o son más recientes.'];

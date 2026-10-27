@@ -14,7 +14,7 @@ import { pintarInicio, configurarInicio } from './biblioteca/inicio.js';
 import { pintarEstadisticas, configurarEstadisticas } from './estadisticas/pantalla.js';
 import {
   prepararPantallaLector, abrirPantallaLector, cerrarPantallaLector, lectorAbierto, cerrarPanelAbierto,
-  idLibroAbierto,
+  idLibroAbierto, refrescarMarcadores,
 } from './lector/pantalla-lector.js';
 import { AperturaCancelada } from './lector/lector.js';
 import { leerLibro } from './datos/libros.js';
@@ -138,6 +138,7 @@ async function alCerrarLector() {
 async function comprobarLibroAbierto() {
   const id = idLibroAbierto();
   if (!id) return;
+  refrescarMarcadores().catch(() => {});
   const libro = await leerLibro(id);
   if (!libro || libro.eliminado) {
     mostrarAviso('Este libro se ha eliminado de la biblioteca desde el otro dispositivo.', 6000);

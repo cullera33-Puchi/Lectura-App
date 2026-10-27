@@ -9,6 +9,8 @@ import { abrirLibro, AperturaCancelada, MENSAJE_LIBRO_ILEGIBLE } from './lector.
 import { leerLibro, leerArchivo, leerUbicaciones, guardarUbicaciones } from '../datos/libros.js';
 import { leerProgreso, guardarProgreso, cambiarEstado } from '../datos/progreso.js';
 import { RegistroSesiones } from '../datos/sesiones.js';
+import { anotacionesDeLibro, crearMarcador, eliminarAnotacion } from '../datos/anotaciones.js';
+import { mostrarAviso } from '../ui/aviso.js';
 import {
   preferencias, cambiarLectura, nombreDispositivo, idDispositivo, alCambiarPreferencias,
 } from '../datos/preferencias.js';
@@ -34,7 +36,7 @@ let alCerrar = () => {};
 // ya no es el turno vigente (otro toque, o se cerró mientras se abría) se descarta.
 let turno = 0;
 
-const PANELES = ['panel-menu', 'panel-indice', 'panel-buscar', 'panel-aa'];
+const PANELES = ['panel-menu', 'panel-indice', 'panel-buscar', 'panel-marcadores', 'panel-aa'];
 
 function controlesVisibles(visibles) {
   if (visibles) abrirCapa($('controles-lector'));
@@ -77,6 +79,102 @@ function textoProgreso(info) {
   return partes.join('. ');
 }
 
+// --- Marcadores (v4) ---
+
+async function cargarMarcadores(a = actual) {
+  if (!a) return;
+  a.marcadores = await anotacionesDeLibro(a.id, 'marcador');
+  pintarBotonMarcador();
+}
+
+function marcadoresDePagina() {
+  const a = actual;
+  if (!a?.motor || !a.marcadores) return [];
+  return a.marcadores.filter((m) => a.motor.enPaginaActual(m.cfi));
+}
+
+function pintarBotonMarcador() {
+  const hay = marcadoresDePagina().length > 0;
+  const boton = $('btn-marcador');
+  boton.setAttribute('aria-pressed', String(hay));
+  boton.setAttribute('aria-label', hay ? 'Quitar el marcador de esta página' : 'Añadir marcador');
+}
+
+async function alternarMarcador() {
+  const a = actual;
+  if (!a?.motor) return;
+  const enPagina = marcadoresDePagina();
+  if (enPagina.length) {
+    for (const m of enPagina) await eliminarAnotacion(m.id);
+    registrar(`Marcador quitado en "${a.titulo}"`);
+  } else {
+    const datos = a.motor.datosPaginaActual();
+    if (!datos) return;
+    await crearMarcador(a.id, datos);
+    registrar(`Marcador añadido en "${a.titulo}" (${datos.capitulo || ''})`);
+    mostrarAviso('Marcador añadido.', 1800);
+  }
+  await cargarMarcadores(a);
+}
+
+// Tras sincronizar, por si llegan marcadores del otro dispositivo.
+export function refrescarMarcadores() {
+  return cargarMarcadores();
+}
+
+function pintarMarcadores() {
+  const a = actual;
+  const lista = $('lista-marcadores');
+  lista.replaceChildren();
+  const marcadores = [...(a?.marcadores || [])].sort((x, y) => (x.porcentaje ?? 0) - (y.porcentaje ?? 0));
+  $('marcadores-vacio').hidden = marcadores.length > 0;
+  for (const m of marcadores) {
+    const li = document.createElement('li');
+    li.className = 'marcador-fila';
+    const ir = document.createElement('button');
+    ir.type = 'button';
+    const cabecera = document.createElement('span');
+    cabecera.className = 'resultado-capitulo';
+    const pct = m.porcentaje != null ? `${Math.round(m.porcentaje * 100)} %` : '';
+    const fecha = new Date(m.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace('.', '');
+    cabecera.textContent = [m.capitulo, pct, fecha].filter(Boolean).join(', ');
+    const texto = document.createElement('span');
+    texto.className = 'resultado-texto';
+    texto.textContent = m.texto ? `${m.texto}...` : 'Página guardada';
+    ir.append(cabecera, texto);
+    ir.addEventListener('click', async () => {
+      cerrarPaneles();
+      controlesVisibles(false);
+      await saltar(m.cfi);
+    });
+    const quitar = document.createElement('button');
+    quitar.type = 'button';
+    quitar.className = 'marcador-quitar';
+    quitar.setAttribute('aria-label', 'Quitar este marcador');
+    quitar.innerHTML = svgIcono('papelera');
+    quitar.addEventListener('click', async () => {
+      await eliminarAnotacion(m.id);
+      await cargarMarcadores(a);
+      pintarMarcadores();
+    });
+    li.append(ir, quitar);
+    lista.appendChild(li);
+  }
+}
+
+async function abrirMarcadores() {
+  await cargarMarcadores();
+  pintarMarcadores();
+  abrirPanel('panel-marcadores');
+}
+
+// Salto a otra parte del libro (índice, búsqueda, barra, marcadores).
+async function saltar(destino) {
+  const a = actual;
+  if (!a?.motor) return;
+  await a.motor.irA(destino);
+}
+
 // --- Barra para recorrer el libro (punto 3) ---
 // Mientras se arrastra, la tarjeta muestra el capítulo y el porcentaje de
 // destino; al soltar, se salta allí.
@@ -107,7 +205,7 @@ async function saltarConBarra() {
   arrastrandoBarra = false;
   if (!destino) return;
   registrar(`Barra del libro: salto al ${Math.round((Number($('barra-libro').value) / 1000) * 100)} %`);
-  await a.motor.irA(destino.cfi);
+  await saltar(destino.cfi);
 }
 
 async function alCambiarPosicion(info) {
@@ -119,6 +217,7 @@ async function alCambiarPosicion(info) {
     $('info-progreso').textContent = textoProgreso(info);
   }
   pintarBarra(info);
+  pintarBotonMarcador();
   if (!$('panel-indice').hidden) pintarIndice();
 
   const p = a.progreso;
@@ -198,7 +297,7 @@ function pintarIndice() {
     boton.addEventListener('click', async () => {
       cerrarPaneles();
       controlesVisibles(false);
-      await actual.motor.irA(entrada.href);
+      await saltar(entrada.href);
     });
     li.appendChild(boton);
     lista.appendChild(li);
@@ -241,7 +340,7 @@ function fragmento(r) {
     if (!a) return;
     cerrarPaneles();
     controlesVisibles(false);
-    await a.motor.irA(r.cfi);
+    await saltar(r.cfi);
     if (actual === a) a.motor.resaltar(r.cfi);
   });
   li.appendChild(b);
@@ -557,6 +656,7 @@ export async function abrirPantallaLector(id) {
   }
   nuevo.repaginandoHasta = Date.now() + 500;
   sesiones.iniciar();
+  cargarMarcadores(nuevo).catch(() => {});
 }
 
 export function idLibroAbierto() {
@@ -592,6 +692,9 @@ export function prepararPantallaLector({ cerrar }) {
   $('btn-cerrar-indice').addEventListener('click', cerrarPaneles);
   $('btn-buscar-libro').addEventListener('click', abrirBuscar);
   $('barra-libro').addEventListener('input', previsualizarBarra);
+  $('btn-marcador').addEventListener('click', alternarMarcador);
+  $('btn-marcadores').addEventListener('click', abrirMarcadores);
+  $('btn-cerrar-marcadores').addEventListener('click', cerrarPaneles);
   $('barra-libro').addEventListener('change', saltarConBarra);
   $('btn-cerrar-buscar').addEventListener('click', cerrarPaneles);
   $('buscar-en-libro').addEventListener('input', () => {

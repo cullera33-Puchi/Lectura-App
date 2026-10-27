@@ -6,7 +6,7 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.7.1 (barra para recorrer el libro)';
+export const VERSION_APP = '0.7.2 (marcadores)';
 
 let resultadoPersistencia = 'sin pedir';
 

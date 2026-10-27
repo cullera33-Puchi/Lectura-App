@@ -225,3 +225,38 @@ export function fusionarSesiones(locales, remoto) {
     .sort((a, b) => a.inicio.localeCompare(b.inicio) || a.id.localeCompare(b.id));
   return { sesiones, escribirRemoto: !igual(sesiones, remotoOrdenado) };
 }
+
+// --- v4: anotaciones (marcadores; más adelante, subrayados y notas) ---
+// anotaciones.json: { version, anotaciones: { id: { id, libroId, tipo, cfi,
+// ..., fecha, eliminado } } }. Por id gana la fecha más reciente; una baja es
+// una anotación con eliminado: true, para que llegue al otro dispositivo.
+
+export const VERSION_ANOTACIONES = 1;
+
+export function normalizarAnotaciones(datos) {
+  if (!esObjeto(datos)) return { version: VERSION_ANOTACIONES, anotaciones: {} };
+  if ((Number(datos.version) || 1) > VERSION_ANOTACIONES) throw versionNoSoportada('anotaciones.json');
+  const anotaciones = {};
+  for (const [id, a] of Object.entries(esObjeto(datos.anotaciones) ? datos.anotaciones : {})) {
+    if (esObjeto(a) && a.libroId && a.cfi) anotaciones[id] = { ...a, id };
+  }
+  return { ...datos, version: VERSION_ANOTACIONES, anotaciones };
+}
+
+export function fusionarAnotaciones(locales, remoto) {
+  const anotaciones = { ...remoto.anotaciones };
+  for (const [id, a] of Object.entries(locales || {})) {
+    const otra = anotaciones[id];
+    if (!otra || (a.fecha || '') > (otra.fecha || '')) anotaciones[id] = a;
+  }
+  const ordenado = ordenarClaves(anotaciones);
+  return {
+    anotaciones: { ...remoto, version: VERSION_ANOTACIONES, anotaciones: ordenado },
+    escribirRemoto: !igual(ordenado, ordenarClaves(remoto.anotaciones)),
+  };
+}
+
+export function unirAnotaciones(lista) {
+  return lista.reduce((acumulado, otro) => fusionarAnotaciones(acumulado.anotaciones, otro).anotaciones,
+    normalizarAnotaciones(null));
+}

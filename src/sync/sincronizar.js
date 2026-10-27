@@ -25,8 +25,9 @@ import {
 import {
   normalizarBiblioteca, normalizarProgreso, fusionarBiblioteca, fusionarProgreso, posicionesNuevas,
   unirBibliotecas, unirProgresos, fusionarExtrasBiblioteca, normalizarSesiones, fusionarSesiones,
-  VERSION_SESIONES,
+  VERSION_SESIONES, normalizarAnotaciones, fusionarAnotaciones, unirAnotaciones,
 } from './fusion.js';
+import { todasLasAnotaciones, guardarAnotacionesFusionadas } from '../datos/anotaciones.js';
 import {
   todosLosLibros, leerLibro, leerArchivo, leerPortada, actualizarLibro, aplicarLibroRemoto,
   guardarPortadaDescargada, guardarArchivoDescargado, idsConPortada, idsDescargados, volverASubir,
@@ -47,6 +48,7 @@ import { registrar } from '../ui/registro.js';
 
 export const NOMBRE_BIBLIOTECA = 'biblioteca.json';
 export const NOMBRE_PROGRESO = 'progreso.json';
+export const NOMBRE_ANOTACIONES = 'anotaciones.json';
 export const MENSAJE_SIN_CONEXION = 'Sin conexión. Se sincronizará cuando vuelvas a pulsar con conexión.';
 const MENSAJE_CUOTA = 'La cuota de Google Drive está llena. Los libros quedan pendientes de subir.';
 
@@ -260,6 +262,29 @@ async function sincronizarSesiones(token, raiz, avisos) {
   await guardarSincronizacion('sesionesRemotas', nuevas);
 }
 
+// Anotaciones (v4): se leen, se fusionan por id con las locales y se escribe
+// el archivo solo si ha cambiado. Las duplicadas se fusionan y van a la papelera.
+async function sincronizarAnotaciones(token, raiz, avisos) {
+  const pendientes = (await listarPendientes()).filter((p) => p.tipo === 'anotaciones');
+  const remoto = await leerRemoto(token, raiz, NOMBRE_ANOTACIONES, normalizarAnotaciones, unirAnotaciones, avisos);
+  const fusion = fusionarAnotaciones(await todasLasAnotaciones(), remoto.datos);
+  if (fusion.escribirRemoto || remoto.duplicados.length) {
+    await escribirJson(token, raiz, remoto.archivo, NOMBRE_ANOTACIONES, fusion.anotaciones);
+  }
+  for (const d of remoto.duplicados) await enviarAPapelera(token, d.id);
+  // Si se ha anotado algo durante la sincronización, queda para la próxima.
+  for (const p of pendientes) {
+    const actual = await leer('pendientes', p.clave);
+    if (actual && actual.fecha === p.fecha) await borrarPendiente(p.clave);
+  }
+  const locales = await todasLasAnotaciones();
+  const recientes = { ...fusion.anotaciones.anotaciones };
+  for (const [id, a] of Object.entries(locales)) {
+    if (!recientes[id] || (a.fecha || '') > (recientes[id].fecha || '')) recientes[id] = a;
+  }
+  await guardarAnotacionesFusionadas(recientes);
+}
+
 async function ejecutar(token, alEstado) {
   const estado = (texto) => alEstado?.(texto);
   const resumen = { subidos: 0, nuevos: 0, bajas: 0, posiciones: 0, avisos: [] };
@@ -394,6 +419,8 @@ async function ejecutar(token, alEstado) {
 
   estado('Sincronizando las estadísticas...');
   await sincronizarSesiones(token, carpetas.raiz, resumen.avisos);
+  estado('Sincronizando los marcadores...');
+  await sincronizarAnotaciones(token, carpetas.raiz, resumen.avisos);
   await guardarSincronizacion('ultima', new Date().toISOString());
 
   // Copia de seguridad del día (solo en la primera sincronización de cada día).

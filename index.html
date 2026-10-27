@@ -242,6 +242,7 @@
       <div class="flotante flotante-arriba">
         <button type="button" id="btn-cerrar-libro" class="boton-redondo" aria-label="Cerrar el libro"><i data-icono="cerrar"></i></button>
         <span id="titulo-libro" class="titulo-flotante"></span>
+        <button type="button" id="btn-marcador" class="boton-redondo" aria-label="Añadir marcador" aria-pressed="false"><i data-icono="marcador"></i></button>
       </div>
       <div class="flotante flotante-abajo">
         <div class="info-lectura">
@@ -260,6 +261,7 @@
       <div class="grupo">
         <button type="button" id="btn-indice" class="fila fila-menu"><span>Contenido</span><i data-icono="indice"></i></button>
         <button type="button" id="btn-buscar-libro" class="fila fila-menu"><span>Buscar en el libro</span><i data-icono="buscar"></i></button>
+        <button type="button" id="btn-marcadores" class="fila fila-menu"><span>Marcadores</span><i data-icono="marcador"></i></button>
         <button type="button" id="btn-aa" class="fila fila-menu"><span>Temas y ajustes</span><span class="icono-aa">Aa</span></button>
         <button type="button" id="btn-sincronizar-lector" class="fila fila-menu boton-sincronizar"><span>Sincronizar</span><span class="indicador" hidden></span><i data-icono="sincronizar"></i></button>
       </div>
@@ -286,6 +288,16 @@
       </div>
       <p id="estado-busqueda" class="estado-busqueda" role="status"></p>
       <ol id="lista-busqueda" class="lista-panel"></ol>
+    </div>
+
+    <div id="panel-marcadores" class="hoja hoja-alta" role="dialog" aria-label="Marcadores" hidden>
+      <div class="asa"></div>
+      <div class="hoja-cabecera">
+        <h2>Marcadores</h2>
+        <button type="button" id="btn-cerrar-marcadores" class="boton-redondo pequeno" aria-label="Cerrar"><i data-icono="cerrar"></i></button>
+      </div>
+      <p id="marcadores-vacio" class="estado-busqueda" hidden>Todavía no hay marcadores. Toca el marcador de arriba a la derecha para guardar la página en la que estás.</p>
+      <ol id="lista-marcadores" class="lista-panel"></ol>
     </div>
 
     <div id="panel-aa" class="hoja" role="dialog" aria-label="Temas y ajustes" hidden></div>
