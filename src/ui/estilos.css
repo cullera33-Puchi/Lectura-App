@@ -126,6 +126,7 @@ body.leyendo {
 .acciones-cabecera {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .contenido {
@@ -751,6 +752,105 @@ body[data-perfil="tinta"] .panel {
   min-width: 64px;
   text-align: center;
   font-size: 15px;
+}
+
+/* Sincronización */
+
+.boton-sincronizar {
+  position: relative;
+  gap: 6px;
+}
+
+.indicador {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--acento);
+  color: var(--texto-acento);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+body[data-perfil="tinta"] .indicador {
+  border-radius: 0;
+  background: var(--texto);
+  color: var(--fondo);
+}
+
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 24px);
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 12px 16px;
+  border-radius: var(--radio);
+  background: var(--texto);
+  color: var(--fondo);
+  white-space: pre-line;
+  font-size: 15px;
+}
+
+body[data-perfil="tinta"] .aviso {
+  border: 2px solid var(--fondo);
+  outline: 2px solid var(--texto);
+}
+
+.insignia {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--borde);
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+body[data-perfil="tinta"] .insignia {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  color: var(--texto);
+  font-size: 14px;
+}
+
+.barra-descarga {
+  height: 6px;
+  margin-top: 6px;
+  background: var(--fondo-suave);
+  border: 1px solid var(--borde);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.barra-descarga span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--acento);
+}
+
+body[data-perfil="tinta"] .barra-descarga {
+  height: 10px;
+  border: 2px solid var(--texto);
+  border-radius: 0;
+}
+
+body[data-perfil="tinta"] .barra-descarga span {
+  background: var(--texto);
+}
+
+.libro.en-nube .portada,
+.libro.no-disponible .portada {
+  opacity: 0.6;
+}
+
+body[data-perfil="tinta"] .libro.en-nube .portada,
+body[data-perfil="tinta"] .libro.no-disponible .portada {
+  opacity: 1;
 }
 
 /* Diagnóstico y registro */

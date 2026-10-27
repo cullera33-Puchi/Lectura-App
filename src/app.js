@@ -5,13 +5,14 @@
 
 import { cargarPreferencias, preferencias, alCambiarPreferencias } from './datos/preferencias.js';
 import { iniciarSesionGoogle } from './sync/google.js';
-import { prepararBiblioteca, pintarBiblioteca } from './biblioteca/biblioteca.js';
+import { prepararBiblioteca, pintarBiblioteca, mostrarMensaje } from './biblioteca/biblioteca.js';
 import {
   prepararPantallaLector, abrirPantallaLector, cerrarPantallaLector, lectorAbierto,
 } from './lector/pantalla-lector.js';
 import { prepararAjustes, pintarAjustes, pintarDiagnostico } from './ui/ajustes.js';
 import { prepararBienvenida, mostrarBienvenida } from './ui/bienvenida.js';
 import { prepararHoja } from './ui/hoja.js';
+import { prepararSincronizacion } from './ui/sincronizacion.js';
 import { aplicarTemaInterfaz, alCambiarModoSistema } from './ui/temas.js';
 import { registrar } from './ui/registro.js';
 import { pedirPersistencia, estaInstalada } from './ui/diagnostico.js';
@@ -76,6 +77,12 @@ async function iniciar() {
   prepararBienvenida({ terminado: irABiblioteca });
   await prepararBiblioteca({ abrirLibro });
   prepararPantallaLector({ cerrar: () => history.back() });
+  prepararSincronizacion({
+    terminado: async () => {
+      mostrarMensaje('');
+      if (!$('pantalla-biblioteca').hidden) await pintarBiblioteca();
+    },
+  });
   $('btn-ajustes').addEventListener('click', abrirAjustes);
   $('btn-volver-ajustes').addEventListener('click', () => history.back());
 

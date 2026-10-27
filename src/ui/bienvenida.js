@@ -1,10 +1,11 @@
-// Primer uso (punto 6 del diseño): perfil, nombre del dispositivo y conexión
-// con Google. La primera sincronización llega con la fase 2.
+// Primer uso (punto 6 del diseño): perfil, nombre del dispositivo, conexión
+// con Google y primera sincronización automática para traer la biblioteca.
 
 import { preferencias, cambiarDispositivo, NOMBRE_PROPUESTO } from '../datos/preferencias.js';
 import { conectarConVentana } from '../sync/google.js';
 import { prepararCarpeta } from '../sync/carpeta.js';
 import { registrar } from './registro.js';
+import { ejecutarSincronizacion } from './sincronizacion.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -58,9 +59,10 @@ export function prepararBienvenida({ terminado }) {
     (async () => {
       try {
         mensaje('Conectando con Google...');
-        const texto = await prepararCarpeta(await promesa);
-        mensaje(texto);
+        const token = await promesa;
+        mensaje(await prepararCarpeta(token));
         await terminar();
+        await ejecutarSincronizacion(Promise.resolve(token));
       } catch (e) {
         mensaje(`${e.message}\nPuedes intentarlo de nuevo o conectar más tarde desde Ajustes.`, true);
         registrar(e.message, 'error');

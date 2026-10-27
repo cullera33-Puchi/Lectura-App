@@ -13,7 +13,9 @@ function cerrar(valor) {
 }
 
 // botones: [{ id, texto, secundario }]
-export function mostrarHoja(titulo, botones) {
+// alPulsar se ejecuta dentro del gesto, antes de cerrar la hoja (necesario si
+// la acción abre la ventana de Google).
+export function mostrarHoja(titulo, botones, { alPulsar } = {}) {
   if (resolverActual) cerrar(null);
   $('hoja-titulo').textContent = titulo;
   const contenedor = $('hoja-botones');
@@ -23,7 +25,10 @@ export function mostrarHoja(titulo, botones) {
     boton.type = 'button';
     boton.textContent = b.texto;
     if (b.secundario) boton.className = 'secundario';
-    boton.addEventListener('click', () => cerrar(b.id));
+    boton.addEventListener('click', () => {
+      alPulsar?.(b.id);
+      cerrar(b.id);
+    });
     contenedor.appendChild(boton);
   }
   $('fondo-hoja').hidden = false;

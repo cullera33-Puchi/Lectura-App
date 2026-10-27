@@ -64,6 +64,7 @@
     <header class="cabecera">
       <h1>Biblioteca</h1>
       <div class="acciones-cabecera">
+        <button type="button" id="btn-sincronizar" class="secundario boton-sincronizar">Sincronizar<span class="indicador" hidden></span></button>
         <label class="boton" for="archivo-epub">Añadir libro</label>
         <button type="button" id="btn-ajustes" class="secundario">Ajustes</button>
       </div>
@@ -86,6 +87,7 @@
             <option value="terminado">Terminados</option>
           </select>
         </label>
+        <button type="button" id="btn-descargar-todos" class="secundario" hidden>Descargar todos</button>
       </div>
       <div id="mensaje-biblioteca" class="mensaje" role="status"></div>
       <div id="lista-libros"></div>
@@ -150,6 +152,9 @@
     <div id="hoja-botones" class="hoja-botones"></div>
   </div>
 
+  <!-- Aviso flotante -->
+  <div id="aviso" class="aviso" role="status" hidden></div>
+
   <!-- Lector -->
   <div id="lector" hidden>
     <div id="visor"></div>
@@ -157,6 +162,7 @@
       <button type="button" id="btn-cerrar-libro" class="secundario">Cerrar</button>
       <span id="titulo-libro"></span>
       <button type="button" id="btn-indice" class="secundario">Índice</button>
+      <button type="button" id="btn-sincronizar-lector" class="secundario boton-sincronizar" aria-label="Sincronizar">Sinc.<span class="indicador" hidden></span></button>
     </div>
     <div id="barra-inferior" class="barra" hidden>
       <div class="info-lectura">
