@@ -77,12 +77,48 @@ function textoProgreso(info) {
   return partes.join('. ');
 }
 
+// --- Barra para recorrer el libro (punto 3) ---
+// Mientras se arrastra, la tarjeta muestra el capítulo y el porcentaje de
+// destino; al soltar, se salta allí.
+let arrastrandoBarra = false;
+
+function pintarBarra(info) {
+  const barra = $('barra-libro');
+  const lista = Boolean(actual?.motor?.hayUbicaciones());
+  barra.disabled = !lista;
+  barra.title = lista ? '' : 'Calculando las páginas del libro...';
+  if (!arrastrandoBarra && info?.porcentaje != null) barra.value = String(Math.round(info.porcentaje * 1000));
+}
+
+function previsualizarBarra() {
+  const a = actual;
+  if (!a) return;
+  arrastrandoBarra = true;
+  const proporcion = Number($('barra-libro').value) / 1000;
+  const destino = a.motor.destinoDePorcentaje(proporcion);
+  $('info-capitulo').textContent = destino?.capitulo || a.titulo;
+  $('info-progreso').textContent = `Ir al ${Math.round(proporcion * 100)} %`;
+}
+
+async function saltarConBarra() {
+  const a = actual;
+  if (!a) return;
+  const destino = a.motor.destinoDePorcentaje(Number($('barra-libro').value) / 1000);
+  arrastrandoBarra = false;
+  if (!destino) return;
+  registrar(`Barra del libro: salto al ${Math.round((Number($('barra-libro').value) / 1000) * 100)} %`);
+  await a.motor.irA(destino.cfi);
+}
+
 async function alCambiarPosicion(info) {
   const a = actual; // la pantalla puede cerrarse durante una escritura
   if (!a) return;
   a.info = info;
-  $('info-capitulo').textContent = info.capitulo || a.titulo;
-  $('info-progreso').textContent = textoProgreso(info);
+  if (!arrastrandoBarra) {
+    $('info-capitulo').textContent = info.capitulo || a.titulo;
+    $('info-progreso').textContent = textoProgreso(info);
+  }
+  pintarBarra(info);
   if (!$('panel-indice').hidden) pintarIndice();
 
   const p = a.progreso;
@@ -468,6 +504,9 @@ export async function abrirPantallaLector(id) {
   $('menu-titulo').textContent = libro.titulo;
   $('info-capitulo').textContent = libro.titulo;
   $('info-progreso').textContent = '';
+  $('barra-libro').value = '0';
+  $('barra-libro').disabled = true;
+  arrastrandoBarra = false;
 
   reiniciarReferencia();
   const sesiones = new RegistroSesiones(id, nombreDispositivo());
@@ -552,6 +591,8 @@ export function prepararPantallaLector({ cerrar }) {
   $('btn-indice').addEventListener('click', abrirIndice);
   $('btn-cerrar-indice').addEventListener('click', cerrarPaneles);
   $('btn-buscar-libro').addEventListener('click', abrirBuscar);
+  $('barra-libro').addEventListener('input', previsualizarBarra);
+  $('barra-libro').addEventListener('change', saltarConBarra);
   $('btn-cerrar-buscar').addEventListener('click', cerrarPaneles);
   $('buscar-en-libro').addEventListener('input', () => {
     clearTimeout(temporizadorBusqueda);

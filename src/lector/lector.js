@@ -716,6 +716,21 @@ export async function abrirLibro(contenedor, datos, opciones) {
     aplicarAjustes,
     buscar,
     resaltar,
+    // Barra para recorrer el libro: necesita las ubicaciones (porcentaje).
+    hayUbicaciones() {
+      return libro.locations.length() > 0;
+    },
+    destinoDePorcentaje(proporcion) {
+      if (!libro.locations.length()) return null;
+      const cfi = libro.locations.cfiFromPercentage(Math.min(1, Math.max(0, proporcion)));
+      let capitulo = null;
+      try {
+        capitulo = etiquetaCapitulo(libro.spine.get(cfi).index);
+      } catch {
+        capitulo = null;
+      }
+      return { cfi, capitulo };
+    },
     irA(destino) {
       return rendition.display(destino);
     },
