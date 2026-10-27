@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lector EPUB</title>
+  <meta name="description" content="Lector EPUB personal sincronizado con Google Drive">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Lector">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="apple-touch-icon" href="iconos/icono-180.png">
+  <link rel="icon" type="image/png" href="iconos/icono-192.png">
+  <link rel="stylesheet" href="src/ui/estilos.css">
+  <script src="vendor/jszip-3.10.1.min.js"></script>
+  <script src="vendor/epub-0.3.93.min.js"></script>
+  <script type="module" src="src/app.js"></script>
+</head>
+<body data-perfil="movil">
+  <header class="cabecera">
+    <h1>Lector EPUB</h1>
+    <p>Prototipo de la fase 0</p>
+  </header>
+
+  <main>
+    <section id="sec-dispositivo">
+      <h2>Este dispositivo</h2>
+      <fieldset>
+        <legend>Perfil</legend>
+        <label><input type="radio" name="perfil" value="movil"> Móvil</label>
+        <label><input type="radio" name="perfil" value="tinta"> Tinta electrónica</label>
+      </fieldset>
+      <label class="campo">Nombre del dispositivo
+        <input type="text" id="nombre-dispositivo" autocomplete="off" maxlength="40">
+      </label>
+    </section>
+
+    <section id="sec-drive">
+      <h2>Google Drive</h2>
+      <p id="estado-sesion" class="nota"></p>
+      <div class="botones">
+        <button id="btn-conectar" type="button">Conectar con Google</button>
+        <button id="btn-escribir" type="button">Escribir prueba.json</button>
+        <button id="btn-leer" type="button">Leer prueba.json</button>
+      </div>
+      <div id="resultado-drive" class="mensaje" role="status"></div>
+      <div id="tabla-prueba"></div>
+      <details>
+        <summary>Opciones de prueba</summary>
+        <div class="botones">
+          <button id="btn-redireccion" type="button" class="secundario">Conectar por redirección (plan B)</button>
+          <button id="btn-caducar" type="button" class="secundario">Forzar caducidad del token</button>
+          <button id="btn-cerrar-sesion" type="button" class="secundario">Cerrar sesión</button>
+        </div>
+      </details>
+    </section>
+
+    <section id="sec-lector">
+      <h2>Lector</h2>
+      <label class="boton" for="archivo-epub">Abrir un EPUB</label>
+      <input type="file" id="archivo-epub" class="oculto-accesible" accept=".epub,application/epub+zip">
+      <div id="resultado-lector" class="mensaje" role="status"></div>
+      <p class="nota">Toca el lado derecho para avanzar, el izquierdo para retroceder y el centro para mostrar los controles. También se puede deslizar a los lados. Deslizar hacia abajo cierra el libro.</p>
+    </section>
+
+    <section id="sec-diagnostico">
+      <h2>Diagnóstico</h2>
+      <dl id="tabla-diagnostico"></dl>
+      <div class="botones">
+        <button id="btn-actualizar-diagnostico" type="button" class="secundario">Actualizar</button>
+        <button id="btn-persistir" type="button" class="secundario">Pedir almacenamiento persistente</button>
+        <button id="btn-copiar" type="button" class="secundario">Copiar diagnóstico y registro</button>
+      </div>
+      <textarea id="texto-copiar" readonly hidden></textarea>
+    </section>
+
+    <section id="sec-registro">
+      <h2>Registro</h2>
+      <ol id="lista-registro"></ol>
+    </section>
+  </main>
+
+  <div id="lector" hidden>
+    <div id="visor"></div>
+    <div id="barra-superior" class="barra" hidden>
+      <button id="btn-cerrar-libro" type="button">Cerrar</button>
+      <span id="titulo-libro"></span>
+    </div>
+    <div id="barra-inferior" class="barra" hidden>
+      <span id="info-capitulo"></span>
+      <span id="info-cfi" class="cfi"></span>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,104 @@
+// Pantalla de diagnóstico de la fase 0.
+
+import { estadoSesion, tokenVigente, urlRedireccion } from '../sync/google.js';
+import { CONFIG } from '../../config.js';
+
+export const VERSION_APP = '0.0.1 (fase 0)';
+
+let resultadoPersistencia = 'sin pedir';
+
+export async function pedirPersistencia() {
+  if (!navigator.storage?.persist) {
+    resultadoPersistencia = 'no disponible en este navegador';
+    return resultadoPersistencia;
+  }
+  try {
+    const concedida = await navigator.storage.persist();
+    resultadoPersistencia = concedida ? 'concedido (true)' : 'denegado (false)';
+  } catch (e) {
+    resultadoPersistencia = `error: ${e.message}`;
+  }
+  return resultadoPersistencia;
+}
+
+export function estaInstalada() {
+  return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+}
+
+export function nombreNavegador(ua = navigator.userAgent) {
+  if (/CriOS\//.test(ua)) return 'Chrome en iOS';
+  if (/FxiOS\//.test(ua)) return 'Firefox en iOS';
+  if (/iPhone|iPad|iPod/.test(ua)) return 'Safari en iOS (WebKit)';
+  if (/SamsungBrowser\//.test(ua)) return 'Samsung Internet';
+  if (/EdgA?\//.test(ua)) return 'Edge';
+  if (/Firefox\//.test(ua)) return 'Firefox';
+  if (/; wv\)/.test(ua)) return 'WebView de Android';
+  if (/Chrome\//.test(ua)) return /Android/.test(ua) ? 'Chrome o navegador Chromium en Android' : 'Chrome o Chromium';
+  if (/Safari\//.test(ua)) return 'Safari';
+  return 'desconocido';
+}
+
+function formatoBytes(n) {
+  if (n == null) return '?';
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
+function textoCaducidad(sesion) {
+  if (!sesion.token) return 'sin token';
+  const hora = new Date(sesion.caduca).toLocaleTimeString('es-ES');
+  const minutos = Math.round((sesion.caduca - Date.now()) / 60000);
+  if (minutos >= 0) return `a las ${hora} (quedan ${minutos} min)`;
+  return `caducado a las ${hora} (hace ${-minutos} min)`;
+}
+
+function textoSesion(sesion) {
+  if (!CONFIG.clientId) return 'falta el ID de cliente en config.js';
+  if (!sesion.token) return 'sin conectar';
+  const quien = sesion.email ? ` como ${sesion.email}` : '';
+  const metodo = sesion.metodo === 'redireccion' ? 'redirección' : 'ventana emergente';
+  return `${tokenVigente() ? 'conectada' : 'token caducado'}${quien} (${metodo})`;
+}
+
+function textoUltimoIntento(intento) {
+  if (!intento) return 'ninguno';
+  const fecha = new Date(intento.fecha).toLocaleString('es-ES');
+  return `${fecha}, ${intento.metodo === 'redireccion' ? 'redirección' : 'ventana'}: ${intento.resultado}`;
+}
+
+export async function datosDiagnostico() {
+  const sesion = estadoSesion();
+  let almacenamiento = 'no disponible';
+  let persistido = 'no disponible';
+  if (navigator.storage?.estimate) {
+    const e = await navigator.storage.estimate();
+    almacenamiento = `${formatoBytes(e.usage)} usados de ${formatoBytes(e.quota)}`;
+  }
+  if (navigator.storage?.persisted) {
+    persistido = (await navigator.storage.persisted()) ? 'sí' : 'no';
+  }
+  const sw = navigator.serviceWorker?.controller ? 'activo' : 'no controla esta página';
+
+  return [
+    ['Versión de la app', VERSION_APP],
+    ['Navegador', nombreNavegador(navigator.userAgent)],
+    ['Agente de usuario', navigator.userAgent],
+    ['Instalada en pantalla de inicio', estaInstalada() ? 'sí (standalone)' : 'no (pestaña del navegador)'],
+    ['Sesión de Google', textoSesion(sesion)],
+    ['Caducidad del token', textoCaducidad(sesion)],
+    ['Último intento de login', textoUltimoIntento(sesion.ultimoIntento)],
+    ['Google Identity Services', sesion.gisCargada ? 'cargado' : 'no cargado'],
+    ['navigator.storage.persist()', resultadoPersistencia],
+    ['Almacenamiento persistente ahora', persistido],
+    ['Espacio', almacenamiento],
+    ['Service worker', sw],
+    ['Conexión', navigator.onLine ? 'en línea' : 'sin conexión'],
+    ['Pantalla', `${innerWidth} x ${innerHeight} px, densidad ${devicePixelRatio}`],
+    ['URI de redirección (plan B)', urlRedireccion()],
+  ];
+}
+
+export function diagnosticoComoTexto(filas) {
+  return filas.map(([k, v]) => `${k}: ${v}`).join('\n');
+}
