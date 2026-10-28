@@ -1,13 +1,14 @@
-// Service worker: red primero y caché como respaldo.
-// - Las peticiones a la red se revalidan siempre (cache: 'no-cache'), porque
-//   GitHub Pages permite al navegador guardar los archivos 10 minutos y la app
-//   podría seguir usando una versión anterior.
-// - Si la red no responde en unos segundos (conexión colgada), se usa la caché
-//   para que la app abra igual que sin conexión.
+// Service worker: la app se sirve desde la caché del dispositivo (mejora 4).
+// - Cada versión publicada tiene su propia caché con todos los archivos de la
+//   app, descargados juntos al instalarla. Así arranca al momento aunque la
+//   conexión sea mala y nunca mezcla archivos de dos versiones.
+// - La versión nueva se descarga en segundo plano y espera. La app le pide
+//   que se active cuando no hay nada en curso (ni libro abierto, ni
+//   sincronización, ni importación) y entonces se recarga.
 // Solo gestiona archivos de la propia app; Google y Drive van siempre a la red.
 
-const CACHE = 'lector-epub-v36';
-const ESPERA_RED_MS = 4000;
+const CACHE = 'lector-epub-c37';
+const PREFIJO = 'lector-epub-';
 const ARCHIVOS = [
   './',
   'index.html',
@@ -97,19 +98,27 @@ const ARCHIVOS = [
 
 self.addEventListener('install', (evento) => {
   // cache: 'reload' evita copiar a la caché nueva archivos antiguos de la caché HTTP.
-  evento.waitUntil(
-    caches.open(CACHE)
-      .then((c) => c.addAll(ARCHIVOS.map((u) => new Request(u, { cache: 'reload' }))))
-      .then(() => self.skipWaiting()),
-  );
+  evento.waitUntil((async () => {
+    const anteriores = await caches.keys();
+    const cache = await caches.open(CACHE);
+    await cache.addAll(ARCHIVOS.map((u) => new Request(u, { cache: 'reload' })));
+    // La primera instalación, o si la versión activa es anterior a la
+    // mejora 4 (red primero, sin el aviso de activar), se activa ya.
+    if (!anteriores.some((k) => k !== CACHE && /^lector-epub-c\d+$/.test(k))) await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (evento) => {
   evento.waitUntil(
     caches.keys()
-      .then((claves) => Promise.all(claves.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((claves) => Promise.all(claves.filter((k) => k.startsWith(PREFIJO) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
+});
+
+// La app avisa cuando puede recargarse con la versión nueva.
+self.addEventListener('message', (evento) => {
+  if (evento.data?.tipo === 'activar') self.skipWaiting();
 });
 
 // Una respuesta con redirección no se puede usar para una navegación: se copia.
@@ -120,27 +129,18 @@ async function limpiarRedireccion(respuesta) {
 
 async function responder(evento) {
   const peticion = evento.request;
-  const desdeCache = () => caches.match(peticion, { ignoreSearch: true });
-  const red = fetch(peticion.url, { cache: 'no-cache' }).then(async (respuesta) => {
-    if (respuesta.ok) {
-      const copia = respuesta.clone();
-      evento.waitUntil(caches.open(CACHE).then((c) => c.put(peticion, copia)));
-    }
-    return limpiarRedireccion(respuesta);
-  });
-  red.catch(() => {}); // si ya se respondió con la caché, el fallo de red no importa
-  // Si la red tarda, se responde con la caché (si la hay) y la red sigue
-  // actualizándola en segundo plano.
-  const plazo = new Promise((resolver) => setTimeout(resolver, ESPERA_RED_MS)).then(desdeCache);
-  try {
-    const primera = await Promise.race([red, plazo]);
-    if (primera) return primera;
-    return await red;
-  } catch {
-    const enCache = await desdeCache();
-    if (enCache) return enCache;
-    throw new Error('Sin conexión y sin copia en caché');
+  const cache = await caches.open(CACHE);
+  const guardada = await cache.match(peticion, { ignoreSearch: true })
+    || (peticion.mode === 'navigate' ? await cache.match('./') : null);
+  if (guardada) return guardada;
+  // Un archivo que no está en la lista: se pide a la red y se guarda en la
+  // caché de esta versión.
+  const respuesta = await fetch(peticion);
+  if (respuesta.ok && respuesta.type === 'basic') {
+    const copia = respuesta.clone();
+    evento.waitUntil(cache.put(peticion, copia));
   }
+  return limpiarRedireccion(respuesta);
 }
 
 self.addEventListener('fetch', (evento) => {

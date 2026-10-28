@@ -62,6 +62,7 @@ const PRUEBAS = [
   ['casos/ajustes-libro.js'],
   ['casos/seguridad.js'],
   ['casos/sin-conexion.js'],
+  ['casos/version-nueva.js'],
 ];
 
 function servidor() {

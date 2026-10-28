@@ -441,6 +441,7 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.8.4 | Detalle de un mes en Estadísticas (mejora 21): al tocar la barra de un mes, hoja con el tiempo, los días y las páginas del mes, los libros leídos con el tiempo de cada uno, los terminados y el reparto por dispositivo. Cada libro abre su ficha |
 | 0.8.5 | Revisión completa del código con verificación independiente de cada hallazgo: 52 errores corregidos. Los más importantes: abrir un libro sin pasar página ya no pisa la posición del otro dispositivo, se conserva el estado "terminado" del otro dispositivo, tras sincronizar con un libro abierto se ofrece la posición más reciente del otro, el primer paso de página en el iPhone se guarda, cambiar una portada no deshace cambios del otro dispositivo, "Quiero leer" se fusiona libro a libro (regla 2), un libro que falla al subir no frena la sincronización, la app no se recarga a mitad de una importación o restauración, búsqueda con saltos de línea y espacios duros, índice con anclas en un mismo archivo, libros de derecha a izquierda en el iPhone, EPUB con BOM y textos en español en los errores de Google y Drive |
 | 0.8.6 | Reloj atrasado en un dispositivo (mejora 18): la fecha de cada cambio que se fusiona por fecha (posición, Quiero leer, marcadores, libros, colecciones y objetivos) es siempre posterior a la del dato que sustituye, así un avance hecho en un dispositivo con la hora atrasada no pierde frente a uno anterior del otro. Diagnóstico muestra la diferencia de hora con Google, medida al subir un JSON a Drive |
+| 0.8.7 | App servida desde la caché del dispositivo (mejora 4): arranca al momento aunque la conexión sea mala. Cada versión publicada se descarga entera en segundo plano a su propia caché y espera; se activa al abrir la app (si no se ha tocado aún) o al pasar a segundo plano, nunca con un libro abierto ni con una sincronización o importación en curso. Así no se mezclan archivos de dos versiones |
 
 ### Mejoras pendientes (numeradas)
 
@@ -448,7 +449,6 @@ Del repaso de la app y nuevas funciones. La numeración se mantiene para poder e
 
 | Nº | Mejora | Esfuerzo |
 |---|---|---|
-| 4 | Servir la app desde la caché del dispositivo (arranque más rápido con mala conexión y sin mezcla de versiones al publicar) | Medio |
 | 5 | Biblioteca sin rehacer la lista entera en cada filtro o búsqueda | Medio |
 | 19 | Capítulo dañado que bloquea el lector y libros muy ilustrados que superan el tiempo de apertura en la tablet | Medio |
 | 20 | iPhone en horizontal: rebote al deslizar en la penúltima página de un capítulo (pendiente de reproducir) | Bajo |

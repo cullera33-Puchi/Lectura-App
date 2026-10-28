@@ -47,6 +47,7 @@ let pestanaActual = 'inicio';
 let abriendo = false; // apertura de un libro en curso
 let scrollAntesDeLeer = 0;
 let recargaPendiente = false;
+let registroSw = null; // para buscar versiones nuevas al volver a la app
 
 function mostrarPantalla(nombre) {
   for (const p of PANTALLAS) $(`pantalla-${p}`).hidden = p !== nombre;
@@ -161,8 +162,46 @@ function appOciosa() {
     && !trabajoEnCurso() && !esperandoGoogle() && $('pantalla-bienvenida').hidden;
 }
 
+// Versión nueva descargada por el service worker y a la espera (mejora 4).
+// Se activa con la app ociosa y, para no recargar la pantalla mientras se
+// usa, solo si aún no se ha tocado desde que se abrió o al pasar a segundo
+// plano. Después se recarga.
+let versionEnEspera = null;
+let appTocada = false;
+for (const tipo of ['pointerdown', 'keydown']) {
+  addEventListener(tipo, () => { appTocada = true; }, { capture: true, once: true });
+}
+
 function recargarSiProcede() {
-  if (recargaPendiente && appOciosa()) location.reload();
+  if (!appOciosa()) return;
+  if (recargaPendiente) location.reload();
+  else if (versionEnEspera && (document.visibilityState === 'hidden' || !appTocada)) {
+    registrar('Se activa la versión nueva de la app');
+    versionEnEspera.postMessage({ tipo: 'activar' });
+    versionEnEspera = null;
+  }
+}
+
+function vigilarVersionNueva(registro) {
+  const esperar = (trabajador) => {
+    if (!navigator.serviceWorker.controller) return; // primera instalación
+    registrar('Versión nueva de la app descargada');
+    versionEnEspera = trabajador;
+    recargarSiProcede();
+    // Al abrir la app suele haber algo en curso (la sincronización): se
+    // reintenta mientras no se toque la app.
+    const reintento = setInterval(() => {
+      if (!versionEnEspera || appTocada) clearInterval(reintento);
+      else recargarSiProcede();
+    }, 2000);
+  };
+  if (registro.waiting) esperar(registro.waiting);
+  registro.addEventListener('updatefound', () => {
+    const nuevo = registro.installing;
+    nuevo?.addEventListener('statechange', () => {
+      if (nuevo.state === 'installed' && registro.waiting === nuevo) esperar(nuevo);
+    });
+  });
 }
 
 // Título grande que se reduce al desplazar, como en iOS: cuando el título
@@ -277,11 +316,11 @@ async function iniciar() {
   avisarAlQuedarLibre(() => recargarSiProcede());
   if ('serviceWorker' in navigator) {
     // Si ya había una versión instalada y se activa otra, se recarga para usar
-    // el código nuevo. Si se está leyendo, se espera a la próxima apertura.
+    // el código nuevo. La versión nueva solo se activa con la app ociosa.
     const habiaVersion = Boolean(navigator.serviceWorker.controller);
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!habiaVersion) return;
-      registrar('Versión nueva de la app disponible');
+      registrar('Versión nueva de la app activada');
       recargaPendiente = true;
       recargarSiProcede();
     });
@@ -290,7 +329,12 @@ async function iniciar() {
       if (document.visibilityState === 'hidden') recargarSiProcede();
     });
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
-      .then((r) => r?.update())
+      .then((r) => {
+        if (!r) return;
+        vigilarVersionNueva(r);
+        registroSw = r;
+        return r.update();
+      })
       .catch((e) => registrar(`Service worker no registrado: ${e.message}`, 'error'));
   }
 
@@ -319,7 +363,10 @@ async function iniciar() {
     }
     // También con un libro abierto: el otro dispositivo puede haber avanzado y,
     // al terminar, se ofrece ir a su posición (revisarPosicionRemota).
-    if (minutosFuera >= MINUTOS_FUERA) alEntrarEnLaApp('al volver a la app');
+    if (minutosFuera >= MINUTOS_FUERA) {
+      alEntrarEnLaApp('al volver a la app');
+      registroSw?.update().catch(() => {}); // por si se ha publicado una versión nueva
+    }
   });
 }
 
