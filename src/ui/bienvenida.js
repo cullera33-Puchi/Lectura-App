@@ -1,7 +1,7 @@
 // Primer uso (punto 6 del diseño): perfil, nombre del dispositivo, conexión
 // con Google y primera sincronización automática para traer la biblioteca.
 
-import { preferencias, cambiarDispositivo, NOMBRE_PROPUESTO } from '../datos/preferencias.js';
+import { cambiarDispositivo, NOMBRE_PROPUESTO, tipoDispositivo } from '../datos/preferencias.js';
 import { conectarConVentana } from '../sync/google.js';
 import { prepararCarpeta } from '../sync/carpeta.js';
 import { registrar } from './registro.js';
@@ -23,11 +23,10 @@ function mensaje(texto, esError = false) {
 }
 
 async function terminar() {
-  const nombre = $('bienvenida-nombre').value.trim() || preferencias().dispositivo.dispositivo;
-  const { dispositivo } = preferencias();
+  const nombre = $('bienvenida-nombre').value.trim() || NOMBRE_PROPUESTO[tipoDispositivo()];
   await cambiarDispositivo({
     dispositivo: nombre,
-    nombreEditado: nombre !== NOMBRE_PROPUESTO[dispositivo.perfil],
+    nombreEditado: nombre !== NOMBRE_PROPUESTO[tipoDispositivo()],
     bienvenidaCompleta: true,
   });
   registrar(`Primer uso completado como ${nombre}`);
@@ -44,9 +43,9 @@ export function prepararBienvenida({ terminado }) {
 
   document.querySelectorAll('#bienvenida-paso1 .opcion-grande').forEach((boton) => {
     boton.addEventListener('click', async () => {
-      const perfil = boton.dataset.perfil;
-      await cambiarDispositivo({ perfil, dispositivo: NOMBRE_PROPUESTO[perfil] });
-      $('bienvenida-nombre').value = NOMBRE_PROPUESTO[perfil];
+      const tipo = boton.dataset.tipo;
+      await cambiarDispositivo({ tipo, dispositivo: NOMBRE_PROPUESTO[tipo] });
+      $('bienvenida-nombre').value = NOMBRE_PROPUESTO[tipo];
       mostrarPaso(2);
     });
   });

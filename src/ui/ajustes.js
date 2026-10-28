@@ -1,6 +1,6 @@
 // Pantalla de Ajustes: perfil, nombre, cuenta de Google, diagnóstico y registro.
 
-import { preferencias, cambiarDispositivo } from '../datos/preferencias.js';
+import { preferencias, cambiarDispositivo, tipoDispositivo } from '../datos/preferencias.js';
 import {
   estadoSesion, tokenVigente, conectarConVentana, asegurarToken, invalidarToken, cerrarSesion,
   suscribirSesion,
@@ -81,8 +81,9 @@ function pintarEntrada(entrada) {
 
 export function pintarAjustes() {
   const { dispositivo } = preferencias();
+  const tipo = tipoDispositivo();
   document.querySelectorAll('input[name="perfil"]').forEach((r) => {
-    r.checked = r.value === dispositivo.perfil;
+    r.checked = r.value === tipo;
   });
   $('nombre-dispositivo').value = dispositivo.dispositivo;
   $('sincronizacion-automatica').checked = dispositivo.sincronizacionAutomatica !== false;
@@ -118,8 +119,8 @@ function conDrive(promesaToken, operacion) {
 export function prepararAjustes() {
   document.querySelectorAll('input[name="perfil"]').forEach((r) => {
     r.addEventListener('change', async () => {
-      await cambiarDispositivo({ perfil: r.value });
-      registrar(`Perfil: ${r.value === 'tinta' ? 'Tinta electrónica' : 'Móvil'}`);
+      await cambiarDispositivo({ tipo: r.value });
+      registrar(`Dispositivo: ${{ movil: 'Móvil', tinta: 'Tinta electrónica', ordenador: 'Ordenador' }[r.value]}`);
       pintarAjustes();
     });
   });

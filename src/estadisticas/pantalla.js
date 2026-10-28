@@ -254,7 +254,7 @@ export async function pintarEstadisticas() {
     partes.push(grupo);
   }
 
-  partes.push(el('p', 'pie-grupo', 'Suma el tiempo de los dos dispositivos con los datos de la última sincronización. Una sesión empieza al abrir un libro y termina al cerrarlo o tras 5 minutos sin pasar página.'));
+  partes.push(el('p', 'pie-grupo', 'Suma el tiempo de todos tus dispositivos con los datos de la última sincronización. Una sesión empieza al abrir un libro y termina al cerrarlo o tras 5 minutos sin pasar página.'));
   $('contenido-estadisticas').replaceChildren(...partes);
 }
 

@@ -26,14 +26,19 @@
         <h1 class="titulo-bienvenida">Lector EPUB</h1>
         <p class="subtitulo">Paso 1 de 2. ¿Qué dispositivo es este?</p>
         <div class="grupo">
-          <button type="button" class="fila fila-opcion opcion-grande" data-perfil="movil">
+          <button type="button" class="fila fila-opcion opcion-grande" data-tipo="movil" data-perfil="movil">
             <i data-icono="movil" class="icono-fila"></i>
-            <span class="fila-texto"><strong>Móvil</strong><span>Para el iPhone o el ordenador. Con animaciones y temas claro, sepia y oscuro.</span></span>
+            <span class="fila-texto"><strong>Móvil</strong><span>Para el iPhone. Con animaciones y temas claro, sepia y oscuro.</span></span>
             <i data-icono="avanzar" class="chevron"></i>
           </button>
-          <button type="button" class="fila fila-opcion opcion-grande" data-perfil="tinta">
+          <button type="button" class="fila fila-opcion opcion-grande" data-tipo="tinta" data-perfil="tinta">
             <i data-icono="tableta" class="icono-fila"></i>
             <span class="fila-texto"><strong>Tinta electrónica</strong><span>Para la tablet. Sin animaciones, en blanco y negro.</span></span>
+            <i data-icono="avanzar" class="chevron"></i>
+          </button>
+          <button type="button" class="fila fila-opcion opcion-grande" data-tipo="ordenador" data-perfil="ordenador">
+            <i data-icono="ordenador" class="icono-fila"></i>
+            <span class="fila-texto"><strong>Ordenador</strong><span>Para el PC o el Mac. Con ratón y teclado, y los temas del móvil.</span></span>
             <i data-icono="avanzar" class="chevron"></i>
           </button>
         </div>
@@ -146,6 +151,7 @@
           <div class="segmentado" role="radiogroup" aria-label="Perfil">
             <label><input type="radio" name="perfil" value="movil"><span>Móvil</span></label>
             <label><input type="radio" name="perfil" value="tinta"><span>Tinta</span></label>
+            <label><input type="radio" name="perfil" value="ordenador"><span>Ordenador</span></label>
           </div>
         </div>
         <label class="fila fila-campo">
@@ -168,7 +174,7 @@
         <button type="button" id="btn-descargar-copia" class="fila fila-boton">Descargar copia de seguridad</button>
         <button type="button" id="btn-restaurar-copia" class="fila fila-boton">Restaurar una copia</button>
       </div>
-      <p class="pie-grupo">Cada día, en la primera sincronización, se guarda en Drive una copia de avances, estadísticas, colecciones y objetivos de los dos dispositivos. No incluye los EPUB. Se conservan las 30 últimas diarias y una por mes durante un año. <span id="ultima-copia"></span></p>
+      <p class="pie-grupo">Cada día, en la primera sincronización, se guarda en Drive una copia de avances, estadísticas, colecciones y objetivos de todos tus dispositivos. No incluye los EPUB. Se conservan las 30 últimas diarias y una por mes durante un año. <span id="ultima-copia"></span></p>
       <input type="file" id="archivo-copia" class="oculto-accesible" accept=".json,application/json">
 
       <h2 class="cabecera-grupo">Cuenta de Google</h2>

@@ -11,9 +11,18 @@ const { URL_APP, ok } = require('../lib/entorno.js');
   const p = await ctx.newPage();
   const errores = []; p.on('pageerror', (e) => errores.push(e.message));
   await p.goto(URL_APP); await p.waitForTimeout(700);
-  await p.click('.opcion-grande[data-perfil=movil]'); await p.waitForTimeout(300);
-  ok(await p.inputValue('#bienvenida-nombre') === 'Ordenador', `nombre propuesto en el ordenador: "${await p.inputValue('#bienvenida-nombre')}"`);
+  const opciones = await p.$$eval('#bienvenida-paso1 .opcion-grande strong', (l) => l.map((x) => x.textContent));
+  ok(opciones.join('|') === 'Móvil|Tinta electrónica|Ordenador', `la bienvenida ofrece ${opciones.join(', ')}`);
+  await p.click('.opcion-grande[data-tipo=ordenador]'); await p.waitForTimeout(300);
+  ok(await p.inputValue('#bienvenida-nombre') === 'Ordenador', `nombre propuesto: "${await p.inputValue('#bienvenida-nombre')}"`);
   await p.click('#bienvenida-omitir'); await p.waitForTimeout(300);
+  const disp = await p.evaluate(async () => { const m = await import('/src/datos/preferencias.js'); return { tipo: m.tipoDispositivo(), perfil: m.perfilActual(), cuerpo: document.body.dataset.perfil }; });
+  ok(disp.tipo === 'ordenador' && disp.perfil === 'movil' && disp.cuerpo === 'movil', `el ordenador usa el perfil Móvil (${JSON.stringify(disp)})`);
+  // En Ajustes aparece marcado "Ordenador".
+  await p.locator('.boton-ajustes:visible').first().click(); await p.waitForTimeout(500);
+  ok(await p.isChecked('input[name=perfil][value=ordenador]'), 'Ajustes muestra "Ordenador" como dispositivo');
+  await p.screenshot({ path: `${require('../lib/entorno.js').SALIDA}/ajustes-ordenador.png` });
+  await p.goBack(); await p.waitForTimeout(400);
 
   // Arrastrar un EPUB (y un archivo que no lo es) a la ventana.
   const soltar = (nombres) => p.evaluate(async (lista) => {

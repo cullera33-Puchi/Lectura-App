@@ -4,11 +4,19 @@
 import { leerAjuste, guardarAjuste } from './almacen.js';
 import { ajustesLecturaIniciales } from '../ui/temas.js';
 
-// Ordenador: sin pantalla táctil y sin sistema de móvil (tercer dispositivo).
-export const ES_ORDENADOR = !/Android|iPhone|iPad|iPod/.test(navigator.userAgent)
+// Tipo de dispositivo: móvil, tinta electrónica u ordenador. El ordenador
+// (tercer dispositivo) usa el perfil Móvil: animaciones y temas de color.
+export const TIPOS = {
+  movil: { perfil: 'movil', nombre: 'iPhone' },
+  tinta: { perfil: 'tinta', nombre: 'Note Air 4C' },
+  ordenador: { perfil: 'movil', nombre: 'Ordenador' },
+};
+
+// Sin pantalla táctil y sin sistema de móvil: se propone "ordenador".
+const ES_ORDENADOR = !/Android|iPhone|iPad|iPod/.test(navigator.userAgent)
   && !(navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches);
 
-export const NOMBRE_PROPUESTO = { movil: ES_ORDENADOR ? 'Ordenador' : 'iPhone', tinta: 'Note Air 4C' };
+export const NOMBRE_PROPUESTO = Object.fromEntries(Object.entries(TIPOS).map(([t, d]) => [t, d.nombre]));
 
 const estado = {
   dispositivo: null, // { perfil, dispositivo, nombreEditado, bienvenidaCompleta }
@@ -20,10 +28,13 @@ const oyentes = new Set();
 
 export async function cargarPreferencias() {
   const dispositivo = await leerAjuste('dispositivo');
-  const perfilPropuesto = /Android/.test(navigator.userAgent) ? 'tinta' : 'movil';
+  let tipoPropuesto = 'movil';
+  if (/Android/.test(navigator.userAgent)) tipoPropuesto = 'tinta';
+  else if (ES_ORDENADOR) tipoPropuesto = 'ordenador';
   estado.dispositivo = {
-    perfil: perfilPropuesto,
-    dispositivo: NOMBRE_PROPUESTO[perfilPropuesto],
+    perfil: TIPOS[tipoPropuesto].perfil,
+    tipo: tipoPropuesto,
+    dispositivo: NOMBRE_PROPUESTO[tipoPropuesto],
     nombreEditado: false,
     bienvenidaCompleta: false,
     ...(dispositivo || {}),
@@ -43,6 +54,11 @@ export async function cargarPreferencias() {
 
 export function preferencias() {
   return { dispositivo: { ...estado.dispositivo }, lectura: { ...estado.lectura } };
+}
+
+// Los datos guardados antes del tipo "ordenador" solo tienen perfil.
+export function tipoDispositivo() {
+  return TIPOS[estado.dispositivo.tipo] ? estado.dispositivo.tipo : estado.dispositivo.perfil;
 }
 
 export function perfilActual() {
@@ -67,10 +83,15 @@ export function alCambiarPreferencias(fn) {
   return () => oyentes.delete(fn);
 }
 
+// cambios.tipo fija también el perfil; un cambio solo de perfil deja el tipo
+// que le corresponde (móvil o tinta).
 export async function cambiarDispositivo(cambios) {
-  const nuevo = { ...estado.dispositivo, ...cambios };
-  if (cambios.perfil && !nuevo.nombreEditado && !('dispositivo' in cambios)) {
-    nuevo.dispositivo = NOMBRE_PROPUESTO[cambios.perfil];
+  const extra = {};
+  if (cambios.tipo) extra.perfil = TIPOS[cambios.tipo].perfil;
+  else if (cambios.perfil) extra.tipo = cambios.perfil;
+  const nuevo = { ...estado.dispositivo, ...cambios, ...extra };
+  if ((cambios.tipo || cambios.perfil) && !nuevo.nombreEditado && !('dispositivo' in cambios)) {
+    nuevo.dispositivo = NOMBRE_PROPUESTO[nuevo.tipo];
   }
   estado.dispositivo = nuevo;
   await guardarAjuste('dispositivo', nuevo);

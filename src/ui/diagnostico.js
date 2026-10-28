@@ -8,7 +8,7 @@ import { resumenRitmo } from '../lector/ritmo.js';
 import { estadoPantalla } from '../lector/pantalla-encendida.js';
 import { resumenPruebaGuiada } from './prueba-guiada.js';
 
-export const VERSION_APP = '0.9.5 (prueba guiada)';
+export const VERSION_APP = '0.9.6 (ordenador como opción)';
 
 let resultadoPersistencia = 'sin pedir';
 
