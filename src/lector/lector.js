@@ -350,7 +350,13 @@ function recursosBajoDemanda(libro) {
       return urls.get(i);
     };
     this.spine.hooks.serialize.register(async (salida, seccion) => {
-      seccion.output = escalarEnCapitulo(await sustituir(salida, recursos.relativeTo(seccion.url), urlDe));
+      try {
+        seccion.output = escalarEnCapitulo(await sustituir(salida, recursos.relativeTo(seccion.url), urlDe));
+      } catch (e) {
+        // Mejor el capítulo sin imágenes que un capítulo en blanco.
+        registrar(`Lector: recursos de ${seccion.href} sin cargar (${e.message})`, 'error');
+        seccion.output = salida;
+      }
     });
     return Promise.resolve();
   };
@@ -1032,6 +1038,16 @@ export async function abrirLibro(contenedor, datos, opciones) {
   // displayError y se queda esperando), así que se le pone tiempo límite.
   let generando = null;
   const pintar = (destino) => conTiempoLimite(rendition.display(destino), LIMITE_PINTADO_MS + extra, 'el libro no responde');
+  // Para el diagnóstico: cómo se pinta y, si tarda, en qué estado se queda.
+  rendition.on('displayError', (e) => registrar(`Lector: error al pintar un capítulo: ${e?.message || e}`, 'error'));
+  registrar(`Lector: pintando ${dosPaginas ? 'a doble página' : 'a una página'} en ${contenedor.clientWidth} x ${contenedor.clientHeight} px`
+    + `${opciones.cfiInicial ? ', en la posición guardada' : ', al principio'} (${Math.round(megas * 10) / 10} MB)`);
+  let pintado = false;
+  const vigia = setTimeout(() => {
+    if (pintado || destruido) return;
+    const vistas = (rendition.manager?.views?.all?.() || []).map((v) => `${v.section?.href} ${Math.round(v.width?.() || 0)} px`);
+    registrar(`Lector: la primera página tarda más de 4 s. Vistas: ${vistas.join(', ') || 'ninguna'}`, 'error');
+  }, 4000);
   try {
     try {
       await pintar(opciones.cfiInicial || undefined);
@@ -1045,6 +1061,9 @@ export async function abrirLibro(contenedor, datos, opciones) {
     if (cancelado()) throw new AperturaCancelada();
     registrar(`No se pudo pintar el libro: ${e.message}`, 'error');
     throw new Error(MENSAJE_LIBRO_ILEGIBLE);
+  } finally {
+    pintado = true;
+    clearTimeout(vigia);
   }
   if (cancelado()) {
     liberar();
