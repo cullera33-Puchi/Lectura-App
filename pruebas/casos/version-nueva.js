@@ -49,6 +49,10 @@ const ocultar = (p) => p.evaluate(() => {
   Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
   document.dispatchEvent(new Event('visibilitychange'));
 });
+const mostrar = (p) => p.evaluate(() => {
+  Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+});
 
 (async () => {
   copiar();
@@ -91,6 +95,7 @@ const ocultar = (p) => p.evaluate(() => {
   ok(servido.includes(`'${original}'`) && !servido.includes('prueba 1'), `mientras tanto, los archivos que se piden son de la versión en uso (${original})`);
   await ocultar(p); await p.waitForTimeout(800);
   ok(await p.evaluate(() => window.marca) === 'sin recargar', 'tampoco al pasar a segundo plano con el libro abierto');
+  await mostrar(p); await p.waitForTimeout(300);
 
   // Se cierra el libro y la app pasa a segundo plano: se activa y recarga.
   await p.goBack(); await p.waitForTimeout(800);
