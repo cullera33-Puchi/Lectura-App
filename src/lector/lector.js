@@ -31,8 +31,11 @@ const MAX_DURACION_TOQUE_MS = 600;
 const VENTANA_CLIC_TRAS_TOQUE_MS = 800;
 const CARACTERES_POR_UBICACION = 1600;
 const ESPERA_COMPROBACION_MS = 400;
+// Plazos de apertura y de la primera página. Crecen con el tamaño del libro
+// (mejora 19): un libro muy ilustrado tarda más en la tablet.
 const LIMITE_APERTURA_MS = 20000;
 const LIMITE_PINTADO_MS = 15000;
+const MS_EXTRA_POR_MB = 300;
 const URL_FUENTES = new URL('../../fonts/fuentes.css', import.meta.url).href;
 const MAX_RESULTADOS = 300;
 const ESPERA_RESALTADO_MS = 800;
@@ -209,6 +212,81 @@ function aplanarIndice(elementos, nivel = 0, lista = []) {
   return lista;
 }
 
+// --- Libros dañados y libros grandes (mejora 19) ---
+
+const PAGINA_DANADA = `<?xml version="1.0" encoding="utf-8"?><html xmlns="${NS_XHTML}"><head><title>Parte dañada</title></head><body><p style="margin-top:3em;text-align:center;font-style:italic">Esta parte del libro no se puede mostrar porque el archivo del EPUB está dañado. Pasa página para seguir leyendo.</p></body></html>`;
+
+// Un capítulo que falta en el archivo o con XHTML mal formado no debe
+// bloquear el lector. Si el XHTML tiene errores (lo más habitual, un &nbsp;
+// sin declarar), se vuelve a leer como HTML, que los tolera. Si no se puede
+// leer, se muestra una página que lo explica y se sigue con el siguiente.
+function cargaTolerante(libro) {
+  const cargar = libro.load.bind(libro);
+  const capitulos = new Set();
+  libro.loaded.spine.then(() => libro.spine.each((s) => capitulos.add(s.url)));
+  const xml = (texto) => new DOMParser().parseFromString(texto, 'application/xhtml+xml');
+  libro.load = async (ruta) => {
+    if (!capitulos.has(ruta)) return cargar(ruta);
+    try {
+      const doc = await cargar(ruta);
+      if (!doc?.getElementsByTagName('parsererror').length) return doc;
+      registrar(`Capítulo con errores de XHTML, leído como HTML: ${ruta}`, 'error');
+      const html = new DOMParser().parseFromString(await libro.archive.getText(libro.resolve(ruta)), 'text/html');
+      const arreglado = document.implementation.createDocument(NS_XHTML, 'html', null);
+      arreglado.replaceChild(arreglado.importNode(html.documentElement, true), arreglado.documentElement);
+      return arreglado;
+    } catch (e) {
+      registrar(`Capítulo que no se puede leer (${e?.message || e}): ${ruta}`, 'error');
+      return xml(PAGINA_DANADA);
+    }
+  };
+  // Las ubicaciones guardan su propia copia de la función de carga.
+  libro.locations.request = libro.load;
+}
+
+// epub.js descomprime todas las imágenes y fuentes del libro antes de mostrar
+// la primera página: en un libro ilustrado, cientos de MB. Aquí se crean solo
+// las de cada capítulo al pintarlo. Devuelve la función que libera las hojas
+// de estilo creadas.
+function recursosBajoDemanda(libro) {
+  const urls = new Map(); // posición del recurso -> promesa de su URL
+  const propias = [];
+  libro.replacements = function replacementsBajoDemanda() {
+    const recursos = this.resources;
+    const absoluta = (i) => recursos.settings.resolver(recursos.urls[i]);
+    const sustituir = async (texto, relativas, crear) => {
+      const usadas = relativas.map((r, i) => i).filter((i) => relativas[i] && texto.includes(relativas[i]))
+        .sort((a, b) => relativas[b].length - relativas[a].length);
+      const nuevas = await Promise.all(usadas.map(crear));
+      usadas.forEach((i, k) => { if (nuevas[k]) texto = texto.split(relativas[i]).join(nuevas[k]); });
+      return texto;
+    };
+    const urlSimple = (i) => {
+      if (!urls.has(i)) urls.set(i, recursos.createUrl(absoluta(i)).catch(() => null));
+      return urls.get(i);
+    };
+    // Una hoja de estilo, con sus fuentes e imágenes ya sustituidas.
+    const urlDe = (i) => {
+      if (!recursos.cssUrls.includes(recursos.urls[i])) return urlSimple(i);
+      if (!urls.has(i)) {
+        urls.set(i, (async () => {
+          const ruta = absoluta(i);
+          const texto = await sustituir(await recursos.settings.archive.getText(ruta), recursos.relativeTo(ruta), urlSimple);
+          const url = URL.createObjectURL(new Blob([texto], { type: 'text/css' }));
+          propias.push(url);
+          return url;
+        })().catch(() => null));
+      }
+      return urls.get(i);
+    };
+    this.spine.hooks.serialize.register(async (salida, seccion) => {
+      seccion.output = await sustituir(salida, recursos.relativeTo(seccion.url), urlDe);
+    });
+    return Promise.resolve();
+  };
+  return () => propias.forEach((u) => URL.revokeObjectURL(u));
+}
+
 // opciones: { perfil, ajustes, cfiInicial, ubicaciones, avisos, cancelado }
 // avisos: { alCambiarPosicion(info), alTocarCentro(), alDeslizarAbajo(),
 //           alGenerarUbicaciones(json), alRepaginar(), alPasarPagina() }
@@ -224,15 +302,21 @@ export async function abrirLibro(contenedor, datos, opciones) {
   if (cancelado()) throw new AperturaCancelada();
   const libro = ePub(datos);
   libro.spine.hooks.content.register(neutralizarScripts);
+  cargaTolerante(libro);
+  const liberarRecursos = recursosBajoDemanda(libro);
+  const megas = (datos.byteLength || datos.size || 0) / (1024 * 1024);
+  const extra = Math.round(megas * MS_EXTRA_POR_MB);
 
   try {
-    await conTiempoLimite(libro.ready, LIMITE_APERTURA_MS, 'tiempo de apertura agotado');
+    await conTiempoLimite(libro.ready, LIMITE_APERTURA_MS + extra, 'tiempo de apertura agotado');
   } catch (e) {
+    liberarRecursos();
     libro.destroy();
     registrar(`No se pudo abrir el EPUB: ${e.message}`, 'error');
     throw new Error(MENSAJE_LIBRO_ILEGIBLE);
   }
   if (cancelado()) {
+    liberarRecursos();
     libro.destroy();
     throw new AperturaCancelada();
   }
@@ -755,12 +839,13 @@ export async function abrirLibro(contenedor, datos, opciones) {
     document.removeEventListener('keydown', alPulsarTecla);
     rendition.destroy();
     libro.destroy();
+    liberarRecursos();
   }
 
   // epub.js no rechaza la promesa de display() si falla un capítulo (emite
   // displayError y se queda esperando), así que se le pone tiempo límite.
   let generando = null;
-  const pintar = (destino) => conTiempoLimite(rendition.display(destino), LIMITE_PINTADO_MS, 'el libro no responde');
+  const pintar = (destino) => conTiempoLimite(rendition.display(destino), LIMITE_PINTADO_MS + extra, 'el libro no responde');
   try {
     try {
       await pintar(opciones.cfiInicial || undefined);
