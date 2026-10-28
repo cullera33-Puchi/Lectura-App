@@ -40,6 +40,7 @@ const LIMITE_APERTURA_MS = 20000;
 const LIMITE_PINTADO_MS = 15000;
 const MS_EXTRA_POR_MB = 300;
 const ESPERA_RECURSO_MS = 8000; // una imagen, fuente u hoja de estilo del libro
+const ESPERA_CAPITULO_MS = 5000; // todos los recursos de un capítulo
 const URL_FUENTES = new URL('../../fonts/fuentes.css', import.meta.url).href;
 const MAX_RESULTADOS = 300;
 const ESPERA_RESALTADO_MS = 800;
@@ -328,7 +329,12 @@ function escalarEnCapitulo(xhtml) {
 // las de cada capítulo al pintarlo. Devuelve la función que libera las hojas
 // de estilo creadas.
 function recursosBajoDemanda(libro) {
-  const urls = new Map(); // posición del recurso -> promesa de su URL
+  // Posición del recurso -> promesa de su URL. Dos memorias: los recursos tal
+  // cual (planas) y las hojas de estilo ya preparadas. Una hoja se prepara
+  // solo con recursos tal cual, así nunca espera a otra hoja ni a sí misma
+  // (una hoja que nombraba su propio archivo dejaba el capítulo en blanco).
+  const planas = new Map();
+  const preparadas = new Map();
   const propias = [];
   libro.replacements = function replacementsBajoDemanda() {
     const recursos = this.resources;
@@ -357,29 +363,49 @@ function recursosBajoDemanda(libro) {
       propias.push(url);
       return url;
     };
+    // Recursos en preparación, para anotarlos si un capítulo tarda.
+    const pendientes = new Set();
+    const seguir = (ruta, promesa) => {
+      pendientes.add(ruta);
+      return promesa.finally(() => pendientes.delete(ruta));
+    };
     const urlSimple = (i) => {
-      if (!urls.has(i)) urls.set(i, conPlazo(crearUrl(absoluta(i)), absoluta(i)));
-      return urls.get(i);
+      if (!planas.has(i)) planas.set(i, seguir(absoluta(i), conPlazo(crearUrl(absoluta(i)), absoluta(i))));
+      return planas.get(i);
     };
     // Una hoja de estilo, con sus fuentes e imágenes ya sustituidas.
     const urlDe = (i) => {
       if (!recursos.cssUrls.includes(recursos.urls[i])) return urlSimple(i);
-      if (!urls.has(i)) {
-        urls.set(i, (async () => {
+      if (!preparadas.has(i)) {
+        preparadas.set(i, seguir(absoluta(i), (async () => {
           const ruta = absoluta(i);
           const original = await conPlazo(recursos.settings.archive.getText(ruta), ruta);
           if (original == null) return null;
-          const texto = escalarTamanosFijos(await sustituir(original, recursos.relativeTo(ruta), urlSimple));
+          const relativas = recursos.relativeTo(ruta);
+          relativas[i] = null; // su propio nombre no se sustituye
+          const texto = escalarTamanosFijos(await sustituir(original, relativas, urlSimple));
           const url = URL.createObjectURL(new Blob([texto], { type: 'text/css' }));
           propias.push(url);
           return url;
-        })().catch(() => null));
+        })().catch(() => null)));
       }
-      return urls.get(i);
+      return preparadas.get(i);
     };
+    // Plazo para la sustitución completa de un capítulo: si no termina, se
+    // pinta tal cual (sin sus imágenes, fuentes ni estilos) y se anota qué
+    // seguía pendiente. Un capítulo sin imágenes es mejor que uno en blanco.
     this.spine.hooks.serialize.register(async (salida, seccion) => {
       try {
-        seccion.output = escalarEnCapitulo(await sustituir(salida, recursos.relativeTo(seccion.url), urlDe));
+        let plazo;
+        const vencido = new Promise((resolver) => { plazo = setTimeout(() => resolver(null), ESPERA_CAPITULO_MS); });
+        const sustituido = await Promise.race([sustituir(salida, recursos.relativeTo(seccion.url), urlDe), vencido]);
+        clearTimeout(plazo);
+        if (sustituido == null) {
+          registrar(`Lector: ${seccion.href} se pinta sin sus imágenes ni estilos porque no estaban listos en ${ESPERA_CAPITULO_MS / 1000} s. Pendientes: ${[...pendientes].join(', ') || 'ninguno'}`, 'error');
+          seccion.output = escalarEnCapitulo(salida);
+          return;
+        }
+        seccion.output = escalarEnCapitulo(sustituido);
       } catch (e) {
         // Mejor el capítulo sin imágenes que un capítulo en blanco.
         registrar(`Lector: recursos de ${seccion.href} sin cargar (${e.message})`, 'error');
@@ -1103,7 +1129,9 @@ export async function abrirLibro(contenedor, datos, opciones) {
     liberar();
     if (cancelado()) throw new AperturaCancelada();
     registrar(`No se pudo pintar el libro: ${e.message}`, 'error');
-    throw new Error(MENSAJE_LIBRO_ILEGIBLE);
+    // El EPUB se ha leído bien (no es DRM ni un archivo dañado): no ha
+    // terminado de pintarse.
+    throw new Error('El libro no ha terminado de abrirse. Vuelve a intentarlo y, si se repite, copia el diagnóstico en Ajustes.');
   } finally {
     pintado = true;
     clearTimeout(vigia);

@@ -81,4 +81,17 @@ async function epubMaquetado() {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-module.exports = { epubDanado, epubIlustrado, epubNotas, epubMaquetado };
+// Hoja de estilo que menciona su propio nombre (en un comentario), como
+// algunos EPUB de editorial: la app se quedaba esperándose a sí misma.
+async function epubEstiloCircular() {
+  const zip = new JSZip();
+  base(zip, 'Libro con estilo circular',
+    '<item id="css" href="Styles/estilo.css" media-type="text/css"/><item id="otra" href="Styles/base.css" media-type="text/css"/><item id="c1" href="Text/c1.xhtml" media-type="application/xhtml+xml"/>',
+    '<itemref idref="c1"/>', '<li><a href="Text/c1.xhtml">Capítulo 1</a></li>');
+  zip.file('OEBPS/Styles/estilo.css', '/* estilo.css: hoja principal. Ver también base.css */ p { text-indent: 1em; }');
+  zip.file('OEBPS/Styles/base.css', '/* base.css, importada desde estilo.css */ h1 { text-align: center; }');
+  zip.file('OEBPS/Text/c1.xhtml', `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Uno</title><link rel="stylesheet" type="text/css" href="../Styles/estilo.css"/><link rel="stylesheet" type="text/css" href="../Styles/base.css"/></head><body><h1>Capítulo 1</h1>${parrafos(10, 'Uno')}</body></html>`);
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+module.exports = { epubDanado, epubIlustrado, epubNotas, epubMaquetado, epubEstiloCircular };

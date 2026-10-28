@@ -4,7 +4,7 @@
 // libro de Penguin).
 const { chromium, devices } = require('playwright');
 const { URL_APP, ok } = require('../lib/entorno.js');
-const { epubIlustrado } = require('../lib/epubs-raros.js');
+const { epubIlustrado, epubEstiloCircular } = require('../lib/epubs-raros.js');
 
 (async () => {
   const datos = await epubIlustrado(3, 1);
@@ -42,6 +42,14 @@ const { epubIlustrado } = require('../lib/epubs-raros.js');
     await p.click('#lista-indice button:has-text("Lámina 2")'); await p.waitForTimeout(2000);
     const dos = await p.evaluate(() => [...document.querySelectorAll('#visor iframe')].map((f) => f.contentDocument?.body?.innerText || '').join(' '));
     ok(/no se puede mostrar/.test(dos), `${perfil}: un capítulo con el texto dañado muestra el aviso en lugar de quedarse en blanco`);
+    // Hoja de estilo que nombra su propio archivo: antes se esperaba a sí
+    // misma y el capítulo se quedaba en blanco.
+    await p.goBack(); await p.waitForTimeout(600);
+    await p.setInputFiles('#archivo-epub', [{ name: 'circular.epub', mimeType: 'application/epub+zip', buffer: await epubEstiloCircular() }]); await p.waitForTimeout(1500);
+    await p.click('#pantalla-biblioteca button[aria-label="Abrir Libro con estilo circular"]'); await p.waitForTimeout(2500);
+    const circular = await p.evaluate(() => [...document.querySelectorAll('#visor iframe')].map((f) => f.contentDocument?.body?.innerText || '').join(' '));
+    const sangria = await p.evaluate(() => { const f = document.querySelector('#visor iframe'); const q = f?.contentDocument?.querySelector('p'); return q ? f.contentWindow.getComputedStyle(q).textIndent : null; });
+    ok(/Uno: párrafo/.test(circular) && sangria && sangria !== '0px', `${perfil}: una hoja de estilo que se nombra a sí misma no deja el capítulo en blanco (sangría ${sangria})`);
     console.log(perfil, 'errores', errores);
     await ctx.close();
   }
