@@ -39,6 +39,7 @@ const ESPERA_CONTIGUO_MS = 1500;
 const LIMITE_APERTURA_MS = 20000;
 const LIMITE_PINTADO_MS = 15000;
 const MS_EXTRA_POR_MB = 300;
+const ESPERA_RECURSO_MS = 8000; // una imagen, fuente u hoja de estilo del libro
 const URL_FUENTES = new URL('../../fonts/fuentes.css', import.meta.url).href;
 const MAX_RESULTADOS = 300;
 const ESPERA_RESALTADO_MS = 800;
@@ -285,10 +286,18 @@ function cargaTolerante(libro) {
   const capitulos = new Set();
   libro.loaded.spine.then(() => libro.spine.each((s) => capitulos.add(s.url)));
   const xml = (texto) => new DOMParser().parseFromString(texto, 'application/xhtml+xml');
+  // El capítulo se lee directamente del archivo: la carga de epub.js no
+  // termina nunca si el archivo no se puede descomprimir.
+  const leerCapitulo = async (ruta) => {
+    const lectura = libro.archive?.getText(libro.resolve(ruta));
+    if (!lectura) return cargar(ruta); // libro sin archivo comprimido
+    const texto = await conTiempoLimite(lectura, ESPERA_RECURSO_MS, 'no responde');
+    return /\.html?$/i.test(ruta) ? new DOMParser().parseFromString(texto, 'text/html') : xml(texto);
+  };
   libro.load = async (ruta) => {
     if (!capitulos.has(ruta)) return cargar(ruta);
     try {
-      const doc = await cargar(ruta);
+      const doc = await leerCapitulo(ruta);
       if (!doc?.getElementsByTagName('parsererror').length) return doc;
       registrar(`Capítulo con errores de XHTML, leído como HTML: ${ruta}`, 'error');
       const html = new DOMParser().parseFromString(await libro.archive.getText(libro.resolve(ruta)), 'text/html');
@@ -331,8 +340,25 @@ function recursosBajoDemanda(libro) {
       usadas.forEach((i, k) => { if (nuevas[k]) texto = texto.split(relativas[i]).join(nuevas[k]); });
       return texto;
     };
+    // epub.js no da por terminada la creación de un recurso que no se puede
+    // descomprimir (su promesa no se resuelve nunca) y el capítulo se quedaría
+    // en blanco esperándolo. Con un plazo, se pinta sin ese recurso.
+    const conPlazo = (promesa, ruta) => conTiempoLimite(Promise.resolve(promesa), ESPERA_RECURSO_MS, 'no responde')
+      .catch((e) => {
+        registrar(`Lector: recurso del libro que no se puede leer (${e?.message || e}): ${ruta}`, 'error');
+        return null;
+      });
+    // Se lee el recurso directamente del archivo (getBlob sí avisa si falla) y
+    // se crea su URL aquí, en lugar de con createUrl de epub.js.
+    const crearUrl = async (ruta) => {
+      const lectura = recursos.settings.archive.getBlob(ruta);
+      if (!lectura) throw new Error('no está en el EPUB');
+      const url = URL.createObjectURL(await lectura);
+      propias.push(url);
+      return url;
+    };
     const urlSimple = (i) => {
-      if (!urls.has(i)) urls.set(i, recursos.createUrl(absoluta(i)).catch(() => null));
+      if (!urls.has(i)) urls.set(i, conPlazo(crearUrl(absoluta(i)), absoluta(i)));
       return urls.get(i);
     };
     // Una hoja de estilo, con sus fuentes e imágenes ya sustituidas.
@@ -341,7 +367,9 @@ function recursosBajoDemanda(libro) {
       if (!urls.has(i)) {
         urls.set(i, (async () => {
           const ruta = absoluta(i);
-          const texto = escalarTamanosFijos(await sustituir(await recursos.settings.archive.getText(ruta), recursos.relativeTo(ruta), urlSimple));
+          const original = await conPlazo(recursos.settings.archive.getText(ruta), ruta);
+          if (original == null) return null;
+          const texto = escalarTamanosFijos(await sustituir(original, recursos.relativeTo(ruta), urlSimple));
           const url = URL.createObjectURL(new Blob([texto], { type: 'text/css' }));
           propias.push(url);
           return url;
@@ -1043,11 +1071,26 @@ export async function abrirLibro(contenedor, datos, opciones) {
   registrar(`Lector: pintando ${dosPaginas ? 'a doble página' : 'a una página'} en ${contenedor.clientWidth} x ${contenedor.clientHeight} px`
     + `${opciones.cfiInicial ? ', en la posición guardada' : ', al principio'} (${Math.round(megas * 10) / 10} MB)`);
   let pintado = false;
+  // Fase en la que está cada vista: preparando el capítulo, cargándolo en su
+  // marco o ya cargado.
+  const estadoVistas = () => (rendition.manager?.views?.all?.() || []).map((v) => {
+    const marco = v.iframe;
+    const fase = v.contents ? 'cargado' : (marco?.srcdoc || marco?.src ? 'cargando en el marco' : 'preparando el capítulo');
+    return `${v.section?.href} ${Math.round(v.width?.() || 0)} px, ${fase}`;
+  }).join('; ') || 'ninguna';
+  const pasosPintado = [];
+  const inicioPintado = performance.now();
+  const marca = (texto) => pasosPintado.length < 12 && pasosPintado.push(`${texto} a los ${Math.round(performance.now() - inicioPintado)} ms`);
+  libro.spine.hooks.serialize.register((salida, seccion) => { if (!pintado) marca(`${seccion.href} preparándose`); });
+  rendition.hooks.content.register((contents) => { if (!pintado) marca(`${libro.spine.get(contents.sectionIndex)?.href} cargado en su marco`); });
   const vigia = setTimeout(() => {
     if (pintado || destruido) return;
-    const vistas = (rendition.manager?.views?.all?.() || []).map((v) => `${v.section?.href} ${Math.round(v.width?.() || 0)} px`);
-    registrar(`Lector: la primera página tarda más de 4 s. Vistas: ${vistas.join(', ') || 'ninguna'}`, 'error');
+    registrar(`Lector: la primera página tarda más de 4 s. Vistas: ${estadoVistas()}. ${pasosPintado.join('; ')}`, 'error');
   }, 4000);
+  const vigia2 = setTimeout(() => {
+    if (pintado || destruido) return;
+    registrar(`Lector: la primera página tarda más de 12 s. Vistas: ${estadoVistas()}. ${pasosPintado.join('; ')}`, 'error');
+  }, 12000);
   try {
     try {
       await pintar(opciones.cfiInicial || undefined);
@@ -1064,6 +1107,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
   } finally {
     pintado = true;
     clearTimeout(vigia);
+    clearTimeout(vigia2);
   }
   if (cancelado()) {
     liberar();
