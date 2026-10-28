@@ -1,6 +1,7 @@
 // Lista "Quiero leer" (punto 6): los próximos libros, en el orden que elija
-// el usuario. Viaja en biblioteca.json (campo quieroLeer) y, como la lista se
-// ordena a mano, gana entera la versión más reciente.
+// el usuario. Viaja en biblioteca.json (campo quieroLeer) y se fusiona libro a
+// libro (ver fusionarQuieroLeer): añadir o quitar un libro en un dispositivo no
+// borra lo que se haya hecho en el otro.
 
 import { leerAjuste, escribirVarios, leerYEscribir } from './almacen.js';
 import { fusionarQuieroLeer } from '../sync/fusion.js';
@@ -9,7 +10,7 @@ import { marcarExtrasPendientes } from './colecciones.js';
 const CLAVE = 'quieroLeer';
 
 export async function leerQuieroLeer() {
-  return (await leerAjuste(CLAVE)) || { ids: [], fecha: null };
+  return (await leerAjuste(CLAVE)) || { ids: [], fecha: null, entradas: {} };
 }
 
 // Lo fusionado en una sincronización se vuelve a fusionar con lo actual, por
@@ -20,8 +21,14 @@ export async function guardarQuieroLeerFusionado(lista) {
   }));
 }
 
-async function guardar(ids) {
-  await escribirVarios([{ almacen: 'ajustes', valor: { ids, fecha: new Date().toISOString() }, clave: CLAVE }]);
+// cambio: { id, quitado } al añadir o quitar un libro; sin él, solo cambia el orden.
+async function guardar(lista, ids, cambio = null) {
+  const fecha = new Date().toISOString();
+  const entradas = { ...(lista.entradas || {}) };
+  // Listas anteriores sin entradas: se anotan los que ya estaban.
+  for (const id of lista.ids) if (!entradas[id]) entradas[id] = { fecha: lista.fecha || fecha, quitado: false };
+  if (cambio) entradas[cambio.id] = { fecha, quitado: cambio.quitado };
+  await escribirVarios([{ almacen: 'ajustes', valor: { ids, fecha, entradas }, clave: CLAVE }]);
   await marcarExtrasPendientes();
 }
 
@@ -31,18 +38,20 @@ export async function estaEnQuieroLeer(libroId) {
 
 // Añade al final o quita. Devuelve true si queda en la lista.
 export async function alternarQuieroLeer(libroId) {
-  const { ids } = await leerQuieroLeer();
-  const dentro = ids.includes(libroId);
-  await guardar(dentro ? ids.filter((id) => id !== libroId) : [...ids, libroId]);
+  const lista = await leerQuieroLeer();
+  const dentro = lista.ids.includes(libroId);
+  await guardar(lista, dentro ? lista.ids.filter((id) => id !== libroId) : [...lista.ids, libroId], { id: libroId, quitado: dentro });
   return !dentro;
 }
 
-export async function moverEnQuieroLeer(libroId, paso) {
-  const { ids } = await leerQuieroLeer();
-  const i = ids.indexOf(libroId);
-  const j = i + paso;
-  if (i < 0 || j < 0 || j >= ids.length) return;
-  const nuevos = [...ids];
+// Intercambia el libro con su vecino visible (la lista puede guardar ids de
+// libros eliminados o aún no recibidos, que no se muestran).
+export async function moverEnQuieroLeer(libroId, vecinoId) {
+  const lista = await leerQuieroLeer();
+  const i = lista.ids.indexOf(libroId);
+  const j = lista.ids.indexOf(vecinoId);
+  if (i < 0 || j < 0 || i === j) return;
+  const nuevos = [...lista.ids];
   [nuevos[i], nuevos[j]] = [nuevos[j], nuevos[i]];
-  await guardar(nuevos);
+  await guardar(lista, nuevos);
 }

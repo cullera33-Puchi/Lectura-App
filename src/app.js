@@ -6,7 +6,7 @@
 
 import { cargarPreferencias, preferencias, alCambiarPreferencias } from './datos/preferencias.js';
 import { leerAjuste, guardarAjuste } from './datos/almacen.js';
-import { iniciarSesionGoogle } from './sync/google.js';
+import { iniciarSesionGoogle, esperandoGoogle } from './sync/google.js';
 import {
   prepararBiblioteca, pintarBiblioteca, mostrarMensaje, librosParaMostrar, descargando,
 } from './biblioteca/biblioteca.js';
@@ -14,14 +14,15 @@ import { pintarInicio, configurarInicio } from './biblioteca/inicio.js';
 import { pintarEstadisticas, configurarEstadisticas } from './estadisticas/pantalla.js';
 import {
   prepararPantallaLector, abrirPantallaLector, cerrarPantallaLector, lectorAbierto, cerrarPanelAbierto,
-  idLibroAbierto, refrescarMarcadores,
+  idLibroAbierto, refrescarMarcadores, revisarPosicionRemota,
 } from './lector/pantalla-lector.js';
 import { AperturaCancelada } from './lector/lector.js';
 import { leerLibro } from './datos/libros.js';
 import { sincronizando } from './sync/sincronizar.js';
 import { mostrarAviso } from './ui/aviso.js';
-import { prepararAjustes, pintarAjustes, pintarDiagnostico } from './ui/ajustes.js';
-import { prepararCopias } from './ui/copias.js';
+import { trabajoEnCurso, avisarAlQuedarLibre, vigilarSelector } from './ui/actividad.js';
+import { prepararAjustes, pintarAjustes, pintarDiagnostico, limpiarResultadoDrive } from './ui/ajustes.js';
+import { prepararCopias, pintarCopias } from './ui/copias.js';
 import { completarEdicionesPendientes } from './biblioteca/importar.js';
 import { prepararFicha, fichaAbierta, cerrarFicha } from './ui/ficha.js';
 import { prepararDeslizarPestanas } from './ui/deslizar-pestanas.js';
@@ -98,6 +99,7 @@ async function irAPestana(nombre) {
 
 function abrirAjustes() {
   if (!$('pantalla-ajustes').hidden) return; // doble toque: una sola entrada
+  limpiarResultadoDrive();
   history.pushState({ pantalla: 'ajustes' }, '');
   mostrarPantalla('ajustes');
   pintarAjustes();
@@ -113,7 +115,10 @@ async function abrirLibro(id) {
   if (abriendo) return; // doble toque en una portada
   abriendo = true;
   scrollAntesDeLeer = window.scrollY;
-  history.pushState({ pantalla: 'lector' }, '');
+  // Si se abre desde una hoja o la ficha, el lector ocupa su entrada del
+  // historial (la capa se cierra a la vez y ya no la retira).
+  if (history.state?.capa) history.replaceState({ pantalla: 'lector' }, '');
+  else history.pushState({ pantalla: 'lector' }, '');
   try {
     await abrirPantallaLector(id);
   } catch (e) {
@@ -145,13 +150,15 @@ async function comprobarLibroAbierto() {
   if (!libro || libro.eliminado) {
     mostrarAviso('Este libro se ha eliminado de la biblioteca desde el otro dispositivo.', 6000);
     volverDesde('lector');
+    return;
   }
+  revisarPosicionRemota().catch((e) => registrar(`Posición remota: ${e.message}`, 'error'));
 }
 
 // Recarga con la versión nueva solo si no hay nada en curso.
 function appOciosa() {
   return !lectorAbierto() && !abriendo && !sincronizando() && !hojaAbierta() && !fichaAbierta() && descargando.size === 0
-    && $('pantalla-bienvenida').hidden;
+    && !trabajoEnCurso() && !esperandoGoogle() && $('pantalla-bienvenida').hidden;
 }
 
 function recargarSiProcede() {
@@ -187,6 +194,8 @@ window.addEventListener('popstate', async () => {
       await cerrarPantallaLector(); // cancela la apertura en curso
     } else if (pantallaAbierta) {
       history.pushState({ pantalla: pantallaAbierta }, '');
+    } else if (fichaAbierta()) {
+      history.pushState({ capa: true }, ''); // la ficha de debajo conserva su entrada
     }
     return;
   }
@@ -227,6 +236,7 @@ async function iniciar() {
   prepararSincronizacion({
     terminado: async () => {
       await refrescar();
+      if (!$('pantalla-ajustes').hidden) pintarCopias().catch(() => {});
       await comprobarLibroAbierto();
     },
   });
@@ -262,6 +272,9 @@ async function iniciar() {
   const persistencia = await pedirPersistencia();
   registrar(`navigator.storage.persist(): ${persistencia}`);
 
+  vigilarSelector($('archivo-epub'));
+  vigilarSelector($('archivo-copia'));
+  avisarAlQuedarLibre(() => recargarSiProcede());
   if ('serviceWorker' in navigator) {
     // Si ya había una versión instalada y se activa otra, se recarga para usar
     // el código nuevo. Si se está leyendo, se espera a la próxima apertura.
@@ -300,10 +313,13 @@ async function iniciar() {
     // sincronice (sin conexión, sesión caducada): "Hoy", la racha y la semana
     // no deben quedarse en el día anterior.
     const otroDia = ocultaDesde && new Date(ocultaDesde).toDateString() !== new Date().toDateString();
-    if ((minutosFuera >= MINUTOS_FUERA || otroDia) && !lectorAbierto() && $('pantalla-bienvenida').hidden) {
+    if (!$('pantalla-bienvenida').hidden) return;
+    if ((minutosFuera >= MINUTOS_FUERA || otroDia) && !lectorAbierto()) {
       refrescar().catch((e) => registrar(`Repintado al volver: ${e.message}`, 'error'));
-      if (minutosFuera >= MINUTOS_FUERA) alEntrarEnLaApp('al volver a la app');
     }
+    // También con un libro abierto: el otro dispositivo puede haber avanzado y,
+    // al terminar, se ofrece ir a su posición (revisarPosicionRemota).
+    if (minutosFuera >= MINUTOS_FUERA) alEntrarEnLaApp('al volver a la app');
   });
 }
 

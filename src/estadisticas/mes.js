@@ -53,7 +53,7 @@ export async function mostrarDetalleMes(anio, mes) {
   cifras.append(
     cifra(formatoDuracion(d.ms), 'de lectura'),
     cifra(String(d.dias), d.dias === 1 ? 'día con lectura' : 'días con lectura'),
-    cifra(String(d.paginas), 'páginas pasadas'),
+    cifra(String(d.paginas), d.paginas === 1 ? 'página pasada' : 'páginas pasadas'),
     cifra(String(d.terminados), d.terminados === 1 ? 'libro terminado' : 'libros terminados'),
   );
   partes.push(cifras);
@@ -69,7 +69,8 @@ export async function mostrarDetalleMes(anio, mes) {
       fila.addEventListener('click', () => abrirFichaDe(l.libroId));
     }
     const texto = el('div', 't-texto');
-    const tiempo = [l.ms ? formatoDuracion(l.ms) : null, l.paginas ? plural(l.paginas, 'página', 'páginas') : null]
+    const minutos = l.ms >= 30000 ? formatoDuracion(l.ms) : (l.ms ? 'menos de 1 min' : null);
+    const tiempo = [minutos, l.paginas ? plural(l.paginas, 'página', 'páginas') : null]
       .filter(Boolean).join(', ');
     texto.append(el('div', 't-titulo', libro?.titulo || 'Libro eliminado'));
     if (tiempo) texto.append(el('div', 't-fecha', tiempo));

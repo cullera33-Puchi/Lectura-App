@@ -63,8 +63,8 @@ async function ordenarQuieroLeer() {
     };
     fila.append(
       texto,
-      botonOrden('arriba', `Subir ${libro.titulo}`, () => moverEnQuieroLeer(libro.id, -1), i === 0),
-      botonOrden('abajo', `Bajar ${libro.titulo}`, () => moverEnQuieroLeer(libro.id, 1), i === lista.length - 1),
+      botonOrden('arriba', `Subir ${libro.titulo}`, () => moverEnQuieroLeer(libro.id, lista[i - 1]?.id), i === 0),
+      botonOrden('abajo', `Bajar ${libro.titulo}`, () => moverEnQuieroLeer(libro.id, lista[i + 1]?.id), i === lista.length - 1),
       botonOrden('quitar', `Quitar ${libro.titulo} de Quiero leer`, () => alternarQuieroLeer(libro.id), false),
     );
     grupo.appendChild(fila);

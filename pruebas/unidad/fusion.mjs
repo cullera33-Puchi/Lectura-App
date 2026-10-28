@@ -39,3 +39,20 @@ ok(p.progreso.progreso.a.dispositivo === 'Tablet' && !p.escribirRemoto, 'posici√
 const u = f.unirBibliotecas([f.normalizarBiblioteca({ version: 1, libros: [L('a', '1')] }), f.normalizarBiblioteca({ version: 1, libros: [L('b', '1'), L('a', '2', { eliminado: true })] })]);
 ok(u.libros.length === 2 && u.libros.find((l) => l.id === 'a').eliminado, 'une dos biblioteca.json duplicados');
 ok(f.normalizarProgreso({ version: 1, progreso: { a: null, b: P('b', '1') } }).progreso.a === undefined, 'descarta progreso nulo');
+
+// Quiero leer (0.8.5): libro a libro, no la lista entera.
+{
+  const T = (h) => `2026-10-2${h}T10:00:00Z`;
+  const iphone = { ids: ['A', 'B'], fecha: T(1), entradas: { A: { fecha: T(1), quitado: false }, B: { fecha: T(1), quitado: false } } };
+  const tablet = { ids: ['C'], fecha: T(2), entradas: { C: { fecha: T(2), quitado: false } } };
+  const r = f.fusionarQuieroLeer(tablet, iphone);
+  ok(r.ids.join() === 'C,A,B', `una alta en otro dispositivo no borra la lista (${r.ids.join()})`);
+  const quitaB = { ids: ['A', 'C'], fecha: T(3), entradas: { ...r.entradas, B: { fecha: T(3), quitado: true } } };
+  const conD = { ids: ['C', 'A', 'B', 'D'], fecha: T(4), entradas: { ...r.entradas, D: { fecha: T(4), quitado: false } } };
+  const m1 = f.fusionarQuieroLeer(quitaB, conD);
+  const m2 = f.fusionarQuieroLeer(conD, quitaB);
+  ok(m1.ids.join() === 'C,A,D' && m2.ids.join() === 'C,A,D', `quitar en uno y a√±adir en otro se combinan (${m1.ids.join()} y ${m2.ids.join()})`);
+  ok(JSON.stringify(f.fusionarQuieroLeer(m1, m1)) === JSON.stringify(m1), 'fusionar consigo misma no cambia nada');
+  const antigua = { ids: ['X', 'Y'], fecha: T(1) };
+  ok(f.fusionarQuieroLeer(tablet, antigua).ids.join() === 'C,X,Y', 'una lista de antes de 0.8.5 se une, no se pierde');
+}

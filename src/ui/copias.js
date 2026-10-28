@@ -11,6 +11,7 @@ import { leerSincronizacion, avisarCambioPendientes } from '../datos/pendientes.
 import { mostrarHoja } from './hoja.js';
 import { mostrarAviso, ocultarAviso } from './aviso.js';
 import { registrar } from './registro.js';
+import { conTrabajo } from './actividad.js';
 
 const $ = (id) => document.getElementById(id);
 const MAX_COPIAS_EN_LISTA = 45;
@@ -29,11 +30,17 @@ async function archivoCopia() {
   return new File([JSON.stringify(datos, null, 2)], nombre, { type: 'application/json' });
 }
 
+// Se vuelve a preparar tras cada cambio con Ajustes abierto (restaurar,
+// sincronizar). Una preparación antigua que termine tarde no pisa la nueva.
+let generacion = 0;
+
 export async function pintarCopias() {
-  const ultima = await leerSincronizacion('ultimaCopia');
-  $('ultima-copia').textContent = ultima ? `Última copia en Drive: ${fechaLarga(ultima)}.` : 'Todavía no hay ninguna copia en Drive: se hará en la próxima sincronización.';
+  const g = ++generacion;
   preparada = null;
-  archivoCopia().then((f) => { preparada = f; }).catch(() => {});
+  archivoCopia().then((f) => { if (g === generacion) preparada = f; }).catch(() => {});
+  const ultima = await leerSincronizacion('ultimaCopia');
+  if (g !== generacion) return;
+  $('ultima-copia').textContent = ultima ? `Última copia en Drive: ${fechaLarga(ultima)}.` : 'Todavía no hay ninguna copia en Drive: se hará en la próxima sincronización.';
 }
 
 function descargarConEnlace(archivo) {
@@ -78,10 +85,13 @@ async function confirmarYRestaurar(datos) {
     [{ id: 'si', texto: 'Restaurar' }],
   );
   if (eleccion !== 'si') return;
-  const r = await restaurarCopia(copia);
-  avisarCambioPendientes();
-  mostrarAviso(textoRestauracion(r), 10000);
-  await alRestaurar();
+  await conTrabajo(async () => { // sin recargas a mitad
+    const r = await restaurarCopia(copia);
+    pintarCopias().catch(() => {}); // la copia para descargar ya incluye lo restaurado
+    avisarCambioPendientes();
+    mostrarAviso(textoRestauracion(r), 10000);
+    await alRestaurar();
+  });
 }
 
 async function restaurarDesdeDrive(promesaToken) {

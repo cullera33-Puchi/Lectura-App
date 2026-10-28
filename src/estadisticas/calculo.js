@@ -216,7 +216,7 @@ export function previsionFin({ msLibro, fraccion, sesiones, ahora = new Date() }
 export function detalleMes({ sesiones, terminados, anio, mes }) {
   const porLibro = new Map();
   const porDispositivo = new Map();
-  const dias = new Set();
+  const dias = new Map();
   let ms = 0;
   let paginas = 0;
   for (const s of sesiones) {
@@ -227,7 +227,7 @@ export function detalleMes({ sesiones, terminados, anio, mes }) {
     if (fecha.getFullYear() !== anio || fecha.getMonth() !== mes) continue;
     ms += duracion;
     paginas += p;
-    dias.add(claveDia(fecha));
+    sumarDia(dias, claveDia(fecha), duracion, p);
     const libro = porLibro.get(s.libroId) || { libroId: s.libroId, ms: 0, paginas: 0 };
     libro.ms += duracion;
     libro.paginas += p;
@@ -254,7 +254,8 @@ export function detalleMes({ sesiones, terminados, anio, mes }) {
     nombre: NOMBRES_MES[mes],
     ms,
     paginas,
-    dias: dias.size,
+    // Mismo criterio de día con lectura que el resto: un minuto o una página.
+    dias: [...dias.values()].filter((v) => v.ms >= 60000 || v.paginas > 0).length,
     terminados: terminadosMes.length,
     libros,
     dispositivos: [...porDispositivo.entries()].sort((a, b) => b[1] - a[1]).map(([nombre, t]) => ({ nombre, ms: t })),
@@ -284,14 +285,16 @@ export function resumenAnual({ sesiones, terminados, anio }) {
   let sesionMasLarga = null;
 
   for (const s of sesiones) {
-    const fecha = new Date(s.inicio);
-    if (fecha.getFullYear() !== anio) continue;
     const d = duracionMs(s);
     const p = Number(s.paginas) || 0;
     if (!d && !p) continue;
+    // Los días, con el reparto de medianoche, como en la pantalla principal
+    // (también la parte del 1 de enero de una sesión de Nochevieja).
+    sumarSesionPorDias(dias, s, d, p);
+    const fecha = new Date(s.inicio);
+    if (fecha.getFullYear() !== anio) continue;
     ms += d;
     paginas += p;
-    sumarDia(dias, claveDia(s.inicio), d, p);
     porMes[fecha.getMonth()] += d;
     porDiaSemana[fecha.getDay()] += d;
     const hora = fecha.getHours();
@@ -307,7 +310,9 @@ export function resumenAnual({ sesiones, terminados, anio }) {
     lista.forEach((v, j) => { if (v > 0 && (i < 0 || v > lista[i])) i = j; });
     return i;
   };
-  const diasConLectura = [...dias.entries()].filter(([, v]) => v.ms >= 60 * 1000 || v.paginas > 0).map(([k]) => k);
+  const diasConLectura = [...dias.entries()]
+    .filter(([k, v]) => k.startsWith(`${anio}-`) && (v.ms >= 60 * 1000 || v.paginas > 0))
+    .map(([k]) => k);
   const mes = maximo(porMes);
   const diaSemana = maximo(porDiaSemana);
   const franja = maximo(porFranja);

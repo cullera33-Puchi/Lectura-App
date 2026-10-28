@@ -14,10 +14,17 @@ import { pintarCopias } from './copias.js';
 const $ = (id) => document.getElementById(id);
 const MAX_LINEAS_REGISTRO = 150;
 
+let operandoDrive = false;
+
 function mostrarDrive(texto, esError = false) {
   const caja = $('resultado-drive');
   caja.textContent = texto;
   caja.classList.toggle('error', esError);
+}
+
+// Al abrir Ajustes no se muestra el resultado de una operación anterior.
+export function limpiarResultadoDrive() {
+  if (!operandoDrive) mostrarDrive('');
 }
 
 export function textoSesion() {
@@ -88,6 +95,7 @@ export function pintarAjustes() {
 // previo para que la ventana de Google se abra dentro del gesto.
 function conDrive(promesaToken, operacion) {
   (async () => {
+    operandoDrive = true;
     try {
       mostrarDrive('Conectando con Google...');
       const token = await promesaToken;
@@ -101,6 +109,7 @@ function conDrive(promesaToken, operacion) {
       }
       registrar(e.message, 'error');
     } finally {
+      operandoDrive = false;
       pintarDiagnostico();
     }
   })();
@@ -175,5 +184,7 @@ export function prepararAjustes() {
   suscribirSesion(() => {
     pintarSesion();
     pintarDiagnostico();
+    // Sesión renovada (por ejemplo, con el botón Sincronizar): fuera el error antiguo.
+    if (tokenVigente() && $('resultado-drive').classList.contains('error')) limpiarResultadoDrive();
   });
 }

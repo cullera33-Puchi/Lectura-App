@@ -40,11 +40,24 @@ const CONTEXTO_FRAGMENTO = 45; // caracteres antes y después de la coincidencia
 
 // Texto sin tildes y en minúsculas, con la posición original de cada carácter,
 // para buscar sin distinguir tildes y poder señalar la coincidencia exacta.
+// Los espacios de cualquier tipo (salto de línea, espacio duro, varios
+// seguidos) cuentan como uno, y los invisibles (guion opcional, espacio de
+// ancho cero) no cuentan: así "la triste" encuentra "la\ntriste".
+const INVISIBLES = /[\u00ad\u200b\u2060\ufeff]/;
+
 function normalizarConPosiciones(texto) {
   let normal = '';
   const posiciones = [];
   for (let i = 0; i < texto.length; i++) {
-    const c = texto[i].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const t = texto[i];
+    if (INVISIBLES.test(t)) continue;
+    if (/\s/.test(t)) {
+      if (normal.endsWith(' ')) continue;
+      normal += ' ';
+      posiciones.push(i);
+      continue;
+    }
+    const c = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     for (let k = 0; k < c.length; k++) {
       normal += c[k];
       posiciones.push(i);
@@ -54,7 +67,13 @@ function normalizarConPosiciones(texto) {
 }
 
 export function normalizarBusqueda(texto) {
-  return normalizarConPosiciones((texto || '').trim().replace(/\s+/g, ' ')).normal;
+  return normalizarConPosiciones((texto || '').trim()).normal.trim();
+}
+
+// Descarte rápido con la misma normalización que normalizarConPosiciones.
+function textoNormalizado(texto) {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u00ad\u200b\u2060\ufeff]/g, '')
+    .replace(/\s+/g, ' ').toLowerCase();
 }
 
 // Coincidencias dentro de cada nodo de texto de un capítulo cargado. Cada una
@@ -70,7 +89,7 @@ function buscarEnSeccion(seccion, buscado, maximo) {
     if (!original || original.length < buscado.length) continue;
     // Descarte rápido: casi ningún nodo contiene lo buscado, y el mapa de
     // posiciones (carácter a carácter) solo se construye para los que sí.
-    if (!original.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(buscado)) continue;
+    if (!textoNormalizado(original).includes(buscado)) continue;
     const { normal, posiciones } = normalizarConPosiciones(original);
     let desde = 0;
     for (let i = normal.indexOf(buscado, desde); i >= 0 && resultados.length < maximo; i = normal.indexOf(buscado, desde)) {
@@ -164,9 +183,27 @@ function neutralizarScripts(doc) {
   }
 }
 
+// Primer enlace dentro de una entrada sin enlace propio (los títulos de parte
+// de un índice anidado), para poder ir a ella.
+function decodificar(texto) {
+  try {
+    return decodeURIComponent(texto);
+  } catch {
+    return texto; // "%" suelto en un id: se usa tal cual
+  }
+}
+
+function primerHref(elementos) {
+  for (const e of elementos || []) {
+    const h = e.href || primerHref(e.subitems);
+    if (h) return h;
+  }
+  return '';
+}
+
 function aplanarIndice(elementos, nivel = 0, lista = []) {
   for (const e of elementos || []) {
-    lista.push({ etiqueta: (e.label || '').trim() || 'Sin título', href: e.href, nivel });
+    lista.push({ etiqueta: (e.label || '').trim() || 'Sin título', href: e.href, destino: e.href || primerHref(e.subitems), nivel });
     aplanarIndice(e.subitems, nivel + 1, lista);
   }
   return lista;
@@ -201,18 +238,27 @@ export async function abrirLibro(contenedor, datos, opciones) {
   }
 
   const metadatos = libro.packaging.metadata;
+  const rtl = metadatos.direction === 'rtl';
 
   // Índice y etiqueta de capítulo por sección del spine. Los enlaces del índice
   // son relativos al archivo del índice, que puede estar en una subcarpeta.
   const baseIndice = directorio(libro.packaging.navPath || libro.packaging.ncxPath);
-  const indice = aplanarIndice(libro.navigation?.toc).map((e) => {
-    let href = e.href;
+  const resolver = (ruta) => {
+    if (!ruta) return { href: '', seccion: null };
+    let href = ruta;
     let seccion = libro.spine.get(href);
-    if (!seccion && baseIndice && href) {
-      href = unirRuta(baseIndice, e.href);
+    if (!seccion && baseIndice) {
+      href = unirRuta(baseIndice, ruta);
       seccion = libro.spine.get(href);
     }
-    return { ...e, href, seccion: seccion?.index ?? null };
+    return { href, seccion: seccion?.index ?? null };
+  };
+  const indice = aplanarIndice(libro.navigation?.toc).map((e) => {
+    const { href, seccion } = resolver(e.href);
+    // destino: dónde lleva tocar la entrada (los títulos sin enlace, a su
+    // primer capítulo); no cuenta para la etiqueta de capítulo.
+    const destino = e.href ? href : resolver(e.destino).href;
+    return { ...e, href, destino, seccion, ancla: href.includes('#') ? decodificar(href.split('#')[1]) : null };
   });
   const etiquetaPorSeccion = new Map();
   for (const e of indice) {
@@ -223,6 +269,43 @@ export async function abrirLibro(contenedor, datos, opciones) {
       if (etiquetaPorSeccion.has(i)) return etiquetaPorSeccion.get(i);
     }
     return null;
+  }
+
+  // Varias entradas del índice pueden apuntar a anclas del mismo archivo (un
+  // libro en un solo XHTML, o subapartados). La entrada actual es la última
+  // cuya ancla queda antes del principio de la página. Los CFI de las anclas
+  // se calculan al cargar cada sección.
+  const cfiAncla = new Map(); // posición en el índice -> CFI del ancla
+  function anotarAnclas(contents) {
+    indice.forEach((e, i) => {
+      if (e.seccion !== contents.sectionIndex || !e.ancla) return;
+      try {
+        const el = contents.document.getElementById(e.ancla);
+        if (el) cfiAncla.set(i, contents.cfiFromNode(el));
+      } catch {
+        // ancla que no se puede situar: cuenta como el principio de la sección
+      }
+    });
+  }
+  function entradaActual(indiceSeccion, cfiInicio) {
+    let elegida = -1;
+    let comparador = null;
+    for (let i = 0; i < indice.length; i++) {
+      if (indice[i].seccion !== indiceSeccion) continue;
+      if (elegida === -1) {
+        elegida = i;
+        continue;
+      }
+      const cfi = cfiAncla.get(i);
+      if (!cfi || !cfiInicio) continue;
+      try {
+        comparador ||= new ePub.CFI();
+        if (comparador.compare(cfi, cfiInicio) <= 0) elegida = i;
+      } catch {
+        // CFI no comparable: se mantiene la anterior
+      }
+    }
+    return elegida;
   }
 
   let css = cssLibro(perfil, ajustes);
@@ -351,13 +434,23 @@ export async function abrirLibro(contenedor, datos, opciones) {
     terminarAnimacion?.();
   }
 
+  // epub.js marca sus propios desplazamientos "silenciosos" para no avisar de
+  // ellos; si el desplazamiento no llega a ocurrir (ya estaba en 0, o en el
+  // principio o el final del libro), la marca se queda puesta y se tragaría el
+  // siguiente paso de página de la app, que no se guardaría. Se quita antes de
+  // desplazar para que epub.js avise siempre de la nueva posición.
+  function desplazar(d, px) {
+    if (rendition.manager) rendition.manager.ignore = false;
+    d.scrollLeft += px;
+  }
+
   // velocidad: px por ms del dedo al soltar (si la página venía arrastrada).
   function animarVistas(desde, hasta, velocidad = null) {
     acabarAnimacionYa();
     const d = contenedorDesplazable();
     if (!d || desde === hasta) {
       moverVistas(0);
-      if (d && hasta) d.scrollLeft += hasta;
+      if (d && hasta) desplazar(d, hasta);
       return Promise.resolve();
     }
     const distancia = Math.abs(hasta - desde);
@@ -383,7 +476,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
         // la posición definitiva.
         animaciones.forEach((a) => a.cancel());
         moverVistas(0);
-        if (hasta) d.scrollLeft += hasta;
+        if (hasta) desplazar(d, hasta);
         resolver();
       };
       terminarAnimacion = terminar;
@@ -402,8 +495,13 @@ export async function abrirLibro(contenedor, datos, opciones) {
   // Lleva la página a la siguiente (1), la anterior (-1) o la de partida (0).
   // arrastre: lo que el dedo ya ha desplazado la página (perfil Móvil).
   function completarPaso(direccion, arrastre = 0, velocidad = null) {
-    if (!movil) {
-      if (direccion === 0) return Promise.resolve();
+    // En los libros de derecha a izquierda, el desplazamiento horizontal va al
+    // revés: se pasa con epub.js, que ya lo tiene en cuenta (sin animación).
+    if (!movil || rtl) {
+      if (direccion === 0) {
+        moverVistas(0);
+        return Promise.resolve();
+      }
       return direccion > 0 ? rendition.next() : rendition.prev();
     }
     if (direccion !== 0 && !hayMasContenido(direccion)) {
@@ -480,6 +578,14 @@ export async function abrirLibro(contenedor, datos, opciones) {
     return evento.clientX + rMarco.left - rVisor.left;
   }
 
+  // Enlaces que epub.js sigue dentro del libro. Los externos (web, correo,
+  // imágenes enlazadas) los marca con target=_blank y la app no los abre: un
+  // toque en ellos cuenta como un toque normal (pasar página, controles).
+  function enlaceInterno(objetivo) {
+    const enlace = objetivo.closest?.('a[href]');
+    return Boolean(enlace) && enlace.getAttribute('target') !== '_blank' && !/^mailto:/i.test(enlace.getAttribute('href') || '');
+  }
+
   function actuarPorZona(x) {
     const ancho = contenedor.clientWidth;
     if (x < ancho / 3) anterior();
@@ -528,7 +634,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
       const ahora = performance.now();
       gesto.muestras.push({ x: t.screenX, t: ahora });
       while (gesto.muestras.length > 2 && ahora - gesto.muestras[0].t > MUESTRAS_GESTO_MS) gesto.muestras.shift();
-      if (gesto.arrastrando && movil) {
+      if (gesto.arrastrando && movil && !rtl) {
         // Sin más contenido en esa dirección, el arrastre se frena.
         const direccion = dx < 0 ? 1 : -1;
         gesto.arrastre = hayMasContenido(direccion) ? -dx : -dx / 4;
@@ -561,7 +667,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
         return;
       }
       if (!g.movido && duracion < MAX_DURACION_TOQUE_MS) {
-        if (e.target.closest?.('a[href]')) return; // los enlaces del libro funcionan
+        if (enlaceInterno(e.target)) return; // los enlaces del libro funcionan
         e.preventDefault(); // evita el clic sintético y el zoom por doble toque
         actuarPorZona(g.xVisor);
         return;
@@ -572,7 +678,8 @@ export async function abrirLibro(contenedor, datos, opciones) {
     // Ratón (ordenador). Se ignora el clic que el navegador genera tras un toque.
     doc.addEventListener('click', (e) => {
       if (Date.now() - ultimoToque < VENTANA_CLIC_TRAS_TOQUE_MS) return;
-      if (e.target.closest?.('a[href]')) return;
+      if (enlaceInterno(e.target)) return;
+      if (e.target.closest?.('a[href]')) e.preventDefault(); // externo: no se intenta abrir
       actuarPorZona(xEnVisor(e, contents));
     });
 
@@ -596,6 +703,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
   }
 
   rendition.hooks.content.register(instalarEstilos);
+  rendition.hooks.content.register(anotarAnclas);
   rendition.hooks.content.register(instalarGestos);
   // Enlace interno del libro (nota, índice dentro del texto): antes de que
   // epub.js salte, se avisa con la posición de partida para poder volver.
@@ -608,20 +716,30 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   // --- Posición ---
 
+  // Las ubicaciones (para el porcentaje y la barra) solo valen cuando están
+  // completas: mientras se generan, epub.js ya devuelve algunas pero el total
+  // sigue en 0 y todo daría 0 %.
+  const ubicacionesListas = () => libro.locations.total > 0;
+
   function infoPosicion(posicion) {
     const inicioPos = posicion.start;
     const pagina = inicioPos.displayed?.page;
     const total = inicioPos.displayed?.total;
-    const conUbicaciones = libro.locations.length() > 0;
+    // Con doble página se cuenta desde la página derecha y por pantallas.
+    const fin = posicion.end?.index === inicioPos.index ? (posicion.end.displayed?.page || pagina) : pagina;
+    const porPantalla = rendition.manager?.layout?.divisor || 1;
+    const conUbicaciones = ubicacionesListas();
+    const entrada = entradaActual(inicioPos.index, inicioPos.cfi);
     return {
       cfi: inicioPos.cfi,
       href: inicioPos.href,
       seccion: inicioPos.index,
-      capitulo: etiquetaCapitulo(inicioPos.index),
+      entrada: entrada >= 0 ? entrada : null,
+      capitulo: entrada >= 0 ? indice[entrada].etiqueta : etiquetaCapitulo(inicioPos.index),
       porcentaje: conUbicaciones ? libro.locations.percentageFromCfi(inicioPos.cfi) : null,
       ubicacion: conUbicaciones ? libro.locations.locationFromCfi(inicioPos.cfi) : null,
       totalUbicaciones: conUbicaciones ? libro.locations.length() : null,
-      paginasRestantesCapitulo: pagina && total ? Math.max(0, total - pagina) : null,
+      paginasRestantesCapitulo: fin && total ? Math.ceil(Math.max(0, total - fin) / porPantalla) : null,
       final: Boolean(posicion.atEnd),
     };
   }
@@ -722,7 +840,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
     quitarResaltado();
     const tipo = perfil === 'tinta' ? 'underline' : 'highlight';
     const estilos = perfil === 'tinta'
-      ? { stroke: '#000000', 'stroke-opacity': '1', 'stroke-width': '3' }
+      ? { stroke: temaEfectivo(perfil, ajustes).texto, 'stroke-opacity': '1', 'stroke-width': '3', 'mix-blend-mode': 'normal' }
       : { fill: '#ffcc33', 'fill-opacity': '0.45', 'mix-blend-mode': 'multiply' };
     rendition.annotations.add(tipo, cfi, {}, null, 'resultado-busqueda', estilos);
     resaltado = { cfi, tipo, desde: Date.now() };
@@ -778,10 +896,10 @@ export async function abrirLibro(contenedor, datos, opciones) {
     },
     // Barra para recorrer el libro: necesita las ubicaciones (porcentaje).
     hayUbicaciones() {
-      return libro.locations.length() > 0;
+      return ubicacionesListas();
     },
     destinoDePorcentaje(proporcion) {
-      if (!libro.locations.length()) return null;
+      if (!ubicacionesListas()) return null;
       const cfi = libro.locations.cfiFromPercentage(Math.min(1, Math.max(0, proporcion)));
       let capitulo = null;
       try {

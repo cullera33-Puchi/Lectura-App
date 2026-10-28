@@ -194,13 +194,40 @@ export function fusionarObjetivos(local = {}, remoto = {}) {
 
 // Añade a la biblioteca fusionada las colecciones y los objetivos. Devuelve
 // también si eso obliga a escribir el archivo remoto.
-// Lista "Quiero leer": { ids, fecha }. Se ordena a mano, así que gana entera
-// la más reciente.
+// Lista "Quiero leer": { ids, fecha, entradas }. Se fusiona libro a libro:
+// entradas guarda, por id, cuándo se añadió o quitó (quitado: true) y gana la
+// fecha más reciente. El orden es el de la lista que se cambió más tarde, con
+// los libros que solo estén en la otra al final. Las listas anteriores a 0.8.5
+// no traen entradas: cada id cuenta como añadido en la fecha de la lista.
+function entradasQuieroLeer(lista) {
+  const entradas = {};
+  for (const [id, e] of Object.entries(esObjeto(lista.entradas) ? lista.entradas : {})) {
+    if (esObjeto(e)) entradas[id] = { fecha: e.fecha || '', quitado: Boolean(e.quitado) };
+  }
+  for (const id of lista.ids) if (!entradas[id]) entradas[id] = { fecha: lista.fecha || '', quitado: false };
+  return entradas;
+}
+
 export function fusionarQuieroLeer(local, remoto) {
   const valida = (x) => esObjeto(x) && Array.isArray(x.ids);
-  if (!valida(remoto)) return valida(local) ? local : { ids: [], fecha: null };
-  if (!valida(local)) return remoto;
-  return (local.fecha || '') > (remoto.fecha || '') ? local : remoto;
+  if (!valida(local) && !valida(remoto)) return { ids: [], fecha: null, entradas: {} };
+  const a = valida(local) ? local : { ids: [], fecha: null };
+  const b = valida(remoto) ? remoto : { ids: [], fecha: null };
+  const ea = entradasQuieroLeer(a);
+  const eb = entradasQuieroLeer(b);
+  const entradas = {};
+  for (const id of new Set([...Object.keys(eb), ...Object.keys(ea)])) {
+    const x = ea[id];
+    const y = eb[id];
+    entradas[id] = !x ? y : !y ? x : (x.fecha > y.fecha ? x : y); // empate: la remota
+  }
+  const [primera, segunda] = (a.fecha || '') > (b.fecha || '') ? [a, b] : [b, a];
+  const ids = [];
+  for (const id of [...primera.ids, ...segunda.ids]) {
+    if (entradas[id] && !entradas[id].quitado && !ids.includes(id)) ids.push(id);
+  }
+  const fecha = [a.fecha, b.fecha].filter(Boolean).sort().pop() || null;
+  return { ids, fecha, entradas: ordenarClaves(entradas) };
 }
 
 export function fusionarExtrasBiblioteca(biblioteca, remoto, extrasLocales) {

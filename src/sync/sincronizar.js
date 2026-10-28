@@ -26,6 +26,7 @@ import {
   normalizarBiblioteca, normalizarProgreso, fusionarBiblioteca, fusionarProgreso, posicionesNuevas,
   unirBibliotecas, unirProgresos, fusionarExtrasBiblioteca, normalizarSesiones, fusionarSesiones,
   VERSION_SESIONES, normalizarAnotaciones, fusionarAnotaciones, unirAnotaciones, fusionarColecciones, fusionarObjetivos,
+  libroRemoto,
 } from './fusion.js';
 import { todasLasAnotaciones, guardarAnotacionesFusionadas } from '../datos/anotaciones.js';
 import { leerQuieroLeer, guardarQuieroLeerFusionado } from '../datos/quiero-leer.js';
@@ -42,7 +43,7 @@ import { idDispositivo, nombreDispositivo } from '../datos/preferencias.js';
 import {
   listarPendientes, borrarPendiente, leerSincronizacion, guardarSincronizacion,
 } from '../datos/pendientes.js';
-import { leer } from '../datos/almacen.js';
+import { leer, leerYEscribir } from '../datos/almacen.js';
 import { huella, completarEdicion } from '../biblioteca/importar.js';
 import { copiaDiaria } from './copias.js';
 import { registrar } from '../ui/registro.js';
@@ -63,6 +64,11 @@ let enCurso = null;
 
 export function sincronizando() {
   return Boolean(enCurso);
+}
+
+// Promesa de la sincronización en curso (o null), para esperarla.
+export function sincronizacionEnCurso() {
+  return enCurso;
 }
 
 // Menos llamadas a Drive (0.8.3). Una sincronización sin cambios hace tres
@@ -102,14 +108,17 @@ async function localizarCarpetas(token) {
       registrar('La carpeta de Drive guardada ya no existe: se vuelve a localizar');
     }
   }
-  const { carpeta } = await localizarCarpeta(token);
+  const { carpeta, creada } = await localizarCarpeta(token);
   const [libros, portadas, contenido] = await Promise.all([
     localizarSubcarpeta(token, carpeta.id, 'libros'),
     localizarSubcarpeta(token, carpeta.id, 'portadas'),
     listarCarpeta(token, carpeta.id),
   ]);
   const carpetas = { raiz: carpeta.id, libros: libros.id, portadas: portadas.id };
-  await guardarSincronizacion(CLAVE_CARPETAS, { ...carpetas, dia: hoyLocal() });
+  // Una carpeta recién creada aquí no se da por buena hasta la siguiente
+  // sincronización: el otro dispositivo puede haber creado otra a la vez, y
+  // entonces ambos deben pasar a la más antigua.
+  await guardarSincronizacion(CLAVE_CARPETAS, { ...carpetas, dia: creada ? null : hoyLocal() });
   return { carpetas, contenido, nombresLibros: await nombresEnCarpeta(token, libros.id) };
 }
 
@@ -163,6 +172,12 @@ async function escribirJson(token, carpetaId, archivo, nombre, datos) {
   return escrito;
 }
 
+// Error de Drive con un archivo concreto (no de sesión ni de conexión): el
+// resto de la sincronización puede seguir.
+function esFalloDeUnArchivo(e) {
+  return e instanceof ErrorDrive && e.estadoHttp !== 401 && navigator.onLine;
+}
+
 async function subirLibro(token, carpetas, pendiente, remotoPorId, nombresLibros) {
   const libro = await leerLibro(pendiente.id);
   if (!libro || libro.eliminado) return 'descartado';
@@ -175,9 +190,20 @@ async function subirLibro(token, carpetas, pendiente, remotoPorId, nombresLibros
   // Ya está en Drive con la misma huella (por ejemplo, importado también en el
   // otro dispositivo): se reutiliza.
   if (remoto?.archivoDriveId && !remoto.eliminado && nombresLibros.has(`${libro.id}.epub`)) {
-    await actualizarLibro(pendiente.id, {
-      archivoDriveId: remoto.archivoDriveId,
-      portadaDriveId: remoto.portadaDriveId ?? libro.portadaDriveId ?? null,
+    await leerYEscribir(['libros'], 'libros', pendiente.id, (actual) => {
+      if (!actual || actual.eliminado) return null;
+      // Sin tocar desde que se importó (las dos fechas coinciden): el archivo es
+      // el mismo, así que gana el registro de Drive, con los datos que se hayan
+      // editado en el otro dispositivo. Si se ha editado aquí, solo se enlaza.
+      const sinTocar = actual.fechaModificacion === actual.fechaAlta;
+      const nuevo = sinTocar
+        ? { ...actual, ...libroRemoto(remoto), edicion: remoto.edicion ?? actual.edicion ?? null }
+        : {
+          ...actual,
+          archivoDriveId: remoto.archivoDriveId,
+          portadaDriveId: remoto.portadaDriveId ?? actual.portadaDriveId ?? null,
+        };
+      return { operaciones: [{ almacen: 'libros', valor: nuevo }] };
     });
     return 'existente';
   }
@@ -220,8 +246,18 @@ async function subirPortadaCambiada(token, carpetas, pendiente, remotoPorId, rec
     await borrarPendiente(pendiente.clave);
     return [];
   }
+  const remoto = remotoPorId.get(libro.id);
+  const remotoMasNuevo = remoto && (remoto.fechaModificacion || '') > (libro.fechaModificacion || '');
+  // El otro dispositivo lo eliminó después: no se sube la portada.
+  if (remotoMasNuevo && remoto.eliminado) {
+    await borrarPendiente(pendiente.clave);
+    return [];
+  }
   const nueva = (await subirArchivo(token, carpetas.portadas, `${libro.id}.jpg`, portada, 'image/jpeg', { libro: libro.id })).id;
-  const viejas = [libro.portadaDriveId, remotoPorId.get(libro.id)?.portadaDriveId].filter((id) => id && id !== nueva);
+  const viejas = [libro.portadaDriveId, remoto?.portadaDriveId].filter((id) => id && id !== nueva);
+  // Si el registro de Drive es más reciente (título, valoración, colecciones
+  // cambiados en el otro dispositivo), se parte de él: solo cambia la portada.
+  if (remotoMasNuevo) await aplicarLibroRemoto(libroRemoto(remoto));
   await actualizarLibro(libro.id, { portadaDriveId: nueva, fechaModificacion: new Date().toISOString() });
   portadasLocales[libro.id] = nueva;
   const actual = await leer('pendientes', pendiente.clave);
@@ -351,9 +387,16 @@ async function sincronizarAnotaciones(token, raiz, avisos, contenido) {
       fusion = fusionarAnotaciones(antes, remoto.datos);
     }
   }
-  // Marcadores añadidos o quitados en el otro dispositivo, para el resumen.
-  const recibidos = Object.entries(fusion.anotaciones.anotaciones)
-    .filter(([id, a]) => (a.fecha || '') > (antes[id]?.fecha || '')).length;
+  // Marcadores añadidos o quitados en el otro dispositivo, para el resumen. Un
+  // marcador borrado que este dispositivo no tenía no cuenta.
+  let recibidos = 0;
+  let quitados = 0;
+  for (const [id, a] of Object.entries(fusion.anotaciones.anotaciones)) {
+    const local = antes[id];
+    if ((a.fecha || '') <= (local?.fecha || '')) continue;
+    if (!a.eliminado) recibidos += 1;
+    else if (local && !local.eliminado) quitados += 1;
+  }
   if (fusion.escribirRemoto || remoto.duplicados.length) {
     await escribirJson(token, raiz, remoto.archivo, NOMBRE_ANOTACIONES, fusion.anotaciones);
   }
@@ -369,7 +412,7 @@ async function sincronizarAnotaciones(token, raiz, avisos, contenido) {
     if (!recientes[id] || (a.fecha || '') > (recientes[id].fecha || '')) recientes[id] = a;
   }
   await guardarAnotacionesFusionadas(recientes);
-  return recibidos;
+  return { recibidos, quitados };
 }
 
 const PORTADAS_A_LA_VEZ = 4;
@@ -419,7 +462,13 @@ async function ejecutar(token, alEstado) {
         resumen.avisos.push(MENSAJE_CUOTA);
         break;
       }
-      throw e;
+      // Sesión rechazada, sin conexión o fallo local: se aborta como siempre.
+      // Un fallo de Drive con un libro no impide sincronizar posiciones,
+      // marcadores y estadísticas: el libro queda pendiente para la próxima.
+      if (!esFalloDeUnArchivo(e)) throw e;
+      const libro = await leerLibro(p.id);
+      registrar(`No se pudo subir "${libro?.titulo || p.id}": ${e.message}`, 'error');
+      resumen.avisos.push(`No se ha podido subir «${libro?.titulo || 'un libro'}». Queda pendiente para la próxima sincronización.`);
     }
   }
 
@@ -428,7 +477,14 @@ async function ejecutar(token, alEstado) {
   const portadasViejas = [];
   for (const p of pendientes.filter((x) => x.tipo === 'subirPortada')) {
     estado('Subiendo portadas...');
-    portadasViejas.push(...await subirPortadaCambiada(token, carpetas, p, remotoPorId, recienSubidos, portadasLocales));
+    try {
+      portadasViejas.push(...await subirPortadaCambiada(token, carpetas, p, remotoPorId, recienSubidos, portadasLocales));
+    } catch (e) {
+      if (!esFalloDeUnArchivo(e)) throw e;
+      const libro = await leerLibro(p.id);
+      registrar(`No se pudo subir la portada de "${libro?.titulo || p.id}": ${e.message}`, 'error');
+      resumen.avisos.push(`No se ha podido subir la portada nueva de «${libro?.titulo || 'un libro'}». Queda pendiente.`);
+    }
   }
 
   // Fusión y escritura. Si alguien ha escrito los JSON mientras se subían los
@@ -540,7 +596,8 @@ async function ejecutar(token, alEstado) {
     sincronizarAnotaciones(token, carpetas.raiz, resumen.avisos, contenido),
   ]);
   resumen.sesiones = sesionesRecibidas;
-  resumen.marcadores = marcadoresRecibidos;
+  resumen.marcadores = marcadoresRecibidos.recibidos;
+  resumen.marcadoresQuitados = marcadoresRecibidos.quitados;
   await guardarSincronizacion('ultima', new Date().toISOString());
 
   // Copia de seguridad del día (solo en la primera sincronización de cada día).
@@ -592,6 +649,7 @@ export function textoResumen(r) {
   if (r.bajas) partes.push(plural(r.bajas, 'libro eliminado', 'libros eliminados'));
   if (r.posiciones) partes.push(plural(r.posiciones, 'posición actualizada', 'posiciones actualizadas'));
   if (r.marcadores) partes.push(plural(r.marcadores, 'marcador recibido', 'marcadores recibidos'));
+  if (r.marcadoresQuitados) partes.push(plural(r.marcadoresQuitados, 'marcador quitado', 'marcadores quitados'));
   const recibido = [r.colecciones && 'colecciones', r.objetivos && 'objetivos', r.quieroLeer && 'Quiero leer'].filter(Boolean);
   if (recibido.length) partes.push(`cambios en ${recibido.join(', ').replace(/, ([^,]*)$/, ' y $1')}`);
   if (r.sesiones) partes.push(plural(r.sesiones, 'sesión de lectura recibida', 'sesiones de lectura recibidas'));
@@ -640,8 +698,12 @@ export async function descargarLibro(token, libro, alAvanzar) {
   if ((await huella(datos)) !== libro.id) {
     throw new Error(`El archivo de "${libro.titulo}" en Drive no coincide con el original. No se ha guardado.`);
   }
-  await guardarArchivoDescargado(libro.id, datos);
+  if (!(await guardarArchivoDescargado(libro.id, datos))) {
+    registrar(`"${libro.titulo}" se ha eliminado durante la descarga. No se guarda.`);
+    return false;
+  }
   if (libro.noDisponible) await actualizarLibro(libro.id, { noDisponible: false });
   registrar(`Descargado "${libro.titulo}"`);
   if (!libro.edicion) completarEdicion(libro).catch(() => {});
+  return true;
 }

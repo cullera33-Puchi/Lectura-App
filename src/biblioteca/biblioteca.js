@@ -1,6 +1,6 @@
 // Pantalla de biblioteca (punto 7 del diseño).
 
-import { listarLibros, eliminarLibro, quitarArchivoLocal } from '../datos/libros.js';
+import { listarLibros, eliminarLibro, quitarArchivoLocal, leerLibro } from '../datos/libros.js';
 import { cambiarEstado } from '../datos/progreso.js';
 import { leerAjuste, guardarAjuste } from '../datos/almacen.js';
 import { listarPendientes, leerSincronizacion } from '../datos/pendientes.js';
@@ -8,7 +8,7 @@ import { perfilActual } from '../datos/preferencias.js';
 import { lectorAbierto } from '../lector/pantalla-lector.js';
 import { asegurarToken, invalidarToken } from '../sync/google.js';
 import { ErrorDrive } from '../sync/drive.js';
-import { descargarLibro, MENSAJE_SIN_CONEXION } from '../sync/sincronizar.js';
+import { descargarLibro } from '../sync/sincronizar.js';
 import { importarArchivo } from './importar.js';
 import {
   crearPortada, estadoDe, textoEstado, estadoCorto,
@@ -24,6 +24,7 @@ import { leerQuieroLeer, alternarQuieroLeer, estaEnQuieroLeer } from '../datos/q
 import { mostrarAviso } from '../ui/aviso.js';
 import { svgIcono } from '../ui/iconos.js';
 import { registrar } from '../ui/registro.js';
+import { conTrabajo } from '../ui/actividad.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -232,7 +233,9 @@ export async function pintarBiblioteca(libros) {
       vacia.textContent = `Ningún libro coincide con "${busqueda}".`;
     }
   } else {
-    vacia.textContent = vista.grupo ? 'No hay libros en este grupo con este filtro.' : 'No hay libros con este filtro.';
+    vacia.textContent = vista.grupo
+      ? (vista.filtro === 'todos' ? 'No hay libros en este grupo.' : 'No hay libros en este grupo con este filtro.')
+      : 'No hay libros con este filtro.';
   }
 
   const enNube = todos.filter((l) => !l.descargado && !l.noDisponible && l.archivoDriveId);
@@ -344,9 +347,14 @@ function pintarAvance(id) {
 
 // Descarga varios libros con un token obtenido dentro del gesto del usuario.
 // Un 401 deja la sesión marcada como caducada para renovarla al volver a pulsar.
+const mensajeSinConexionDescarga = (n) => (n === 1
+  ? 'Sin conexión. Este libro está en Google Drive: conéctate a internet para descargarlo.'
+  : 'Sin conexión. Conéctate a internet para descargar los libros de Google Drive.');
+
 async function descargar(promesaToken, libros) {
   if (!navigator.onLine) {
-    mostrarMensaje(MENSAJE_SIN_CONEXION, true);
+    promesaToken.catch(() => {});
+    mostrarMensaje(mensajeSinConexionDescarga(libros.length), true);
     return false;
   }
   libros.forEach((l) => descargando.set(l.id, 0));
@@ -356,10 +364,11 @@ async function descargar(promesaToken, libros) {
     const token = await promesaToken;
     for (const libro of libros) {
       try {
-        await descargarLibro(token, libro, (avance) => {
+        const guardado = await descargarLibro(token, libro, (avance) => {
           descargando.set(libro.id, avance);
           pintarAvance(libro.id);
         });
+        if (!guardado) todoBien = false; // eliminado durante la descarga
       } catch (e) {
         todoBien = false;
         if (e instanceof ErrorDrive && e.estadoHttp === 401) {
@@ -397,15 +406,27 @@ export function pulsarLibro(libro) {
     mostrarMensaje(`"${libro.titulo}" no está disponible en Google Drive.`, true);
     return;
   }
+  // Sin conexión no se abre la ventana de Google (la comprobación no espera
+  // nada, así que asegurarToken sigue dentro del gesto).
+  if (!navigator.onLine) {
+    mostrarMensaje(mensajeSinConexionDescarga(1), true);
+    return;
+  }
   const promesaToken = asegurarToken(); // dentro del gesto
-  descargar(promesaToken, [libro]).then((bien) => {
-    // Si mientras tanto se ha abierto otro libro, no se cambia de libro.
-    if (bien && !lectorAbierto()) alAbrirLibro(libro.id);
+  descargar(promesaToken, [libro]).then(async (bien) => {
+    // Si mientras tanto se ha abierto otro libro, no se cambia de libro. Si se
+    // ha eliminado durante la descarga, no se abre.
+    const actualizado = await leerLibro(libro.id);
+    if (bien && actualizado && !actualizado.eliminado && !lectorAbierto()) alAbrirLibro(libro.id);
   });
 }
 
-async function importar(archivos) {
-  const resumen = { importados: 0, nuevos: [], duplicados: [], errores: [] };
+function importar(archivos) {
+  return conTrabajo(() => importarAhora(archivos)); // sin recargas a mitad
+}
+
+async function importarAhora(archivos) {
+  const resumen = { importados: 0, nuevos: [], recuperados: [], duplicados: [], errores: [] };
   let n = 0;
   for (const archivo of archivos) {
     n += 1;
@@ -416,6 +437,9 @@ async function importar(archivos) {
         resumen.importados += 1;
         resumen.nuevos.push(r.libro.id);
         registrar(`Importado "${r.libro.titulo}" (${r.libro.id.slice(0, 12)})`);
+      } else if (r.resultado === 'recuperado') {
+        resumen.recuperados.push(r.libro.titulo);
+        registrar(`"${r.libro.titulo}" ya estaba en la biblioteca; ahora también tiene el archivo en este dispositivo`);
       } else if (r.resultado === 'duplicado') {
         resumen.duplicados.push(r.libro.titulo);
         registrar(`"${r.libro.titulo}" ya estaba en la biblioteca`);
@@ -424,14 +448,17 @@ async function importar(archivos) {
         registrar(`${archivo.name} no se puede importar: ${r.detalle}`, 'error');
       }
     } catch (e) {
-      resumen.errores.push(`${archivo.name}: ${e.message}`);
-      registrar(`Error al importar ${archivo.name}: ${e.message}`, 'error');
+      const mensaje = e?.name === 'QuotaExceededError' ? 'No queda espacio en el dispositivo.' : (e?.message || String(e));
+      resumen.errores.push(`${archivo.name}: ${mensaje}`);
+      registrar(`Error al importar ${archivo.name}: ${mensaje}`, 'error');
     }
   }
   const lineas = [];
   if (resumen.importados) {
-    lineas.push(`${resumen.importados === 1 ? '1 libro añadido' : `${resumen.importados} libros añadidos`}. Se subirá a Drive al sincronizar.`);
+    lineas.push(resumen.importados === 1 ? '1 libro añadido. Se subirá a Drive al sincronizar.'
+      : `${resumen.importados} libros añadidos. Se subirán a Drive al sincronizar.`);
   }
+  for (const t of resumen.recuperados) lineas.push(`"${t}" ya estaba en la biblioteca. Ahora también está en este dispositivo.`);
   for (const t of resumen.duplicados) lineas.push(`"${t}" ya está en la biblioteca. No se ha duplicado.`);
   if (resumen.importados) {
     const grupos = gruposDuplicados(await librosParaMostrar(), await leerIgnorados());
@@ -585,6 +612,10 @@ export async function prepararBiblioteca(opciones) {
 
   $('btn-descargar-todos').addEventListener('click', async () => {
     if (descargando.size) return; // ya hay descargas en curso
+    if (!navigator.onLine) {
+      mostrarMensaje(mensajeSinConexionDescarga(2), true);
+      return;
+    }
     const promesaToken = asegurarToken(); // dentro del gesto
     const todos = await librosParaMostrar();
     const enNube = todos.filter((l) => !l.descargado && !l.noDisponible && l.archivoDriveId && !descargando.has(l.id));

@@ -21,7 +21,9 @@ export function listarProgresos() {
 export async function guardarProgreso(id, datos, { mantenerFecha = false, provisional = false } = {}) {
   let fecha = new Date().toISOString();
   if (provisional) fecha = null;
-  else if (mantenerFecha && datos.fecha) fecha = datos.fecha;
+  // Con mantenerFecha, una entrada provisional (sin fecha) sigue sin fecha: no
+  // es un avance y no debe pisar la posición del otro dispositivo.
+  else if (mantenerFecha) fecha = datos.fecha || null;
   const registro = { ...datos, id, fecha };
   const operaciones = [{ almacen: 'progreso', valor: registro }];
   const clave = `progreso:${id}`;

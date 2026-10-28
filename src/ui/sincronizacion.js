@@ -4,7 +4,7 @@ import {
   asegurarToken, invalidarToken, tokenVigente, estadoSesion, suscribirSesion,
 } from '../sync/google.js';
 import { preferencias } from '../datos/preferencias.js';
-import { ErrorDrive } from '../sync/drive.js';
+import { ErrorDrive, esTemporal } from '../sync/drive.js';
 import { sincronizar, sincronizando, textoResumen, MENSAJE_SIN_CONEXION } from '../sync/sincronizar.js';
 import { alCambiarPendientes, avisarCambioPendientes } from '../datos/pendientes.js';
 import { mostrarAviso } from './aviso.js';
@@ -28,7 +28,7 @@ function pintarIndicador(n = pendientes) {
     indicador.hidden = n === 0 && !caducada;
     b.classList.toggle('sesion-caducada', caducada);
     const partes = [];
-    if (n) partes.push(`${n} cambios pendientes`);
+    if (n) partes.push(n === 1 ? '1 cambio pendiente' : `${n} cambios pendientes`);
     if (caducada) partes.push('sesión de Google caducada');
     b.setAttribute('aria-label', partes.length ? `Sincronizar (${partes.join(', ')})` : 'Sincronizar');
     b.title = caducada ? 'La sesión de Google ha caducado. Pulsa para renovarla.' : '';
@@ -69,7 +69,7 @@ export function sincronizacionAutomaticaActiva() {
   return preferencias().dispositivo.sincronizacionAutomatica !== false;
 }
 
-const HAY_CAMBIOS = (r) => r.subidos || r.nuevos || r.bajas || r.posiciones || r.marcadores
+const HAY_CAMBIOS = (r) => r.subidos || r.nuevos || r.bajas || r.posiciones || r.marcadores || r.marcadoresQuitados
   || r.colecciones || r.objetivos || r.quieroLeer || r.avisos.length;
 let ultimaAutomatica = 0;
 
@@ -104,7 +104,7 @@ export async function sincronizarAutomaticamente(motivo) {
     // conexión, red lenta, Drive saturado o sesión caducada (que ya se pide
     // renovar).
     const estado = e instanceof ErrorDrive ? e.estadoHttp : null;
-    const pasajero = !navigator.onLine || estado === 0 || estado === 401 || estado === 429 || estado >= 500;
+    const pasajero = !navigator.onLine || estado === 0 || estado === 401 || (e instanceof ErrorDrive && esTemporal(estado, e.detalle));
     if (!pasajero) mostrarAviso(`No se ha podido sincronizar: ${e.message}`, 8000);
     return null;
   } finally {

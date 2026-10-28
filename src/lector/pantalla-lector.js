@@ -23,7 +23,8 @@ import {
 } from '../ui/temas.js';
 import { registrar } from '../ui/registro.js';
 import { leerSincronizacion } from '../datos/pendientes.js';
-import { mostrarHoja } from '../ui/hoja.js';
+import { mostrarHoja, hojaAbierta } from '../ui/hoja.js';
+import { sincronizacionEnCurso } from '../sync/sincronizar.js';
 import { cargarRitmo, anotarPagina, reiniciarReferencia, tiempoRestante } from './ritmo.js';
 import {
   abrirCapa, cerrarCapa, capaAbierta, cerrarDeslizando,
@@ -33,6 +34,7 @@ import { svgIcono } from '../ui/iconos.js';
 const $ = (id) => document.getElementById(id);
 const MARGEN_REPAGINADO_MS = 2000;
 const ESPERA_AJUSTES_MS = 250;
+const ESPERA_SINCRONIZACION_MS = 3000; // al abrir un libro con la sincronización en marcha
 
 let actual = null; // { id, motor, sesiones, progreso, ultimoCfi, repaginandoHasta }
 let alCerrar = () => {};
@@ -223,11 +225,21 @@ async function saltar(destino) {
 async function volver() {
   const a = actual;
   const v = a?.volver;
-  if (!v) return;
+  // Doble toque (habitual en tinta): el segundo llegaría con la posición de
+  // partida y borraría el camino de vuelta. Se libera al llegar.
+  if (!v || !a.motor || a.volviendo) return;
+  a.volviendo = true;
   registrar('Lector: vuelta a la posición anterior al salto');
   if (a.info?.cfi) anotarSalto(a, a.info.cfi, a.info);
   else a.volver = null;
-  await a.motor.irA(v.cfi);
+  try {
+    await a.motor.irA(v.cfi);
+  } catch (e) {
+    a.volviendo = false;
+    a.volver = v;
+    pintarVolver();
+    registrar(`Lector: no se pudo volver (${e.message})`, 'error');
+  }
 }
 
 // Cada paso de página normal cuenta para ocultar el botón.
@@ -290,6 +302,7 @@ async function alCambiarPosicion(info) {
   const a = actual; // la pantalla puede cerrarse durante una escritura
   if (!a) return;
   a.info = info;
+  a.volviendo = false;
   if (!arrastrandoBarra) pintarInfo(a, info);
   pintarBarra(info);
   pintarBotonMarcador();
@@ -359,15 +372,22 @@ function pintarIndice() {
   const lista = $('lista-indice');
   lista.replaceChildren();
   const seccionActual = actual.info?.seccion ?? -1;
-  // El capítulo actual es la última entrada cuya sección no supera la actual.
-  let marcado = -1;
-  actual.motor.indice.forEach((e, i) => {
-    if (e.seccion !== null && e.seccion <= seccionActual) marcado = i;
-  });
+  // El capítulo actual: la entrada que da el lector (tiene en cuenta las anclas
+  // dentro de un mismo archivo) o, si no, la última cuya sección no supera la
+  // actual.
+  let marcado = actual.info?.entrada ?? -1;
+  if (marcado < 0) {
+    actual.motor.indice.forEach((e, i) => {
+      if (e.seccion !== null && e.seccion <= seccionActual) marcado = i;
+    });
+  }
   actual.motor.indice.forEach((entrada, i) => {
     const li = document.createElement('li');
-    const boton = document.createElement('button');
-    boton.type = 'button';
+    // Un título sin enlace ni capítulos con enlace debajo no lleva a ningún
+    // sitio: se muestra como texto, no como botón.
+    const boton = document.createElement(entrada.destino ? 'button' : 'div');
+    if (entrada.destino) boton.type = 'button';
+    else boton.className = 'indice-titulo';
     const texto = document.createElement('span');
     texto.textContent = entrada.etiqueta;
     boton.appendChild(texto);
@@ -377,11 +397,13 @@ function pintarIndice() {
       boton.setAttribute('aria-current', 'true');
       boton.insertAdjacentHTML('beforeend', svgIcono('check'));
     }
-    boton.addEventListener('click', async () => {
-      cerrarPaneles();
-      controlesVisibles(false);
-      await saltar(entrada.href);
-    });
+    if (entrada.destino) {
+      boton.addEventListener('click', async () => {
+        cerrarPaneles();
+        controlesVisibles(false);
+        await saltar(entrada.destino);
+      });
+    }
     li.appendChild(boton);
     lista.appendChild(li);
   });
@@ -454,9 +476,10 @@ async function lanzarBusqueda() {
   await a.motor.buscar(texto, {
     cancelado: () => !vigente(),
     alAvanzar: (i, n) => {
-      if (vigente()) estado.textContent = `Buscando... capítulo ${i} de ${n}. ${total ? `${total} encontrados` : ''}`;
+      if (vigente()) estado.textContent = `Buscando... capítulo ${i} de ${n}.${total ? ` ${total === 1 ? '1 resultado' : `${total} resultados`}.` : ''}`;
     },
     alResultados: (resultados) => {
+      if (!vigente()) return;
       total += resultados.length;
       lista.append(...resultados.map(fragmento));
     },
@@ -471,7 +494,7 @@ async function lanzarBusqueda() {
 
 function abrirBuscar() {
   // Al cambiar de libro, la búsqueda anterior no vale.
-  if (busqueda.libro !== actual?.id || !busqueda.completa) {
+  if (busqueda.libro !== actual?.id) {
     $('buscar-en-libro').value = '';
     $('lista-busqueda').replaceChildren();
     $('estado-busqueda').textContent = '';
@@ -735,7 +758,21 @@ async function decidirPosicion(id, local) {
     ? remota.dispositivoId !== idDispositivo()
     : remota.dispositivo && remota.dispositivo !== nombreDispositivo());
   const masReciente = remota && (remota.fecha || '') > (local?.fecha || '');
-  if (!esDeOtro || !masReciente || remota.cfi === local?.cfi) return local;
+  // Aunque no se adopte la posición remota, se conserva su estado (por
+  // ejemplo, terminado en el otro dispositivo): si no, el primer paso de
+  // página lo devolvería a "leyendo". Sin entrada local, se parte de la remota.
+  // No se guarda aquí: la fecha local no cambia.
+  let base = local;
+  if (masReciente) {
+    base = local
+      ? { ...local, estado: remota.estado || local.estado, fechaTerminado: remota.fechaTerminado ?? null }
+      : { ...remota, id };
+  }
+  if (!esDeOtro || !masReciente || remota.cfi === local?.cfi) return base;
+  // Si se rechaza la posición del otro dispositivo sin tener una propia, se
+  // empieza por el principio, pero con su estado (terminado).
+  // Sin fecha (provisional): no debe pisar en Drive la posición remota.
+  if (!local) base = remota.estado === 'terminado' ? { ...remota, id, cfi: null, porcentaje: null, capitulo: null, fecha: null } : null;
 
   const porcentaje = remota.porcentaje != null ? ` (${Math.round(remota.porcentaje * 100)} %)` : '';
   const donde = remota.capitulo ? `hasta "${remota.capitulo}"` : 'más adelante';
@@ -755,9 +792,45 @@ async function decidirPosicion(id, local) {
   if (eleccion === 'quedarme' && local) {
     // La posición local pasa a ser la más reciente para que gane al sincronizar.
     registrar('Se mantiene la posición de este dispositivo');
-    return guardarProgreso(id, { ...local, dispositivo: nombreDispositivo(), dispositivoId: idDispositivo() });
+    return guardarProgreso(id, { ...base, dispositivo: nombreDispositivo(), dispositivoId: idDispositivo() });
   }
-  return local; // cancelar no cambia nada
+  return base; // cancelar no cambia nada
+}
+
+// Tras una sincronización con un libro abierto: si ha llegado una posición del
+// otro dispositivo más reciente que la última de aquí, se ofrece ir allí, como
+// al abrir. Cubre abrir el libro mientras la sincronización de entrada aún no
+// había terminado y volver a la app con un libro abierto desde el día antes.
+export async function revisarPosicionRemota() {
+  const a = actual;
+  if (!a?.motor || hojaAbierta()) return;
+  const remota = (await leerSincronizacion('progresoRemoto'))?.progreso?.[a.id];
+  const esDeOtro = remota?.cfi && (remota.dispositivoId
+    ? remota.dispositivoId !== idDispositivo()
+    : remota.dispositivo && remota.dispositivo !== nombreDispositivo());
+  const conocida = [a.fechaAlAbrir, a.progreso?.fecha, a.remotaOfrecida].filter(Boolean).sort().pop() || '';
+  if (!esDeOtro || (remota.fecha || '') <= conocida || remota.cfi === a.ultimoCfi) return;
+  a.remotaOfrecida = remota.fecha; // una sola vez por cada posición recibida
+  const porcentaje = remota.porcentaje != null ? ` (${Math.round(remota.porcentaje * 100)} %)` : '';
+  const donde = remota.capitulo ? `hasta "${remota.capitulo}"` : 'más adelante';
+  const fecha = new Date(remota.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
+  const eleccion = await mostrarHoja(
+    `Leíste ${donde}${porcentaje} en el ${remota.dispositivo} el ${fecha}. ¿Continuar allí?`,
+    [{ id: 'ir', texto: 'Ir allí' }, { id: 'quedarme', texto: 'Quedarme aquí' }],
+  );
+  if (actual !== a || !a.motor) return;
+  if (eleccion === 'ir') {
+    registrar(`Posición del ${remota.dispositivo} aceptada tras sincronizar`);
+    a.progreso = await guardarProgreso(a.id, { ...remota }, { mantenerFecha: true });
+    a.repaginandoHasta = Date.now() + MARGEN_REPAGINADO_MS; // el salto no es un avance
+    await a.motor.irA(remota.cfi);
+  } else if (eleccion === 'quedarme') {
+    registrar('Se mantiene la posición de este dispositivo');
+    a.progreso = await guardarProgreso(a.id, {
+      ...(a.progreso || {}), cfi: a.ultimoCfi, estado: remota.estado || a.progreso?.estado || 'leyendo',
+      fechaTerminado: remota.fechaTerminado ?? null, dispositivo: nombreDispositivo(), dispositivoId: idDispositivo(),
+    });
+  }
 }
 
 export async function abrirPantallaLector(id) {
@@ -767,9 +840,17 @@ export async function abrirPantallaLector(id) {
   const [libro, datos, progresoLocal, ubicaciones] = await Promise.all([
     leerLibro(id), leerArchivo(id), leerProgreso(id), leerUbicaciones(id),
   ]);
-  if (!libro || !datos) throw new Error('El archivo de este libro no está en el dispositivo.');
+  if (!libro || libro.eliminado) throw new Error('Este libro ya no está en la biblioteca.');
+  if (!datos) throw new Error('El archivo de este libro no está en el dispositivo.');
+  // Si la sincronización de entrada está en marcha, se espera un poco: puede
+  // traer una posición más reciente del otro dispositivo.
+  const enMarcha = sincronizacionEnCurso();
+  if (enMarcha) await Promise.race([enMarcha.catch(() => {}), new Promise((r) => setTimeout(r, ESPERA_SINCRONIZACION_MS))]);
+  if (cancelado()) throw new AperturaCancelada();
   const progreso = await decidirPosicion(id, progresoLocal);
   if (cancelado()) throw new AperturaCancelada();
+  // La posición remota que había al abrir ya se ha tenido en cuenta.
+  const remotaAlAbrir = (await leerSincronizacion('progresoRemoto'))?.progreso?.[id]?.fecha || null;
 
   document.body.classList.add('leyendo');
   $('lector').hidden = false;
@@ -793,6 +874,8 @@ export async function abrirPantallaLector(id) {
     sesiones,
     progreso: progreso || null,
     ultimoCfi: progreso?.cfi || null,
+    fechaAlAbrir: progreso?.fecha || null,
+    remotaOfrecida: remotaAlAbrir,
     repaginandoHasta: Infinity, // hasta que termine la apertura
     info: null,
   };
@@ -852,6 +935,11 @@ export async function cerrarPantallaLector() {
   turno += 1; // cancela una apertura en curso
   clearTimeout(temporizadorAjustes);
   clearTimeout(temporizadorBusqueda);
+  // Una búsqueda cortada al cerrar el libro no se conserva (sí una terminada).
+  if (!busqueda.completa) {
+    busqueda.numero += 1;
+    busqueda.libro = null;
+  }
   if (!actual) return;
   const cerrado = actual;
   actual = null;

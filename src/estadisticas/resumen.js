@@ -56,7 +56,7 @@ export async function mostrarResumenAnual(anio) {
   cifras.append(
     cifra(String(r.terminados.length), r.terminados.length === 1 ? 'libro terminado' : 'libros terminados'),
     cifra(formatoDuracion(r.ms), 'de lectura'),
-    cifra(String(r.paginas), 'páginas pasadas'),
+    cifra(String(r.paginas), r.paginas === 1 ? 'página pasada' : 'páginas pasadas'),
     cifra(String(r.dias), r.dias === 1 ? 'día con lectura' : 'días con lectura'),
     cifra(plural(r.rachaMasLarga, 'día', 'días'), 'de racha más larga'),
     cifra(formatoDuracion(r.mediaPorDiaMs), 'de media cada día que lees'),

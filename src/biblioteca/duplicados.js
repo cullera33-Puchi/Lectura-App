@@ -25,7 +25,10 @@ function normalizar(texto) {
 // Identificadores que no sirven para comparar (vacíos o genéricos).
 function identificadorUtil(id) {
   const n = normalizar(id);
-  return n.length >= 6 && !/^(urn )?(uuid )?0+$/.test(n) ? n : null;
+  // Se mira sin espacios: "urn:uuid:00000000-0000-..." o "urn:isbn:" vacío son
+  // marcadores de relleno que comparten libros distintos.
+  const c = n.replace(/ /g, '');
+  return c.length >= 6 && !/^(urn)?(uuid|isbn|calibre)?0*$/.test(c) ? n : null;
 }
 
 // Grupos de libros que parecen el mismo. Cada grupo lleva una clave estable

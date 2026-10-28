@@ -29,6 +29,11 @@ const estado = {
 
 let clienteToken = null;
 let peticionEnCurso = null;
+
+// La ventana de Google está abierta esperando respuesta.
+export function esperandoGoogle() {
+  return Boolean(peticionEnCurso);
+}
 const oyentes = new Set();
 
 export function estadoSesion() {
@@ -138,20 +143,28 @@ function cargarGis() {
   });
 }
 
+// Textos en español para los códigos de Google (el código queda en el registro).
+const TEXTOS_GIS = {
+  popup_closed: 'Se ha cerrado la ventana de Google sin conectar.',
+  popup_failed_to_open: 'No se ha podido abrir la ventana de Google. Vuelve a pulsar para intentarlo.',
+  access_denied: 'No se ha dado permiso en Google. Vuelve a pulsar y acepta el acceso a Drive.',
+};
+const textoGis = (codigo) => TEXTOS_GIS[codigo] || 'No se ha podido conectar con Google. Inténtalo de nuevo.';
+
 function alRecibirRespuestaGis(respuesta) {
   const pendiente = peticionEnCurso;
   peticionEnCurso = null;
   if (respuesta.error) {
     anotarIntento(`error: ${respuesta.error}`);
     registrar(`Google devolvió un error: ${respuesta.error} ${respuesta.error_description || ''}`, 'error');
-    pendiente?.rechazar(new Error(`Google: ${respuesta.error}`));
+    pendiente?.rechazar(new Error(textoGis(respuesta.error)));
     avisar();
     return;
   }
   if (!google.accounts.oauth2.hasGrantedAllScopes(respuesta, PERMISO_DRIVE)) {
     anotarIntento('permiso de Drive no concedido');
     registrar('No se ha concedido el permiso de Drive. Marca la casilla de Drive al autorizar.', 'error');
-    pendiente?.rechazar(new Error('Permiso de Drive no concedido'));
+    pendiente?.rechazar(new Error('No se ha dado permiso para Google Drive. Vuelve a pulsar y marca la casilla de Drive.'));
     avisar();
     return;
   }
@@ -165,7 +178,7 @@ function alFallarGis(error) {
   // Tipos documentados: popup_failed_to_open, popup_closed, unknown.
   anotarIntento(`fallo: ${error.type}`);
   registrar(`Fallo en la ventana de Google: ${error.type}${error.message ? ` (${error.message})` : ''}`, 'error');
-  pendiente?.rechazar(new Error(`Ventana de Google: ${error.type}`));
+  pendiente?.rechazar(new Error(textoGis(error.type)));
   avisar();
 }
 
@@ -178,7 +191,7 @@ export function conectarConVentana() {
     prepararClienteGis();
     return Promise.reject(new Error(navigator.onLine
       ? 'El login de Google todavía se está cargando. Inténtalo de nuevo en unos segundos.'
-      : 'Sin conexión. Se sincronizará cuando vuelvas a pulsar con conexión.'));
+      : 'Sin conexión. Conéctate a internet para conectar con Google.'));
   }
   if (peticionEnCurso) peticionEnCurso.rechazar(new Error('Sustituida por una nueva petición'));
   const promesa = new Promise((resolver, rechazar) => {

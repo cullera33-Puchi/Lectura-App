@@ -44,6 +44,9 @@ function graficoBarras(datos, { resumen, formato, alPulsar }) {
   let seleccionada = null;
 
   datos.forEach((d) => {
+    // Las barras que abren un detalle (meses) lo abren en cada toque, sin
+    // alternar la selección.
+    const abreDetalle = Boolean(alPulsar) && !d.futuro;
     const barra = el('button', `barra${d.futuro ? ' futura' : ''}${d.valor ? '' : ' vacia'}`);
     barra.type = 'button';
     barra.setAttribute('aria-label', `${d.descripcion}: ${formato(d.valor)}`);
@@ -52,7 +55,7 @@ function graficoBarras(datos, { resumen, formato, alPulsar }) {
     barra.appendChild(relleno);
     barra.addEventListener('click', () => {
       seleccionada?.classList.remove('seleccionada');
-      if (seleccionada === barra) {
+      if (seleccionada === barra && !abreDetalle) {
         seleccionada = null;
         detalle.textContent = resumen;
         return;
@@ -60,7 +63,7 @@ function graficoBarras(datos, { resumen, formato, alPulsar }) {
       seleccionada = barra;
       barra.classList.add('seleccionada');
       detalle.textContent = `${d.descripcion}: ${formato(d.valor)}`;
-      if (alPulsar && !d.futuro) alPulsar(d);
+      if (abreDetalle) alPulsar(d);
     });
     barras.appendChild(barra);
     etiquetas.appendChild(el('span', '', d.etiqueta));
@@ -76,6 +79,13 @@ function botonResumen(anio) {
   boton.insertAdjacentHTML('beforeend', svgIcono('avanzar', 'chevron'));
   boton.addEventListener('click', () => mostrarResumenAnual(anio));
   return boton;
+}
+
+// Tiempo de hoy. Con una meta aún sin cumplir se redondea hacia abajo, para
+// no mostrar "30 min" junto a una meta de 30 min que todavía no se ha cumplido.
+function minutosHoy(e) {
+  const ms = e.metaDiaria && !e.metaDiaria.cumplida ? Math.floor(e.hoy.ms / 60000) * 60000 : e.hoy.ms;
+  return formatoDuracion(ms);
 }
 
 function cifra(valor, texto) {
@@ -116,7 +126,7 @@ function seccionHoy(e) {
   const hoy = el('div', 'grupo tarjeta');
   const cifras = el('div', 'tarjeta-cifras');
   cifras.append(
-    cifra(formatoDuracion(e.hoy.ms), plural(e.hoy.paginas, 'página', 'páginas')),
+    cifra(minutosHoy(e), plural(e.hoy.paginas, 'página', 'páginas')),
     cifra(plural(e.racha.actual, 'día', 'días'), `seguidos. Récord: ${plural(e.racha.record, 'día', 'días')}`),
   );
   hoy.appendChild(cifras);
@@ -126,7 +136,7 @@ function seccionHoy(e) {
     const falta = Math.max(1, Math.ceil(meta.minutos - e.hoy.ms / 60000));
     hoy.appendChild(el('p', 'tarjeta-texto', meta.cumplida
       ? `Meta de hoy cumplida (${meta.minutos} min).`
-      : `Meta diaria: ${meta.minutos} min. Te faltan ${falta} min.`));
+      : `Meta diaria: ${meta.minutos} min. ${falta === 1 ? 'Te falta 1 min' : `Te faltan ${falta} min`}.`));
   }
   const boton = el('button', 'fila fila-boton', meta ? 'Cambiar meta diaria' : 'Fijar meta diaria');
   boton.type = 'button';
@@ -199,7 +209,7 @@ export async function pintarEstadisticas() {
   anio.appendChild(el('div', 'tarjeta-cifras', null));
   anio.firstChild.append(
     cifra(formatoDuracion(e.delAnio.ms), 'leyendo'),
-    cifra(String(e.delAnio.paginas), 'páginas'),
+    cifra(String(e.delAnio.paginas), e.delAnio.paginas === 1 ? 'página' : 'páginas'),
     cifra(String(e.delAnio.terminados), e.delAnio.terminados === 1 ? 'libro terminado' : 'libros terminados'),
   );
   anio.appendChild(el('p', 'grafico-titulo', 'Tiempo de lectura por mes'));
@@ -262,7 +272,7 @@ export async function crearResumenObjetivos(alPulsar) {
     return c;
   };
   celdas.append(
-    celda(formatoDuracion(e.hoy.ms), e.metaDiaria ? (e.metaDiaria.cumplida ? 'Meta cumplida' : `Hoy, de ${e.metaDiaria.minutos} min`) : 'Hoy'),
+    celda(minutosHoy(e), e.metaDiaria ? (e.metaDiaria.cumplida ? 'Meta cumplida' : `Hoy, de ${e.metaDiaria.minutos} min`) : 'Hoy'),
     celda(plural(e.racha.actual, 'día', 'días'), 'Racha'),
     e.objetivo
       ? celda(`${e.objetivo.hechos} de ${e.objetivo.libros}`, `Objetivo ${e.anio}`)

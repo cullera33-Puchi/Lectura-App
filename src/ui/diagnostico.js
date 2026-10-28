@@ -6,7 +6,7 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.8.4 (detalle de un mes)';
+export const VERSION_APP = '0.8.5 (correcciones de la revisión)';
 
 let resultadoPersistencia = 'sin pedir';
 
@@ -50,6 +50,7 @@ function formatoBytes(n) {
 
 function textoCaducidad(sesion) {
   if (!sesion.token) return 'sin token';
+  if (!sesion.caduca) return 'rechazado por Google; se renovará al usar Drive';
   const hora = new Date(sesion.caduca).toLocaleTimeString('es-ES');
   const minutos = Math.round((sesion.caduca - Date.now()) / 60000);
   if (minutos >= 0) return `a las ${hora} (quedan ${minutos} min)`;

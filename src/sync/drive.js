@@ -33,6 +33,7 @@ function mensajeError(estadoHttp, detalle) {
   const motivo = detalle?.error?.errors?.[0]?.reason || '';
   if (estadoHttp === 401) return 'La sesión de Google ha caducado o no es válida. Pulsa de nuevo para renovarla.';
   if (motivo === 'storageQuotaExceeded') return 'La cuota de Google Drive está llena';
+  if (motivo === 'rateLimitExceeded' || motivo === 'userRateLimitExceeded') return 'Google Drive no responde ahora mismo. Inténtalo dentro de un momento.';
   if (estadoHttp === 403) return `Drive ha denegado la operación (${motivo || 'sin motivo'})`;
   if (estadoHttp === 404) return 'El archivo ya no existe en Drive';
   if (estadoHttp === 429 || estadoHttp >= 500) return 'Google Drive no responde ahora mismo. Inténtalo dentro de un momento.';
@@ -41,7 +42,27 @@ function mensajeError(estadoHttp, detalle) {
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function esTemporal(estadoHttp, detalle) {
+// Leer el cuerpo de una respuesta también puede fallar (conexión cortada a
+// mitad, tiempo agotado): se convierte en un ErrorDrive con un texto en
+// español, como los fallos de la propia petición.
+function errorDeCuerpo(e) {
+  if (e instanceof ErrorDrive || e instanceof SyntaxError) return e;
+  if (!navigator.onLine) return new ErrorDrive('Sin conexión', 0);
+  if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
+    return new ErrorDrive('Google Drive tarda demasiado en responder. Inténtalo de nuevo.', 0);
+  }
+  return new ErrorDrive('Se ha cortado la conexión con Drive. Inténtalo de nuevo.', 0);
+}
+
+async function leerCuerpo(respuesta, tipo) {
+  try {
+    return await respuesta[tipo]();
+  } catch (e) {
+    throw errorDeCuerpo(e);
+  }
+}
+
+export function esTemporal(estadoHttp, detalle) {
   const motivo = detalle?.error?.errors?.[0]?.reason || '';
   return estadoHttp === 429 || estadoHttp >= 500 || motivo === 'rateLimitExceeded' || motivo === 'userRateLimitExceeded';
 }
@@ -98,7 +119,7 @@ async function buscar(token, consulta, campos = 'id,name,createdTime,modifiedTim
     });
     if (pagina) parametros.set('pageToken', pagina);
     const r = await peticion(token, `${API}/files?${parametros}`);
-    const datos = await r.json();
+    const datos = await leerCuerpo(r, 'json');
     resultados.push(...(datos.files || []));
     pagina = datos.nextPageToken;
   } while (pagina);
@@ -107,7 +128,7 @@ async function buscar(token, consulta, campos = 'id,name,createdTime,modifiedTim
 
 export async function obtenerUsuario(token) {
   const r = await peticion(token, `${API}/about?fields=user(displayName,emailAddress)`);
-  return (await r.json()).user;
+  return (await leerCuerpo(r, 'json')).user;
 }
 
 // Busca la carpeta de la app por su marca. Si hay varias (por ejemplo, creadas
@@ -133,7 +154,7 @@ export async function localizarCarpeta(token) {
       appProperties: { [MARCA_APP.clave]: MARCA_APP.valor },
     }),
   });
-  return { carpeta: await r.json(), creada: true, total: 1 };
+  return { carpeta: await leerCuerpo(r, 'json'), creada: true, total: 1 };
 }
 
 // Subcarpeta de la app (libros o portadas), localizada por su marca dentro de la raíz.
@@ -156,7 +177,7 @@ export async function localizarSubcarpeta(token, raizId, tipo) {
       appProperties: { [MARCA_APP.clave]: MARCA_APP.valor, tipo },
     }),
   });
-  return r.json();
+  return leerCuerpo(r, 'json');
 }
 
 // Todos los archivos con ese nombre, del más antiguo al más reciente.
@@ -184,7 +205,7 @@ export async function nombresEnCarpeta(token, carpetaId) {
 
 export async function obtenerMetadatos(token, archivoId) {
   const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?fields=id,name,modifiedTime,trashed`);
-  return r.json();
+  return leerCuerpo(r, 'json');
 }
 
 export class ErrorJsonIlegible extends Error {}
@@ -192,7 +213,7 @@ export class ErrorJsonIlegible extends Error {}
 // Lee un JSON de Drive. Si el contenido no es JSON válido, lanza ErrorJsonIlegible.
 export async function leerJson(token, archivoId) {
   const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?alt=media`);
-  const texto = await r.text();
+  const texto = await leerCuerpo(r, 'text');
   try {
     return JSON.parse(texto);
   } catch {
@@ -228,7 +249,7 @@ export async function crearJson(token, carpetaId, nombre, datos) {
     headers: { 'Content-Type': `multipart/related; boundary=${separador}` },
     body: cuerpo,
   });
-  return r.json();
+  return leerCuerpo(r, 'json');
 }
 
 export async function actualizarJson(token, archivoId, datos) {
@@ -238,7 +259,7 @@ export async function actualizarJson(token, archivoId, datos) {
     headers: { 'Content-Type': 'application/json; charset=UTF-8' },
     body: JSON.stringify(datos, null, 2),
   });
-  return r.json();
+  return leerCuerpo(r, 'json');
 }
 
 const LIMITE_MULTIPART = 4 * 1024 * 1024;
@@ -250,7 +271,7 @@ export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propie
   const tamano = datos.byteLength ?? datos.size;
   const mb = (tamano / 1048576).toFixed(1);
   const inicioMs = performance.now();
-  const terminar = (respuesta, metodo) => respuesta.json().then((archivo) => {
+  const terminar = (respuesta, metodo) => leerCuerpo(respuesta, 'json').then((archivo) => {
     registrar(`Subido ${nombre} (${mb} MB, ${metodo}) en ${Math.round(performance.now() - inicioMs)} ms`);
     return archivo;
   });
@@ -307,12 +328,18 @@ export async function subirArchivo(token, carpetaId, nombre, datos, tipo, propie
 export async function descargarArchivo(token, archivoId, tamanoEsperado, alAvanzar) {
   const r = await peticion(token, `${API}/files/${encodeURIComponent(archivoId)}?alt=media`, { limite: LIMITE_LARGO_MS });
   const total = Number(r.headers.get('Content-Length')) || tamanoEsperado || 0;
-  if (!r.body || !total || !alAvanzar) return r.arrayBuffer();
+  if (!r.body || !total || !alAvanzar) return leerCuerpo(r, 'arrayBuffer');
   const lector = r.body.getReader();
   const trozos = [];
   let recibido = 0;
   for (;;) {
-    const { done, value } = await lector.read();
+    let trozo;
+    try {
+      trozo = await lector.read();
+    } catch (e) {
+      throw errorDeCuerpo(e);
+    }
+    const { done, value } = trozo;
     if (done) break;
     trozos.push(value);
     recibido += value.byteLength;

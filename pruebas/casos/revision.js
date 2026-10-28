@@ -54,8 +54,12 @@ const { URL_APP, EPUBS: S, SALIDA, ok } = require('../lib/entorno.js');
   const cfiTablet = drive.estado().progreso.progreso[bib.id].cfi;
 
   // 2. iPhone sin sincronizar abre el libro y lo cierra sin pasar página
+  // Se espera a que se generen las ubicaciones (el porcentaje): antes de 0.8.5
+  // eso le ponía fecha a la posición provisional y pisaba la de la tablet.
   await A.click('#pantalla-biblioteca button[aria-label="Abrir Don Quijote de prueba"]');
-  await A.waitForSelector('#visor iframe'); await A.waitForTimeout(1200);
+  await A.waitForSelector('#visor iframe');
+  await A.waitForFunction(() => !document.getElementById('barra-libro').disabled, null, { timeout: 20000 }).catch(() => {});
+  await A.waitForTimeout(800);
   await A.goBack(); await A.waitForTimeout(600);
   await sinc(A);
   ok(drive.estado().progreso.progreso[bib.id].cfi === cfiTablet, 'abrir sin pasar página no pisa la posición del otro dispositivo');

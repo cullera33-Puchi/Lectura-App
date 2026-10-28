@@ -30,7 +30,7 @@ const { URL_APP, EPUBS: S, ok } = require('../lib/entorno.js');
   await pestana(A, 'estadisticas');
   await A.click('#contenido-estadisticas button:has-text("Fijar meta diaria")'); await A.waitForTimeout(300);
   await A.fill('.campo-hoja', '1'); await hoja(A, 'Guardar');
-  ok(/Meta diaria: 1 min\. Te faltan 1 min/.test(await textoHoy(A)), `Estadísticas muestra la meta: "${await textoHoy(A)}"`);
+  ok(/Meta diaria: 1 min\. Te falta 1 min/.test(await textoHoy(A)), `Estadísticas muestra la meta: "${await textoHoy(A)}"`);
   await pestana(A, 'inicio');
   ok(await celdaHoy(A) === 'Hoy, de 1 min', `Leyendo ahora la indica: "${await celdaHoy(A)}"`);
 

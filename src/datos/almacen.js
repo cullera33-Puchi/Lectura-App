@@ -89,7 +89,9 @@ function ejecutar(bd, almacenes, modo, accion, avisados = almacenes) {
       if (modo === 'readwrite' && avisados.length) avisarEscritura(avisados);
       resolver(typeof resultado === 'function' ? resultado() : resultado);
     };
-    tx.onerror = () => rechazar(tx.error);
+    // El error de una petición llega aquí antes de que la transacción tenga
+    // tx.error: se usa el de la propia petición.
+    tx.onerror = (ev) => rechazar(ev.target?.error || tx.error || new Error('Error de la base de datos'));
     tx.onabort = () => rechazar(tx.error || new Error('Operación cancelada'));
   });
 }

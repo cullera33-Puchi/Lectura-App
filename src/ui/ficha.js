@@ -8,11 +8,12 @@ import { entrarEnCapa, salirDeCapa } from './historial.js';
 const $ = (id) => document.getElementById(id);
 
 export function abrirFicha(titulo, elementos) {
+  // Si se repinta la misma hoja (ordenar Quiero leer, revisar duplicados), se
+  // conserva el punto de desplazamiento; otra distinta empieza arriba.
+  const misma = fichaAbierta() && $('ficha-titulo').textContent === titulo;
   $('ficha-titulo').textContent = titulo;
   $('ficha-contenido').replaceChildren(...elementos);
-  // Si ya estaba abierta (ordenar Quiero leer, revisar duplicados), se
-  // conserva el punto de desplazamiento.
-  if (!fichaAbierta()) $('panel-ficha').scrollTop = 0;
+  if (!misma) $('panel-ficha').scrollTop = 0;
   entrarEnCapa('ficha');
   abrirCapa($('fondo-ficha'));
   abrirCapa($('panel-ficha'));

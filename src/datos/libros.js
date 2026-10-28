@@ -147,8 +147,13 @@ export function aplicarLibroRemoto(registro) {
   });
 }
 
+// Solo si el libro sigue en la biblioteca: se puede haber eliminado durante la
+// descarga (aquí o desde el otro dispositivo). Devuelve si se ha guardado.
 export async function guardarArchivoDescargado(id, datos) {
-  await escribirVarios([{ almacen: 'archivos', valor: datos, clave: id }]);
+  const guardado = await leerYEscribir(['libros', 'archivos'], 'libros', id, (libro) => (
+    !libro || libro.eliminado ? null : { operaciones: [{ almacen: 'archivos', valor: datos, clave: id }], resultado: true }
+  ));
+  return guardado === true;
 }
 
 export async function guardarPortadaDescargada(id, blob) {

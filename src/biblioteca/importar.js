@@ -4,6 +4,7 @@
 import { cargarJSZip } from '../lector/librerias.js';
 import {
   leerLibro, guardarLibroImportado, leerArchivo, guardarEdicion, idsDescargados, todosLosLibros,
+  guardarArchivoDescargado, actualizarLibro,
 } from '../datos/libros.js';
 import { registrar } from '../ui/registro.js';
 
@@ -28,7 +29,9 @@ export async function huella(datos) {
 }
 
 function xml(texto) {
-  const doc = new DOMParser().parseFromString(texto, 'application/xml');
+  // Algunos EPUB empiezan el XML con una marca de orden de bytes (BOM), que
+  // DOMParser no acepta.
+  const doc = new DOMParser().parseFromString(texto.replace(/^\uFEFF/, ''), 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) throw new ErrorImportacion('XML no válido');
   return doc;
 }
@@ -251,13 +254,20 @@ export async function completarEdicionesPendientes() {
   if (libros.length) registrar(`Datos de la edición completados en ${libros.length} ${libros.length === 1 ? 'libro' : 'libros'}`);
 }
 
-// Devuelve { resultado: 'importado' | 'duplicado' | 'error', libro?, mensaje? }
+// Devuelve { resultado: 'importado' | 'recuperado' | 'duplicado' | 'error', libro?, mensaje? }
 export async function importarArchivo(archivo) {
   const datos = await archivo.arrayBuffer();
   const id = await huella(datos);
 
   const existente = await leerLibro(id);
   if (existente && !existente.eliminado) {
+    // Ya está en la biblioteca, pero sin el archivo en este dispositivo (en la
+    // nube o "no disponible"): se aprovecha el archivo elegido, que es el mismo.
+    // Si falta en Drive, la siguiente sincronización lo vuelve a subir.
+    if (!(await idsDescargados()).includes(id) && await guardarArchivoDescargado(id, datos)) {
+      if (existente.noDisponible) await actualizarLibro(id, { noDisponible: false });
+      return { resultado: 'recuperado', libro: existente };
+    }
     return { resultado: 'duplicado', libro: existente };
   }
 
