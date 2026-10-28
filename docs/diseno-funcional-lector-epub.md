@@ -453,6 +453,7 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.9.6 | Ordenador como opción propia: la bienvenida y Ajustes ofrecen Móvil, Tinta electrónica y Ordenador. El ordenador usa el comportamiento del perfil Móvil y propone el nombre "Ordenador"; si se abre la app en un ordenador sin pantalla táctil, sale propuesto de entrada |
 | 0.9.7 a 0.9.9 | Ajustes tras usar la app en el ordenador: la pantalla encendida no anota errores repetidos si el navegador la niega; el registro detalla la apertura del lector (modo de página, tamaño del visor, vistas cargadas si tarda y errores de epub.js); y, si hay una versión nueva esperando y la app ya se está usando, un aviso ofrece "Actualizar" (en el ordenador la pestaña rara vez pasa a segundo plano) |
 | 0.9.10 | Capítulos en blanco en el ordenador: si una imagen, fuente, hoja de estilo o el propio capítulo no se podía descomprimir, epub.js lo esperaba para siempre y el capítulo se quedaba con 0 px de ancho. Ahora se leen directamente del archivo, con un plazo de 8 s: el capítulo se pinta sin el recurso dañado (o con el aviso de parte dañada) y el registro anota cuál era. Si la primera página tarda, el registro dice en qué fase está cada capítulo |
+| 0.9.11 | El registro de Diagnóstico se conserva al recargar la página o reabrir la app (las últimas 150 líneas, en este dispositivo), para no perder lo que pasó antes de copiarlo |
 
 ### Mejoras pendientes (numeradas)
 
