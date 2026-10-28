@@ -6,7 +6,7 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.8.9 (libros dañados y grandes)';
+export const VERSION_APP = '0.9.0 (sin rebote al deslizar)';
 
 let resultadoPersistencia = 'sin pedir';
 

@@ -31,6 +31,9 @@ const MAX_DURACION_TOQUE_MS = 600;
 const VENTANA_CLIC_TRAS_TOQUE_MS = 800;
 const CARACTERES_POR_UBICACION = 1600;
 const ESPERA_COMPROBACION_MS = 400;
+// Mejora 20: carga del capítulo contiguo en el perfil Móvil.
+const PAGINAS_PRECARGA = 3;
+const ESPERA_CONTIGUO_MS = 1500;
 // Plazos de apertura y de la primera página. Crecen con el tamaño del libro
 // (mejora 19): un libro muy ilustrado tarda más en la tablet.
 const LIMITE_APERTURA_MS = 20000;
@@ -569,11 +572,52 @@ export async function abrirLibro(contenedor, datos, opciones) {
     });
   }
 
+  // Ancho del contenido cargado. Con scrollWidth no basta: Safari descuenta
+  // el translateX de las vistas mientras se arrastra y, con una sola página
+  // por delante, el lector creía que no había más, frenaba el arrastre y
+  // devolvía la página (mejora 20). El ancho de las vistas no cambia.
+  function anchoContenido(d) {
+    return Math.max(d.scrollWidth, vistas().reduce((t, v) => t + v.offsetWidth, 0));
+  }
+
   function hayMasContenido(direccion) {
     const d = contenedorDesplazable();
     if (!d) return false;
-    if (direccion > 0) return d.scrollLeft + d.clientWidth + anchoPagina() <= d.scrollWidth + 1;
+    if (direccion > 0) return d.scrollLeft + d.clientWidth + anchoPagina() <= anchoContenido(d) + 1;
     return d.scrollLeft - anchoPagina() >= -1;
+  }
+
+  // epub.js carga el capítulo siguiente al llegar a la penúltima página, justo
+  // cuando se va a deslizar otra vez: en el iPhone ese trabajo coincide con el
+  // gesto. Se adelanta a unas páginas antes del final, con la página quieta.
+  function precargarSiguiente() {
+    const d = contenedorDesplazable();
+    const m = rendition.manager;
+    if (destruido || !movil || rtl || !d || !m?.check) return;
+    const margen = PAGINAS_PRECARGA * anchoPagina();
+    const resto = anchoContenido(d) - (d.scrollLeft + d.clientWidth);
+    // Con margen menor que scrollLeft, check() no carga el capítulo anterior.
+    if (resto > margen || d.scrollLeft < margen) return;
+    const ultima = m.views.last();
+    if (!ultima?.section?.next() || ultima.section.index !== ultimaPosicion?.end?.index) return;
+    Promise.resolve(m.check(margen)).catch(() => {});
+  }
+
+  // Al deslizar en la última página de un capítulo, si el contiguo aún no está
+  // cargado, se espera a que lo esté (la página queda donde la dejó el dedo)
+  // en lugar de devolverla a su sitio y saltar sin animación.
+  async function esperarContiguo(direccion) {
+    const m = rendition.manager;
+    const vista = direccion > 0 ? m?.views.last() : m?.views.first();
+    const contiguo = direccion > 0 ? vista?.section?.next() : vista?.section?.prev();
+    if (!m?.check || !contiguo) return null; // principio o final del libro
+    Promise.resolve(m.check(1)).catch(() => {});
+    const hasta = performance.now() + ESPERA_CONTIGUO_MS;
+    while (!destruido && performance.now() < hasta) {
+      await new Promise((r) => setTimeout(r, 50));
+      if (hayMasContenido(direccion)) return true;
+    }
+    return false;
   }
 
   // Lleva la página a la siguiente (1), la anterior (-1) o la de partida (0).
@@ -589,9 +633,14 @@ export async function abrirLibro(contenedor, datos, opciones) {
       return direccion > 0 ? rendition.next() : rendition.prev();
     }
     if (direccion !== 0 && !hayMasContenido(direccion)) {
-      // Capítulo siguiente o anterior aún sin cargar: se recoloca la página y
-      // se pasa sin animación.
-      return animarVistas(arrastre, 0, velocidad).then(() => (direccion > 0 ? rendition.next() : rendition.prev()));
+      return esperarContiguo(direccion).then((cargado) => {
+        if (cargado && !destruido) return animarVistas(arrastre, direccion * anchoPagina(), velocidad);
+        // Sin capítulo contiguo a tiempo (o al principio o al final del
+        // libro): se recoloca la página y se pasa sin animación. El retraso
+        // queda en el registro por si se repite.
+        if (cargado === false) traza(`capítulo ${direccion > 0 ? 'siguiente' : 'anterior'} sin cargar al deslizar`);
+        return animarVistas(arrastre, 0, velocidad).then(() => (direccion > 0 ? rendition.next() : rendition.prev()));
+      });
     }
     return animarVistas(arrastre, direccion * anchoPagina(), velocidad);
   }
@@ -633,7 +682,10 @@ export async function abrirLibro(contenedor, datos, opciones) {
       .then(() => new Promise((r) => setTimeout(r, ESPERA_COMPROBACION_MS)))
       .then(() => { if (vigente()) accion(); });
     despues(completarPaso(direccion, arrastre, velocidad), () => {
-      if (huellaPosicion() !== antes) return;
+      if (huellaPosicion() !== antes) {
+        if (direccion > 0) precargarSiguiente();
+        return;
+      }
       traza('la página no se ha movido. Se usa el paso de respaldo');
       const antesRespaldo = huellaPosicion();
       despues(direccion > 0 ? rendition.next() : rendition.prev(), () => {
