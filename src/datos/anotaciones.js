@@ -3,6 +3,7 @@
 // con eliminado: true para que llegue al otro dispositivo.
 
 import { leerAjuste, escribirVarios, leerYEscribir } from './almacen.js';
+import { fechaPosterior } from './reloj.js';
 
 const CLAVE = 'anotaciones';
 const PENDIENTE = { clave: 'anotaciones:todas', tipo: 'anotaciones' };
@@ -50,5 +51,5 @@ export async function crearMarcador(libroId, datos) {
 }
 
 export async function eliminarAnotacion(id) {
-  await cambiarUna(id, (actual) => (actual ? { ...actual, eliminado: true, fecha: new Date().toISOString() } : null));
+  await cambiarUna(id, (actual) => (actual ? { ...actual, eliminado: true, fecha: fechaPosterior(actual.fecha) } : null));
 }

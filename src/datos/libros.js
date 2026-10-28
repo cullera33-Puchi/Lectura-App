@@ -3,6 +3,7 @@
 import {
   leer, leerTodos, leerClaves, escribirVarios, leerYEscribir,
 } from './almacen.js';
+import { fechaPosterior } from './reloj.js';
 
 // Libros visibles (no eliminados), con su progreso y si el archivo está en el dispositivo.
 export async function listarLibros() {
@@ -68,7 +69,9 @@ function olvidarPortada(id) {
 // anula su baja pendiente, para que la sincronización no borre en Drive el
 // archivo que se va a subir o reutilizar.
 export async function guardarLibroImportado(libro, datosEpub, portada) {
-  const ahora = new Date().toISOString();
+  // Posterior a la baja que se recupera, aunque la hora de este dispositivo
+  // vaya atrasada respecto al que la hizo.
+  const ahora = fechaPosterior((await leer('libros', libro.id))?.fechaModificacion);
   const registro = {
     archivoDriveId: null,
     portadaDriveId: null,
@@ -99,7 +102,7 @@ export async function eliminarLibro(id) {
     if (!libro) return null;
     return {
       operaciones: [
-        { almacen: 'libros', valor: { ...libro, eliminado: true, fechaModificacion: ahora } },
+        { almacen: 'libros', valor: { ...libro, eliminado: true, fechaModificacion: fechaPosterior(libro.fechaModificacion) } },
         { almacen: 'archivos', clave: id, borrar: true },
         { almacen: 'portadas', clave: id, borrar: true },
         { almacen: 'ubicaciones', clave: id, borrar: true },
@@ -197,7 +200,7 @@ export function editarMetadatos(id, cambios) {
   const fecha = new Date().toISOString();
   return leerYEscribir(['libros', 'pendientes'], 'libros', id, (libro) => {
     if (!libro) return null;
-    const nuevo = { ...libro, ...cambios, fechaModificacion: fecha };
+    const nuevo = { ...libro, ...cambios, fechaModificacion: fechaPosterior(libro.fechaModificacion) };
     return {
       operaciones: [
         { almacen: 'libros', valor: nuevo },
@@ -241,7 +244,7 @@ export function valorarLibro(id, cambios) {
   return leerYEscribir(['libros', 'pendientes'], 'libros', id, (libro) => {
     if (!libro) return null;
     const valoracion = { ...(libro.valoracion || {}), ...cambios, fecha };
-    const nuevo = { ...libro, valoracion, fechaModificacion: fecha };
+    const nuevo = { ...libro, valoracion, fechaModificacion: fechaPosterior(libro.fechaModificacion) };
     return {
       operaciones: [
         { almacen: 'libros', valor: nuevo },

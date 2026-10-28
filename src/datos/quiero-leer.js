@@ -6,6 +6,7 @@
 import { leerAjuste, escribirVarios, leerYEscribir } from './almacen.js';
 import { fusionarQuieroLeer } from '../sync/fusion.js';
 import { marcarExtrasPendientes } from './colecciones.js';
+import { fechaPosterior } from './reloj.js';
 
 const CLAVE = 'quieroLeer';
 
@@ -23,7 +24,7 @@ export async function guardarQuieroLeerFusionado(lista) {
 
 // cambio: { id, quitado } al añadir o quitar un libro; sin él, solo cambia el orden.
 async function guardar(lista, ids, cambio = null) {
-  const fecha = new Date().toISOString();
+  const fecha = fechaPosterior(lista.fecha, cambio && lista.entradas?.[cambio.id]?.fecha);
   const entradas = { ...(lista.entradas || {}) };
   // Listas anteriores sin entradas: se anotan los que ya estaban.
   for (const id of lista.ids) if (!entradas[id]) entradas[id] = { fecha: lista.fecha || fecha, quitado: false };

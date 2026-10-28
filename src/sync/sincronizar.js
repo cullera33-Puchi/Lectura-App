@@ -40,6 +40,7 @@ import {
   leerColecciones, leerObjetivos, guardarColeccionesFusionadas, guardarObjetivosFusionados,
 } from '../datos/colecciones.js';
 import { idDispositivo, nombreDispositivo } from '../datos/preferencias.js';
+import { medirDesfase } from '../datos/reloj.js';
 import {
   listarPendientes, borrarPendiente, leerSincronizacion, guardarSincronizacion,
 } from '../datos/pendientes.js';
@@ -167,8 +168,12 @@ async function leerRemoto(token, carpetaId, nombre, normalizar, unir, avisos, co
 }
 
 async function escribirJson(token, carpetaId, archivo, nombre, datos) {
+  const antes = Date.now();
   const escrito = archivo ? await actualizarJson(token, archivo.id, datos) : await crearJson(token, carpetaId, nombre, datos);
+  const desfase = medirDesfase(antes, Date.now(), escrito.modifiedTime);
   await recordarJson(nombre, escrito, datos);
+  // Para Diagnóstico (mejora 18): una hora muy desviada se avisa allí.
+  if (desfase != null) await guardarSincronizacion('desfaseReloj', { ms: desfase, fecha: new Date().toISOString() });
   return escrito;
 }
 

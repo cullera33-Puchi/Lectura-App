@@ -3,6 +3,7 @@
 
 import { leerAjuste, escribirVarios, leerYEscribir } from './almacen.js';
 import { fusionarColecciones, fusionarObjetivos } from '../sync/fusion.js';
+import { fechaPosterior } from './reloj.js';
 
 const PENDIENTE_EXTRAS = { clave: 'biblioteca:extras', tipo: 'extras' };
 
@@ -45,7 +46,7 @@ export async function crearColeccion(nombre) {
 async function cambiarColeccion(id, cambios) {
   const fecha = new Date().toISOString();
   const actuales = await leerColecciones({ incluirEliminadas: true });
-  const nuevas = actuales.map((c) => (c.id === id ? { ...c, ...cambios, fechaModificacion: fecha } : c));
+  const nuevas = actuales.map((c) => (c.id === id ? { ...c, ...cambios, fechaModificacion: fechaPosterior(c.fechaModificacion) } : c));
   await escribirVarios([{ almacen: 'ajustes', valor: nuevas, clave: 'colecciones' }, pendiente(fecha)]);
 }
 
@@ -67,7 +68,7 @@ export function alternarLibroEnColeccion(libroId, coleccionId) {
     const actuales = new Set(libro.colecciones || []);
     if (actuales.has(coleccionId)) actuales.delete(coleccionId);
     else actuales.add(coleccionId);
-    const nuevo = { ...libro, colecciones: [...actuales], fechaModificacion: fecha };
+    const nuevo = { ...libro, colecciones: [...actuales], fechaModificacion: fechaPosterior(libro.fechaModificacion) };
     return {
       operaciones: [
         { almacen: 'libros', valor: nuevo },
@@ -91,15 +92,17 @@ export async function guardarObjetivosFusionados(objetivos) {
 }
 
 export async function fijarObjetivo(anio, libros) {
-  const fecha = new Date().toISOString();
-  const objetivos = { ...(await leerObjetivos()), [anio]: { libros, fecha } };
+  const actuales = await leerObjetivos();
+  const fecha = fechaPosterior(actuales[anio]?.fecha);
+  const objetivos = { ...actuales, [anio]: { libros, fecha } };
   await escribirVarios([{ almacen: 'ajustes', valor: objetivos, clave: 'objetivos' }, pendiente(fecha)]);
 }
 
 // Meta diaria de minutos: va con los objetivos, en la clave "diario", y se
 // fusiona igual (gana la fecha más reciente). minutos null la quita.
 export async function fijarMetaDiaria(minutos) {
-  const fecha = new Date().toISOString();
-  const objetivos = { ...(await leerObjetivos()), diario: { minutos: minutos || null, fecha } };
+  const actuales = await leerObjetivos();
+  const fecha = fechaPosterior(actuales.diario?.fecha);
+  const objetivos = { ...actuales, diario: { minutos: minutos || null, fecha } };
   await escribirVarios([{ almacen: 'ajustes', valor: objetivos, clave: 'objetivos' }, pendiente(fecha)]);
 }

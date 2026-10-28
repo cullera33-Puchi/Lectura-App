@@ -3,6 +3,7 @@
 import { leer, leerTodos, escribirVarios } from './almacen.js';
 import { leerSincronizacion, pendienteYaContado } from './pendientes.js';
 import { nombreDispositivo, idDispositivo } from './preferencias.js';
+import { fechaPosterior } from './reloj.js';
 
 export function leerProgreso(id) {
   return leer('progreso', id);
@@ -18,8 +19,14 @@ export function listarProgresos() {
 // - provisional: posición sin fecha (abrir un libro sin pasar página). La
 //   fusión ignora las entradas sin fecha, así no pisa la posición del otro
 //   dispositivo.
+// - La fecha de un avance es posterior a la de la posición conocida (local o
+//   recibida del otro dispositivo), aunque la hora de este vaya atrasada.
 export async function guardarProgreso(id, datos, { mantenerFecha = false, provisional = false } = {}) {
-  let fecha = new Date().toISOString();
+  let fecha = null;
+  if (!provisional && !mantenerFecha) {
+    const [local, copia] = await Promise.all([leerProgreso(id), leerSincronizacion('progresoRemoto')]);
+    fecha = fechaPosterior(local?.fecha, copia?.progreso?.[id]?.fecha, datos.fecha);
+  }
   if (provisional) fecha = null;
   // Con mantenerFecha, una entrada provisional (sin fecha) sigue sin fecha: no
   // es un avance y no debe pisar la posición del otro dispositivo.

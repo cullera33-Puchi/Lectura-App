@@ -6,7 +6,7 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 
-export const VERSION_APP = '0.8.5 (correcciones de la revisión)';
+export const VERSION_APP = '0.8.6 (reloj atrasado)';
 
 let resultadoPersistencia = 'sin pedir';
 
@@ -64,6 +64,16 @@ function textoSesion(sesion) {
   return `${tokenVigente() ? 'conectada' : 'token caducado'}${quien}`;
 }
 
+// Diferencia con la hora de Google, medida en la última subida a Drive.
+function textoHora(desfase) {
+  if (!desfase) return 'sin medir (se mide al sincronizar)';
+  const segundos = Math.round(Math.abs(desfase.ms) / 1000);
+  if (segundos < 60) return `correcta (diferencia con Google de ${segundos} s)`;
+  const minutos = Math.round(segundos / 60);
+  const sentido = desfase.ms > 0 ? 'atrasada' : 'adelantada';
+  return `${sentido} ${minutos} min respecto a Google. Activa la hora automática en los ajustes del dispositivo`;
+}
+
 function textoUltimoIntento(intento) {
   if (!intento) return 'ninguno';
   const fecha = new Date(intento.fecha).toLocaleString('es-ES');
@@ -83,7 +93,9 @@ export async function datosDiagnostico() {
   }
   const sw = navigator.serviceWorker?.controller ? 'activo' : 'no controla esta página';
   const hora = (f) => (f ? new Date(f).toLocaleString('es-ES') : 'nunca');
-  const [ultima, pendientes, ultimaCopia] = await Promise.all([leerSincronizacion('ultima'), contarPendientes(), leerSincronizacion('ultimaCopia')]);
+  const [ultima, pendientes, ultimaCopia, desfase] = await Promise.all([
+    leerSincronizacion('ultima'), contarPendientes(), leerSincronizacion('ultimaCopia'), leerSincronizacion('desfaseReloj'),
+  ]);
   const automatica = sincronizacionAutomaticaActiva()
     ? `activada. Última en esta sesión de la app: ${hora(ultimaSincronizacionAutomatica())}`
     : 'desactivada';
@@ -104,6 +116,7 @@ export async function datosDiagnostico() {
     ['Conexión', navigator.onLine ? 'en línea' : 'sin conexión'],
     ['Pantalla', `${innerWidth} x ${innerHeight} px, densidad ${devicePixelRatio}`],
     ['Tema de la interfaz', `${document.body.dataset.tema}. Barra de estado: ${document.querySelector('meta[name="theme-color"]')?.content || 'sin color'}`],
+    ['Hora del dispositivo', textoHora(desfase)],
     ['Última sincronización correcta', hora(ultima)],
     ['Sincronización automática', automatica],
     ['Cambios pendientes de sincronizar', String(pendientes)],
