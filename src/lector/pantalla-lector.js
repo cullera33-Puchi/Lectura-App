@@ -16,7 +16,7 @@ import { anotacionesDeLibro, crearMarcador, eliminarAnotacion } from '../datos/a
 import { mostrarAviso } from '../ui/aviso.js';
 import {
   preferencias, nombreDispositivo, idDispositivo, alCambiarPreferencias,
-  lecturaDeLibro, tieneAjustesPropios, activarAjustesPropios, cambiarLecturaDeLibro,
+  lecturaDeLibro, tieneAjustesPropios, activarAjustesPropios, cambiarLecturaDeLibro, fijarFormatoDeLibro,
 } from '../datos/preferencias.js';
 import {
   TEMAS, TAMANOS, FUENTES, INTERLINEADOS, MARGENES, JUSTIFICACIONES, idTemaElegido, alCambiarModoSistema,
@@ -624,6 +624,28 @@ function pintarPanelAa() {
   }
   panel.appendChild(temas);
 
+  // Formato del editor o el mío (mejora 28), siempre de este libro. Con el
+  // del libro no se muestran letra, interlineado ni justificación.
+  const delLibro = actual && lectura.formato === 'libro';
+  if (actual) {
+    const grupo = document.createElement('div');
+    grupo.className = 'grupo';
+    grupo.appendChild(filaSegmentada('Formato de este libro', [
+      { id: 'mio', nombre: 'Mis ajustes' }, { id: 'libro', nombre: 'Del editor' },
+    ], lectura.formato, async (id) => {
+      if (!actual || id === lecturaActual().formato) return;
+      registrar(`Formato de "${actual.titulo}": ${id === 'libro' ? 'del editor' : 'mis ajustes'}`);
+      await fijarFormatoDeLibro(actual.id, id);
+      pintarPanelAa();
+    }, 'formato'));
+    const pie = document.createElement('p');
+    pie.className = 'pie-grupo';
+    pie.textContent = delLibro
+      ? 'Se respetan la letra, el interlineado y la justificación del libro. El tamaño, el tema y los márgenes siguen siendo los tuyos.'
+      : 'Si este libro tiene una maquetación especial, elige "Del editor" para respetar su letra, interlineado y justificación.';
+    panel.append(grupo, pie);
+  }
+
   // Fuentes, con cada nombre en su tipo de letra
   const fuentes = document.createElement('div');
   fuentes.className = 'grupo';
@@ -639,15 +661,13 @@ function pintarPanelAa() {
     if (f.id === lectura.fuente) fila.insertAdjacentHTML('beforeend', svgIcono('check'));
     fuentes.appendChild(fila);
   }
-  panel.appendChild(fuentes);
+  if (!delLibro) panel.appendChild(fuentes);
 
   const formato = document.createElement('div');
   formato.className = 'grupo';
-  formato.append(
-    filaSegmentada('Interlineado', INTERLINEADOS, lectura.interlineado, (id) => cambiarLectura({ interlineado: id }), 'interlineado'),
-    filaSegmentada('Márgenes', MARGENES, lectura.margenes, (id) => cambiarLectura({ margenes: id }), 'margenes'),
-    filaSegmentada('Justificación', JUSTIFICACIONES, lectura.justificacion, (id) => cambiarLectura({ justificacion: id }), 'justificacion'),
-  );
+  if (!delLibro) formato.appendChild(filaSegmentada('Interlineado', INTERLINEADOS, lectura.interlineado, (id) => cambiarLectura({ interlineado: id }), 'interlineado'));
+  formato.appendChild(filaSegmentada('Márgenes', MARGENES, lectura.margenes, (id) => cambiarLectura({ margenes: id }), 'margenes'));
+  if (!delLibro) formato.appendChild(filaSegmentada('Justificación', JUSTIFICACIONES, lectura.justificacion, (id) => cambiarLectura({ justificacion: id }), 'justificacion'));
   // Doble página con la pantalla en horizontal: solo en pantallas grandes.
   if (Math.min(window.screen.width, window.screen.height) >= 500) {
     formato.appendChild(filaSegmentada('Dos páginas en horizontal', [
@@ -707,6 +727,7 @@ function actualizarPanelAa() {
     margenes: lectura.margenes,
     justificacion: lectura.justificacion,
     dosPaginas: lectura.dosPaginas === false ? 'no' : 'si',
+    formato: lectura.formato,
   };
   for (const b of panel.querySelectorAll('[data-ajuste]')) {
     const marcado = String(valores[b.dataset.ajuste]) === b.dataset.valor;

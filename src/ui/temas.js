@@ -101,10 +101,17 @@ export function proporcionMargenes(ajustes) {
 }
 
 // Ajustes que cambian la paginación. El tema solo cambia colores.
-const AJUSTES_QUE_REPAGINAN = ['tamano', 'fuente', 'interlineado', 'margenes', 'justificacion', 'dosPaginas'];
+const AJUSTES_QUE_REPAGINAN = ['tamano', 'fuente', 'interlineado', 'margenes', 'justificacion', 'dosPaginas', 'formato'];
 
 export function cambioRepagina(antes, despues) {
   return AJUSTES_QUE_REPAGINAN.some((c) => antes?.[c] !== despues?.[c]);
+}
+
+// Los tamaños fijos del libro (font-size en px o pt) no crecen con el tamaño
+// de "Aa", que se aplica en porcentaje: se multiplican por la escala elegida.
+// A 100 % quedan igual que los puso el editor.
+export function escalarTamanosFijos(css) {
+  return css.replace(/(font-size\s*:\s*)(\d*\.?\d+)(px|pt)\b/gi, '$1calc($2$3 * var(--lector-escala, 1))');
 }
 
 // Hoja de estilos que se inyecta en cada capítulo del libro.
@@ -114,8 +121,15 @@ export function cssLibro(perfil, ajustes) {
   const interlineado = (INTERLINEADOS.find((i) => i.id === ajustes.interlineado) || INTERLINEADOS[1]).valor;
   const alineacion = ajustes.justificacion === 'izquierda' ? 'left' : 'justify';
   const sinCodigo = ':not(code):not(pre):not(kbd):not(samp)';
+  // Con el formato del libro (mejora 28) no se fuerzan letra, interlineado ni
+  // justificación.
+  const mio = ajustes.formato !== 'libro';
 
   return `
+:root {
+  /* Escala de los tamaños fijos (px, pt) del libro: ver escalarTamanosFijos. */
+  --lector-escala: ${ajustes.tamano / 100};
+}
 html, body {
   background: ${tema.fondo} !important;
   color: ${tema.texto} !important;
@@ -137,15 +151,15 @@ a, a * {
   color: inherit !important;
   text-decoration: underline;
 }
-body, body p, body div, body li, body span, body blockquote, body dd {
+${mio ? `body, body p, body div, body li, body span, body blockquote, body dd {
   line-height: ${interlineado} !important;
 }
 body p:not([class*="center"]):not([class*="right"]):not([style*="center"]):not([style*="right"]) {
   text-align: ${alineacion} !important;
   -webkit-hyphens: auto;
   hyphens: auto;
-}
-${fuente.familia ? `body, body *${sinCodigo} { font-family: ${fuente.familia} !important; }` : ''}
+}` : ''}
+${mio && fuente.familia ? `body, body *${sinCodigo} { font-family: ${fuente.familia} !important; }` : ''}
 img, svg {
   max-width: 100% !important;
 }

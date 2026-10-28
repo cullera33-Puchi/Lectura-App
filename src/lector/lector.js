@@ -18,7 +18,7 @@
 import { cargarEpub } from './librerias.js';
 import { registrar } from '../ui/registro.js';
 import { curvaDesde } from '../ui/paneles.js';
-import { cssLibro, temaEfectivo, proporcionMargenes, cambioRepagina } from '../ui/temas.js';
+import { cssLibro, temaEfectivo, proporcionMargenes, cambioRepagina, escalarTamanosFijos } from '../ui/temas.js';
 import { MENSAJE_ILEGIBLE } from '../biblioteca/importar.js';
 
 const DURACION_ANIMACION_MS = 260;
@@ -304,6 +304,16 @@ function cargaTolerante(libro) {
   libro.locations.request = libro.load;
 }
 
+// Tamaños fijos de los estilos dentro de un capítulo (bloques <style> y
+// atributos style), sin tocar el texto: un libro sobre CSS puede contener
+// "font-size: 12px" como ejemplo.
+function escalarEnCapitulo(xhtml) {
+  return xhtml
+    .replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (_, a, css, b) => a + escalarTamanosFijos(css) + b)
+    .replace(/(\sstyle\s*=\s*)(?:"([^"]*)"|'([^']*)')/gi, (_, a, doble, simple) => (doble != null
+      ? `${a}"${escalarTamanosFijos(doble)}"` : `${a}'${escalarTamanosFijos(simple)}'`));
+}
+
 // epub.js descomprime todas las imágenes y fuentes del libro antes de mostrar
 // la primera página: en un libro ilustrado, cientos de MB. Aquí se crean solo
 // las de cada capítulo al pintarlo. Devuelve la función que libera las hojas
@@ -331,7 +341,7 @@ function recursosBajoDemanda(libro) {
       if (!urls.has(i)) {
         urls.set(i, (async () => {
           const ruta = absoluta(i);
-          const texto = await sustituir(await recursos.settings.archive.getText(ruta), recursos.relativeTo(ruta), urlSimple);
+          const texto = escalarTamanosFijos(await sustituir(await recursos.settings.archive.getText(ruta), recursos.relativeTo(ruta), urlSimple));
           const url = URL.createObjectURL(new Blob([texto], { type: 'text/css' }));
           propias.push(url);
           return url;
@@ -340,7 +350,7 @@ function recursosBajoDemanda(libro) {
       return urls.get(i);
     };
     this.spine.hooks.serialize.register(async (salida, seccion) => {
-      seccion.output = await sustituir(salida, recursos.relativeTo(seccion.url), urlDe);
+      seccion.output = escalarEnCapitulo(await sustituir(salida, recursos.relativeTo(seccion.url), urlDe));
     });
     return Promise.resolve();
   };

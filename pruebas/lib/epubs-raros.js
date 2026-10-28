@@ -69,4 +69,16 @@ ${parrafos(20, 'Uno')}
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-module.exports = { epubDanado, epubIlustrado, epubNotas };
+// Maquetación rígida del editor (mejora 28): letra, tamaño fijo en puntos,
+// interlineado y alineación en su hoja de estilos, y un tamaño en un atributo.
+async function epubMaquetado() {
+  const zip = new JSZip();
+  base(zip, 'Libro maquetado',
+    '<item id="css" href="estilo.css" media-type="text/css"/><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/>',
+    '<itemref idref="c1"/>', '<li><a href="c1.xhtml">Capítulo 1</a></li>');
+  zip.file('OEBPS/estilo.css', 'p { font-family: "Courier New", monospace; font-size: 10pt; line-height: 1; text-align: left; }');
+  zip.file('OEBPS/c1.xhtml', `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Uno</title><link rel="stylesheet" type="text/css" href="estilo.css"/></head><body><h1>Capítulo 1</h1><p id="fijo">Párrafo con estilo del editor.</p><p><span id="pequeno" style="font-size: 8px">Texto pequeño en un atributo.</span></p>${parrafos(10, 'Uno')}</body></html>`);
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+module.exports = { epubDanado, epubIlustrado, epubNotas, epubMaquetado };

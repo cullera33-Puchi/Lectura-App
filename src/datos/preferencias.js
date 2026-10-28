@@ -10,6 +10,7 @@ const estado = {
   dispositivo: null, // { perfil, dispositivo, nombreEditado, bienvenidaCompleta }
   lectura: null,
   porLibro: {}, // ajustes de lectura propios de algunos libros (punto 4)
+  formatoPorLibro: {}, // libros que se leen con el formato del editor (mejora 28)
 };
 const oyentes = new Set();
 
@@ -32,6 +33,7 @@ export async function cargarPreferencias() {
   }
   estado.lectura = { ...ajustesLecturaIniciales(), ...((await leerAjuste('lectura')) || {}) };
   estado.porLibro = (await leerAjuste('lecturaPorLibro')) || {};
+  estado.formatoPorLibro = (await leerAjuste('formatoPorLibro')) || {};
   return preferencias();
 }
 
@@ -88,7 +90,23 @@ export function tieneAjustesPropios(libroId) {
 }
 
 export function lecturaDeLibro(libroId) {
-  return { ...estado.lectura, ...(estado.porLibro[libroId] || {}) };
+  return { ...estado.lectura, ...(estado.porLibro[libroId] || {}), formato: formatoDeLibro(libroId) };
+}
+
+// --- Formato del editor o el mío (mejora 28) ---
+// "mio": se aplican la letra, el interlineado y la justificación de "Aa".
+// "libro": se respetan los del EPUB; el tamaño, el tema y los márgenes de
+// página siguen siendo los de "Aa". Siempre es de un libro concreto, de este
+// dispositivo, y no se sincroniza.
+export function formatoDeLibro(libroId) {
+  return estado.formatoPorLibro[libroId] === 'libro' ? 'libro' : 'mio';
+}
+
+export async function fijarFormatoDeLibro(libroId, formato) {
+  const { [libroId]: _, ...resto } = estado.formatoPorLibro;
+  estado.formatoPorLibro = formato === 'libro' ? { ...resto, [libroId]: 'libro' } : resto;
+  await guardarAjuste('formatoPorLibro', estado.formatoPorLibro);
+  avisar('lectura');
 }
 
 async function guardarPorLibro() {

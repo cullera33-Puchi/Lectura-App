@@ -7,7 +7,7 @@ import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from '
 import { resumenRitmo } from '../lector/ritmo.js';
 import { estadoPantalla } from '../lector/pantalla-encendida.js';
 
-export const VERSION_APP = '0.9.2 (pantalla encendida)';
+export const VERSION_APP = '0.9.3 (formato del editor)';
 
 let resultadoPersistencia = 'sin pedir';
 
