@@ -12,10 +12,11 @@ let leyendo = false;
 let bloqueo = null;
 let temporizador = null;
 let vencida = false;
+let rechazado = false; // el navegador lo niega: no se insiste hasta reabrir el libro
 let estado = 'sin libro abierto';
 
 async function pedir() {
-  if (!leyendo || vencida || bloqueo || document.visibilityState !== 'visible') return;
+  if (!leyendo || vencida || rechazado || bloqueo || document.visibilityState !== 'visible') return;
   if (!navigator.wakeLock?.request) {
     estado = 'el navegador no lo permite';
     return;
@@ -32,8 +33,9 @@ async function pedir() {
       if (bloqueo === nuevo) bloqueo = null;
     });
   } catch (e) {
+    rechazado = true;
     estado = `rechazado por el navegador (${e.message})`;
-    registrar(`Pantalla encendida: ${estado}`, 'error');
+    registrar(`Pantalla encendida: ${estado}`);
   }
 }
 
@@ -55,6 +57,7 @@ function contar() {
 export function mantenerEncendida() {
   leyendo = true;
   vencida = false;
+  rechazado = false;
   contar();
   pedir();
 }
