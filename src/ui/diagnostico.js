@@ -6,8 +6,9 @@ import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
 import { estadoPantalla } from '../lector/pantalla-encendida.js';
+import { resumenPruebaGuiada } from './prueba-guiada.js';
 
-export const VERSION_APP = '0.9.4 (ordenador)';
+export const VERSION_APP = '0.9.5 (prueba guiada)';
 
 let resultadoPersistencia = 'sin pedir';
 
@@ -133,6 +134,7 @@ export async function datosDiagnostico() {
     ['Última copia de seguridad en Drive', ultimaCopia || 'ninguna'],
     ['Ritmo de lectura', resumenRitmo()],
     ['Pantalla encendida al leer', estadoPantalla()],
+    ['Prueba guiada', await resumenPruebaGuiada()],
   ];
 }
 

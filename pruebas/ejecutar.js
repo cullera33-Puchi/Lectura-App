@@ -62,6 +62,7 @@ const PRUEBAS = [
   ['casos/pantalla-encendida.js'],
   ['casos/formato-libro.js'],
   ['casos/ordenador.js'],
+  ['casos/prueba-guiada.js'],
   ['casos/doble-pagina.js'],
   ['casos/animacion.js', 'movil'],
   ['casos/animacion.js', 'tinta'],

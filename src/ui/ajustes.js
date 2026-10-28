@@ -160,6 +160,10 @@ export function prepararAjustes() {
   suscribirRegistro(pintarEntrada);
 
   $('btn-actualizar-diagnostico').addEventListener('click', pintarDiagnostico);
+  $('btn-prueba-guiada').addEventListener('click', async () => {
+    const { abrirPruebaGuiada } = await import('./prueba-guiada.js');
+    await abrirPruebaGuiada();
+  });
 
   $('btn-persistir').addEventListener('click', async () => {
     const resultado = await pedirPersistencia();

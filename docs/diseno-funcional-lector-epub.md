@@ -449,6 +449,7 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.9.2 | Pantalla encendida mientras se lee (mejora 24): con un libro abierto la pantalla no se apaga. Se suelta al cerrar el libro o tras 5 minutos sin pasar página ni tocar el libro, y se vuelve a pedir al pasar página o al volver a la app. Diagnóstico muestra su estado. La mejora 25 (tiempo restante) ya existía desde la v3 y se retira de la lista |
 | 0.9.3 | Formato del editor o el mío (mejora 28): en "Aa", con un libro abierto, "Formato de este libro": "Mis ajustes" aplica la letra, el interlineado y la justificación elegidos; "Del editor" respeta los del EPUB. El tamaño, el tema y los márgenes de página siguen siendo los de "Aa". Es de cada libro y de cada dispositivo. Además, el tamaño de "Aa" ya escala los tamaños fijos (pt, px) que algunos libros ponen en sus estilos y que antes no cambiaban |
 | 0.9.4 | Tercer dispositivo, el ordenador: usa el perfil Móvil y se propone el nombre "Ordenador". Los EPUB se pueden arrastrar a la ventana para añadirlos. En el lector, la rueda del ratón y el panel táctil pasan una página por gesto, además de las flechas del teclado y los clics en los laterales que ya funcionaban. En monitores de más de 1600 px el lector se limita a 1500 px centrados para que las líneas no sean demasiado largas. Diagnóstico nombra el sistema (Windows, macOS, Linux). Sesiones, posición y estadísticas ya admitían un tercer dispositivo sin cambios |
+| 0.9.5 | Prueba guiada (mejora 31): en Ajustes, Diagnóstico, "Prueba guiada en este dispositivo". Explica cómo comprobar lo que no cubren las pruebas automáticas: botones físicos (muestra las teclas que recibe la app), deslizar en horizontal en el iPhone, restos de páginas en la tinta electrónica y pantalla encendida. Guarda las respuestas y las incluye en "Copiar diagnóstico y registro" |
 
 ### Mejoras pendientes (numeradas)
 
@@ -461,7 +462,6 @@ Del repaso de la app y nuevas funciones. La numeración se mantiene para poder e
 | 27 | Exportar los subrayados y notas de un libro a Markdown (depende de la 26) | Bajo |
 | 29 | Lectura en voz alta con las voces del propio dispositivo, pasando de página sola. Sin servicios externos | Medio |
 | 30 | Citas favoritas en Inicio: un pasaje subrayado al azar de los libros leídos (depende de la 26) | Bajo |
-| 31 | Prueba guiada en Diagnóstico para validar en cada dispositivo lo que no se puede comprobar en las pruebas automáticas: rebote en horizontal, botones físicos de la tablet y refresco de la tinta electrónica | Bajo |
 | 32 | Espacio en el dispositivo: lo que ocupa cada libro y liberar el de los terminados | Bajo |
 | 33 | Añadir libros desde Drive: importar EPUB que ya están en Drive sin descargarlos antes al dispositivo | Medio |
 | 34 | Compartir un EPUB desde otra app al lector. Solo en la tablet: Safari no lo permite en el iPhone | Bajo |
@@ -472,5 +472,5 @@ Del repaso de la app y nuevas funciones. La numeración se mantiene para poder e
 | Idea | Comentario |
 |---|---|
 | Biblioteca grande | Revisar rendimiento y memoria con varios cientos de libros (portadas, búsqueda y sincronización) |
-| Botones físicos de la tablet | Pasar página con los botones de volumen o los de la funda, si el navegador de la tablet los expone. Se comprobará con la prueba guiada (31) |
-| Refresco forzado en tinta electrónica cada cierto número de páginas | Para limpiar restos de páginas anteriores. Validar antes con la prueba guiada (31) si la tablet ya lo gestiona por sí sola |
+| Botones físicos de la tablet | Pasar página con los botones de volumen o los de la funda, si el navegador de la tablet los expone. Se comprueba con la prueba guiada de Diagnóstico (0.9.5) |
+| Refresco forzado en tinta electrónica cada cierto número de páginas | Para limpiar restos de páginas anteriores. Validar antes con la prueba guiada de Diagnóstico (0.9.5) si la tablet ya lo gestiona por sí sola |
