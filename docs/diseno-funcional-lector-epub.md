@@ -407,8 +407,8 @@ Regla: cada dispositivo solo escribe su propio archivo de sesiones, también al 
 |---|---|---|---|
 | Búsqueda dentro del libro | Localizar un nombre o una frase. Resultados con su contexto, salto al pasaje y resaltado temporal (subrayado en Tinta electrónica) | Medio | Hecho (0.7.0) |
 | Marcadores | Volver a pasajes concretos. Botón en la barra superior y lista en el menú. Se sincronizan | Bajo | Hecho (0.7.2) |
-| Subrayados en colores y notas | Con pulsación larga sobre el texto. Se sincronizan entre dispositivos | Medio | Pendiente |
-| Exportar subrayados y notas a Markdown | Llevarse las ideas de un libro a otro sitio | Bajo | Pendiente (depende de los subrayados) |
+| Subrayados en colores y notas | Con pulsación larga sobre el texto. Se sincronizan entre dispositivos | Medio | Pendiente (mejora 26) |
+| Exportar subrayados y notas a Markdown | Llevarse las ideas de un libro a otro sitio | Bajo | Pendiente (mejora 27) |
 | Diccionario | Definición de una palabra con pulsación larga | Medio | Pendiente. Choca con la regla 7 (ningún servicio externo salvo Google): habría que incluir un diccionario sin conexión o aceptar una excepción |
 
 Impacto en el diseño: archivo `anotaciones.json` en Drive (ya creado para los marcadores), con cada anotación anclada por un CFI. Se fusiona por identificador de anotación y gana la fecha más reciente. Los borrados se conservan marcados con `eliminado`, igual que los libros. Los subrayados usarán el mismo archivo con un rango CFI.
@@ -454,16 +454,24 @@ Del repaso de la app y nuevas funciones. La numeración se mantiene para poder e
 | Nº | Mejora | Esfuerzo |
 |---|---|---|
 | 23 | Cómics en CBR (y CBZ): importarlos, verlos en la biblioteca con su portada y leerlos página a página, con zoom, doble página en horizontal y sentido de lectura de manga. Es viable con dos decisiones previas: añadir una librería para descomprimir RAR (por ejemplo, libarchive.js en WebAssembly, copiada en `vendor/`, cargada solo al importar) y una excepción a la regla 1, porque un cómic no tiene CFI y la posición sería el número de página. Al importar se convertiría a CBZ para leerlo después con JSZip, que ya está en la app | Alto |
+| 24 | Pantalla encendida mientras se lee: la pantalla no se apaga en mitad de una página larga. Se suelta al cerrar el libro o tras unos minutos sin pasar página | Bajo |
+| 25 | Tiempo restante estimado: "Quedan 12 min de capítulo" y "4 h de libro", con el ritmo real de lectura | Bajo |
+| 26 | Subrayados en colores y notas, con pulsación larga sobre el texto. Se sincronizan en `anotaciones.json`. En Tinta electrónica, subrayado simple sin colores | Medio |
+| 27 | Exportar los subrayados y notas de un libro a Markdown (depende de la 26) | Bajo |
+| 28 | Formato del editor o el mío: opción por libro para respetar la letra, el tamaño y los márgenes del EPUB o aplicar siempre los ajustes "Aa" | Bajo a medio |
+| 29 | Lectura en voz alta con las voces del propio dispositivo, pasando de página sola. Sin servicios externos | Medio |
+| 30 | Citas favoritas en Inicio: un pasaje subrayado al azar de los libros leídos (depende de la 26) | Bajo |
+| 31 | Prueba guiada en Diagnóstico para validar en cada dispositivo lo que no se puede comprobar en las pruebas automáticas: rebote en horizontal, botones físicos de la tablet y refresco de la tinta electrónica | Bajo |
+| 32 | Espacio en el dispositivo: lo que ocupa cada libro y liberar el de los terminados | Bajo |
+| 33 | Añadir libros desde Drive: importar EPUB que ya están en Drive sin descargarlos antes al dispositivo | Medio |
+| 34 | Compartir un EPUB desde otra app al lector. Solo en la tablet: Safari no lo permite en el iPhone | Bajo |
+| 35 | Exportar estadísticas a Excel: sesiones y libros terminados | Bajo |
 
 ### Ideas a valorar (sin fecha)
 
 | Idea | Comentario |
 |---|---|
-| Exportar estadísticas a Excel | Sesiones y libros terminados en un archivo para analizarlos fuera de la app |
 | Biblioteca grande | Revisar rendimiento y memoria con varios cientos de libros (portadas, búsqueda y sincronización) |
-| Añadir libros desde Drive | Importar EPUB que ya están en una carpeta de Drive sin descargarlos antes al dispositivo |
-| Botones físicos de la tablet | Pasar página con los botones de volumen o los de la funda, si el navegador de la tablet los expone |
-| Espacio en el dispositivo | Mostrar lo que ocupa cada libro y liberar espacio de los terminados |
-| Compartir un EPUB desde otra app directamente al lector | Viable en la tablet, porque Android lo permite a las apps web instaladas. En el iPhone, Safari no lo permite |
-| Refresco forzado en tinta electrónica cada cierto número de páginas | Para limpiar restos de páginas anteriores. Validar antes si la tablet ya lo gestiona por sí sola |
+| Botones físicos de la tablet | Pasar página con los botones de volumen o los de la funda, si el navegador de la tablet los expone. Se comprobará con la prueba guiada (31) |
+| Refresco forzado en tinta electrónica cada cierto número de páginas | Para limpiar restos de páginas anteriores. Validar antes con la prueba guiada (31) si la tablet ya lo gestiona por sí sola |
 | Tercer dispositivo (ordenador) | Cabe en el diseño actual sin cambios |
