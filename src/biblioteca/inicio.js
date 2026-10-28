@@ -11,6 +11,7 @@ import { svgIcono } from '../ui/iconos.js';
 import { crearResumenObjetivos } from '../estadisticas/pantalla.js';
 import { leerQuieroLeer, moverEnQuieroLeer, alternarQuieroLeer } from '../datos/quiero-leer.js';
 import { abrirFicha } from '../ui/ficha.js';
+import { todosLosSubrayados } from '../datos/anotaciones.js';
 
 let alVerEstadisticas = () => {};
 let alCambiar = () => {};
@@ -205,6 +206,42 @@ function vacio() {
 }
 
 // libros: datos ya leídos con librosParaMostrar() (si no, se leen aquí).
+// --- Cita del día (mejora 30) ---
+// Un pasaje subrayado al azar de los libros de la biblioteca, el mismo durante
+// todo el día. Al tocarlo se abre el libro en ese punto.
+
+const MAX_CITA = 280;
+
+function citaDelDia(subrayados, porId) {
+  const validos = subrayados.filter((s) => porId.has(s.libroId) && s.texto).sort((a, b) => a.id.localeCompare(b.id));
+  if (!validos.length) return null;
+  const hoy = new Date().toLocaleDateString('sv'); // AAAA-MM-DD, hora local
+  let semilla = 0;
+  for (const c of hoy) semilla = (semilla * 31 + c.charCodeAt(0)) % 1000003;
+  return validos[semilla % validos.length];
+}
+
+function tarjetaCita(cita, libro) {
+  const tarjeta = document.createElement('button');
+  tarjeta.type = 'button';
+  tarjeta.className = 'tarjeta-cita';
+  const texto = document.createElement('blockquote');
+  texto.textContent = cita.texto.length > MAX_CITA ? `${cita.texto.slice(0, MAX_CITA).replace(/\s+\S*$/, '')}...` : cita.texto;
+  const origen = document.createElement('span');
+  origen.className = 'cita-origen';
+  origen.textContent = [libro.titulo, libro.autor].filter(Boolean).join(', ');
+  tarjeta.append(texto, origen);
+  if (cita.nota) {
+    const nota = document.createElement('span');
+    nota.className = 'subrayado-nota';
+    nota.textContent = cita.nota;
+    tarjeta.appendChild(nota);
+  }
+  tarjeta.setAttribute('aria-label', `Cita del día de ${libro.titulo}. Abrir el libro en este pasaje`);
+  tarjeta.addEventListener('click', () => pulsarLibro(libro, cita.cfi));
+  return tarjeta;
+}
+
 export async function pintarInicio(datos) {
   const libros = datos || await librosParaMostrar();
   const contenedor = $('contenido-inicio');
@@ -228,6 +265,8 @@ export async function pintarInicio(datos) {
   const partes = [];
   if (leyendo.length) partes.push(await tarjetaActual(leyendo[0]));
   partes.push(titulo('Objetivos de lectura'), await crearResumenObjetivos(alVerEstadisticas));
+  const cita = citaDelDia(await todosLosSubrayados(), porId);
+  if (cita) partes.push(titulo('Cita del día'), tarjetaCita(cita, porId.get(cita.libroId)));
   if (leyendo.length > 1) partes.push(titulo('Seguir leyendo'), await carrusel(leyendo.slice(1)));
   if (quiero.length) partes.push(tituloConEnlace('Quiero leer', 'Ordenar', ordenarQuieroLeer), await carrusel(quiero));
   if (nuevos.length) {

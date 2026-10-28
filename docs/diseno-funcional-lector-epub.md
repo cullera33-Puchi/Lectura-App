@@ -55,7 +55,7 @@ Lector EPUB/
 ├── copias/          copia-AAAA-MM-DD.json (copia de seguridad diaria)
 ├── biblioteca.json  catálogo de libros, colecciones, objetivos y Quiero leer
 ├── progreso.json    posición de lectura por libro
-├── anotaciones.json marcadores (y, más adelante, subrayados y notas)
+├── anotaciones.json marcadores, subrayados y notas
 └── sesiones-<id>.json sesiones de lectura, uno por dispositivo
 ```
 
@@ -191,7 +191,7 @@ En el perfil Tinta electrónica hay una opción "Descargar todos".
 | Deslizar a izquierda o derecha | Pasar página con animación de deslizamiento |
 | Tocar el centro | Mostrar u ocultar los controles |
 | Deslizar hacia abajo | Cerrar el libro y volver a la biblioteca |
-| Pulsación larga | Sin acción en la v1 (reservada para subrayados) |
+| Pulsación larga | Selecciona texto para subrayarlo o añadir una nota (0.10.0) |
 
 Zonas táctiles orientativas: tercio izquierdo, tercio central y tercio derecho de la pantalla.
 
@@ -407,11 +407,11 @@ Regla: cada dispositivo solo escribe su propio archivo de sesiones, también al 
 |---|---|---|---|
 | Búsqueda dentro del libro | Localizar un nombre o una frase. Resultados con su contexto, salto al pasaje y resaltado temporal (subrayado en Tinta electrónica) | Medio | Hecho (0.7.0) |
 | Marcadores | Volver a pasajes concretos. Botón en la barra superior y lista en el menú. Se sincronizan | Bajo | Hecho (0.7.2) |
-| Subrayados en colores y notas | Con pulsación larga sobre el texto. Se sincronizan entre dispositivos | Medio | Pendiente (mejora 26) |
-| Exportar subrayados y notas a Markdown | Llevarse las ideas de un libro a otro sitio | Bajo | Pendiente (mejora 27) |
+| Subrayados en colores y notas | Con pulsación larga sobre el texto. Se sincronizan entre dispositivos | Medio | Hecho (0.10.0) |
+| Exportar subrayados y notas a Markdown | Llevarse las ideas de un libro a otro sitio | Bajo | Hecho (0.10.0) |
 | Diccionario | Definición de una palabra con pulsación larga | Medio | Pendiente. Choca con la regla 7 (ningún servicio externo salvo Google): habría que incluir un diccionario sin conexión o aceptar una excepción |
 
-Impacto en el diseño: archivo `anotaciones.json` en Drive (ya creado para los marcadores), con cada anotación anclada por un CFI. Se fusiona por identificador de anotación y gana la fecha más reciente. Los borrados se conservan marcados con `eliminado`, igual que los libros. Los subrayados usarán el mismo archivo con un rango CFI.
+Impacto en el diseño: archivo `anotaciones.json` en Drive (ya creado para los marcadores), con cada anotación anclada por un CFI. Se fusiona por identificador de anotación y gana la fecha más reciente. Los borrados se conservan marcados con `eliminado`, igual que los libros. Los subrayados usan el mismo archivo con un rango CFI (0.10.0).
 
 En el perfil Tinta electrónica, los colores de subrayado se sustituirán por subrayado simple, sin grises.
 
@@ -455,6 +455,7 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.9.10 | Capítulos en blanco en el ordenador: si una imagen, fuente, hoja de estilo o el propio capítulo no se podía descomprimir, epub.js lo esperaba para siempre y el capítulo se quedaba con 0 px de ancho. Ahora se leen directamente del archivo, con un plazo de 8 s: el capítulo se pinta sin el recurso dañado (o con el aviso de parte dañada) y el registro anota cuál era. Si la primera página tarda, el registro dice en qué fase está cada capítulo |
 | 0.9.11 | El registro de Diagnóstico se conserva al recargar la página o reabrir la app (las últimas 150 líneas, en este dispositivo), para no perder lo que pasó antes de copiarlo |
 | 0.9.12 | Libros que no abrían desde la 0.8.9 (visto con un EPUB de Penguin): si una hoja de estilo mencionaba su propio nombre, al prepararla se esperaba a sí misma y el capítulo se quedaba en blanco. Las hojas preparadas y los recursos tal cual van en memorias separadas, así ninguna hoja espera a otra ni a sí misma. Además, si la preparación de un capítulo tarda más de 5 s, se pinta sin sus imágenes y estilos y el registro anota qué faltaba. El aviso de un libro que no termina de pintarse ya no habla de DRM |
+| 0.10.0 | Subrayados y notas (mejoras 26, 27 y 30). Mantener pulsado el texto (o arrastrar con el ratón) lo selecciona y aparece una barra abajo: cuatro colores (amarillo, verde, azul y rosa) y "Nota". En tinta electrónica, "Subrayar" con subrayado simple, sin colores. Tocar un subrayado permite cambiar el color, escribir o editar la nota y borrarlo. Lista "Subrayados y notas" en el menú del lector (salta al pasaje) y en la ficha del libro (abre el libro en el pasaje, con el botón para volver a donde se iba). Exportar a Markdown desde las dos listas: en el iPhone abre el menú Compartir; en el ordenador se descarga el archivo. Cita del día en Inicio: un pasaje subrayado al azar, el mismo todo el día, que abre el libro en ese punto. Se sincronizan en `anotaciones.json` (tipo `subrayado`, con `cfi` de rango, `texto`, `color` y `nota`), fusionados por identificador como los marcadores |
 
 ### Mejoras pendientes (numeradas)
 
@@ -463,10 +464,7 @@ Del repaso de la app y nuevas funciones. La numeración se mantiene para poder e
 | Nº | Mejora | Esfuerzo |
 |---|---|---|
 | 23 | Cómics en CBR (y CBZ): importarlos, verlos en la biblioteca con su portada y leerlos página a página, con zoom, doble página en horizontal y sentido de lectura de manga. Es viable con dos decisiones previas: añadir una librería para descomprimir RAR (por ejemplo, libarchive.js en WebAssembly, copiada en `vendor/`, cargada solo al importar) y una excepción a la regla 1, porque un cómic no tiene CFI y la posición sería el número de página. Al importar se convertiría a CBZ para leerlo después con JSZip, que ya está en la app | Alto |
-| 26 | Subrayados en colores y notas, con pulsación larga sobre el texto. Se sincronizan en `anotaciones.json`. En Tinta electrónica, subrayado simple sin colores | Medio |
-| 27 | Exportar los subrayados y notas de un libro a Markdown (depende de la 26) | Bajo |
 | 29 | Lectura en voz alta con las voces del propio dispositivo, pasando de página sola. Sin servicios externos | Medio |
-| 30 | Citas favoritas en Inicio: un pasaje subrayado al azar de los libros leídos (depende de la 26) | Bajo |
 | 32 | Espacio en el dispositivo: lo que ocupa cada libro y liberar el de los terminados | Bajo |
 | 33 | Añadir libros desde Drive: importar EPUB que ya están en Drive sin descargarlos antes al dispositivo | Medio |
 | 34 | Compartir un EPUB desde otra app al lector. Solo en la tablet: Safari no lo permite en el iPhone | Bajo |

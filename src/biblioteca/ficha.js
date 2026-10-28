@@ -13,6 +13,8 @@ import { crearPortada, porcentajeDe, textoEstado } from './portadas.js';
 import { abrirFicha, cerrarFicha } from '../ui/ficha.js';
 import { svgIcono } from '../ui/iconos.js';
 import { registrar } from '../ui/registro.js';
+import { anotacionesDeLibro } from '../datos/anotaciones.js';
+import { ordenarSubrayados, compartirSubrayados } from '../ui/exportar-subrayados.js';
 
 function el(etiqueta, clase, texto) {
   const e = document.createElement(etiqueta);
@@ -137,6 +139,41 @@ function seccionValoracion(libro, acciones) {
 }
 
 // acciones: { abrir(libro), editar(libro), cambiado() }, que se ejecutan dentro del toque.
+const COLORES_FICHA = { amarillo: '#ffd23f', verde: '#7ed957', azul: '#5ab0ff', rosa: '#ff7eb6' };
+
+function seccionSubrayados(libro, subrayados, acciones) {
+  const caja = el('div', 'grupo ficha-subrayados');
+  const tinta = document.body.dataset.perfil === 'tinta';
+  for (const s of subrayados) {
+    const fila = el('button', 'fila subrayado-fila ficha-subrayado');
+    fila.type = 'button';
+    const texto = el('div', 't-texto');
+    const cabeza = el('div', 'resultado-capitulo');
+    if (!tinta) {
+      const marca = el('span', 'marca-color');
+      marca.style.background = COLORES_FICHA[s.color] || COLORES_FICHA.amarillo;
+      cabeza.appendChild(marca);
+    }
+    cabeza.append(s.capitulo || 'Sin capítulo');
+    texto.append(cabeza, el('div', 'subrayado-texto', s.texto));
+    if (s.nota) texto.appendChild(el('div', 'subrayado-nota', s.nota));
+    fila.appendChild(texto);
+    // Abre el libro en el pasaje.
+    fila.addEventListener('click', () => {
+      cerrarFicha();
+      acciones.abrir(libro, s.cfi);
+    });
+    caja.appendChild(fila);
+  }
+  const exportar = el('button', 'fila fila-boton', 'Exportar a Markdown');
+  exportar.type = 'button';
+  exportar.addEventListener('click', () => {
+    compartirSubrayados(libro, subrayados).catch((e) => registrar(`Exportar subrayados: ${e.message}`, 'error'));
+  });
+  caja.appendChild(exportar);
+  return caja;
+}
+
 export async function mostrarFichaLibro(libro, acciones) {
   const [sesiones, colecciones] = await Promise.all([todasLasSesiones(), leerColecciones()]);
   const lectura = resumenLibro(sesiones.filter((s) => s.libroId === libro.id));
@@ -214,6 +251,10 @@ export async function mostrarFichaLibro(libro, acciones) {
   partes.push(tuLectura || el('p', 'pie-grupo ficha-vacio', 'Todavía no hay sesiones de lectura de este libro.'));
 
   partes.push(cabecera('Tu valoración'), seccionValoracion(libro, acciones));
+
+  // Subrayados y notas (mejora 26), con exportación a Markdown (mejora 27).
+  const subrayados = ordenarSubrayados(await anotacionesDeLibro(libro.id, 'subrayado'));
+  if (subrayados.length) partes.push(cabecera(`Subrayados y notas (${subrayados.length})`), seccionSubrayados(libro, subrayados, acciones));
 
   // Sinopsis
   if (edicion.sinopsis) {

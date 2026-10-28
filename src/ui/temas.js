@@ -138,10 +138,9 @@ body {
   font-size: ${ajustes.tamano}% !important;
   -webkit-text-size-adjust: none;
   -webkit-tap-highlight-color: transparent;
-  /* La pulsación larga no tiene acción en la v1 (reservada para subrayados). */
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
+  /* Con pulsación larga se selecciona texto para subrayar (mejora 26). */
+  -webkit-user-select: text;
+  user-select: text;
 }
 body *:not(img):not(svg):not(image) {
   color: inherit !important;

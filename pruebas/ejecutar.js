@@ -60,6 +60,7 @@ const PRUEBAS = [
   ['casos/recurso-danado.js'],
   ['casos/rebote.js'],
   ['casos/notas.js'],
+  ['casos/subrayados.js'],
   ['casos/pantalla-encendida.js'],
   ['casos/formato-libro.js'],
   ['casos/ordenador.js'],

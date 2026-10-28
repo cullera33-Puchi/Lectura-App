@@ -5,14 +5,17 @@
 // flotantes (cerrar arriba y menú abajo). El menú abre Contenido, Temas y
 // ajustes, y Sincronizar.
 
-import { abrirLibro, AperturaCancelada, MENSAJE_LIBRO_ILEGIBLE } from './lector.js';
+import { abrirLibro, AperturaCancelada, MENSAJE_LIBRO_ILEGIBLE, COLORES } from './lector.js';
 import {
   leerLibro, leerArchivo, leerUbicaciones, guardarUbicaciones, valorarLibro,
 } from '../datos/libros.js';
 import { leerProgreso, guardarProgreso, cambiarEstado } from '../datos/progreso.js';
 import { RegistroSesiones } from '../datos/sesiones.js';
 import { comprobarMetaDiaria } from '../estadisticas/meta-diaria.js';
-import { anotacionesDeLibro, crearMarcador, eliminarAnotacion } from '../datos/anotaciones.js';
+import {
+  anotacionesDeLibro, crearMarcador, eliminarAnotacion, crearSubrayado, cambiarSubrayado, COLORES_SUBRAYADO,
+} from '../datos/anotaciones.js';
+import { ordenarSubrayados, compartirSubrayados } from '../ui/exportar-subrayados.js';
 import { mostrarAviso } from '../ui/aviso.js';
 import {
   preferencias, nombreDispositivo, idDispositivo, alCambiarPreferencias,
@@ -24,7 +27,7 @@ import {
 import { registrar } from '../ui/registro.js';
 import { mantenerEncendida, actividadLectura, soltarPantalla } from './pantalla-encendida.js';
 import { leerSincronizacion } from '../datos/pendientes.js';
-import { mostrarHoja, mostrarTexto, hojaAbierta } from '../ui/hoja.js';
+import { mostrarHoja, mostrarTexto, pedirTextoLargo, hojaAbierta } from '../ui/hoja.js';
 import { sincronizacionEnCurso } from '../sync/sincronizar.js';
 import { cargarRitmo, anotarPagina, reiniciarReferencia, tiempoRestante } from './ritmo.js';
 import {
@@ -43,7 +46,7 @@ let alCerrar = () => {};
 // ya no es el turno vigente (otro toque, o se cerró mientras se abría) se descarta.
 let turno = 0;
 
-const PANELES = ['panel-menu', 'panel-indice', 'panel-buscar', 'panel-marcadores', 'panel-aa'];
+const PANELES = ['panel-menu', 'panel-indice', 'panel-buscar', 'panel-marcadores', 'panel-subrayados', 'panel-aa'];
 
 function controlesVisibles(visibles) {
   if (visibles) abrirCapa($('controles-lector'));
@@ -137,7 +140,7 @@ async function alternarMarcadorAhora(a) {
 
 // Tras sincronizar, por si llegan marcadores del otro dispositivo.
 export function refrescarMarcadores() {
-  return cargarMarcadores();
+  return Promise.all([cargarMarcadores(), cargarSubrayados()]);
 }
 
 function pintarMarcadores() {
@@ -186,6 +189,178 @@ async function abrirMarcadores() {
   abrirPanel('panel-marcadores');
 }
 
+// --- Subrayados y notas (mejora 26) ---
+// Mantener pulsado el texto lo selecciona; una barra abajo ofrece los colores
+// (en tinta electrónica, subrayado simple) y "Nota". Tocar un subrayado
+// permite cambiar el color, escribir la nota o borrarlo.
+
+const NOMBRES_COLOR = { amarillo: 'Amarillo', verde: 'Verde', azul: 'Azul', rosa: 'Rosa' };
+let seleccion = null;
+const enTinta = () => preferencias().dispositivo.perfil === 'tinta';
+
+async function cargarSubrayados(a = actual) {
+  if (!a?.motor) return;
+  a.subrayados = await anotacionesDeLibro(a.id, 'subrayado');
+  if (actual === a) a.motor.pintarSubrayados(a.subrayados);
+}
+
+function botonColor(color, alElegir, marcado = false) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'color-subrayado';
+  b.style.background = COLORES[color];
+  b.dataset.color = color;
+  b.setAttribute('aria-label', `Subrayar en ${NOMBRES_COLOR[color].toLowerCase()}`);
+  b.setAttribute('aria-pressed', String(marcado));
+  b.addEventListener('click', () => alElegir(color));
+  return b;
+}
+
+function pintarBarraSeleccion() {
+  const caja = $('colores-seleccion');
+  caja.replaceChildren();
+  if (enTinta()) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'boton-barra';
+    b.dataset.color = 'amarillo';
+    b.innerHTML = `${svgIcono('subrayado')}<span>Subrayar</span>`;
+    b.addEventListener('click', () => subrayarSeleccion('amarillo'));
+    caja.appendChild(b);
+  } else {
+    for (const color of COLORES_SUBRAYADO) caja.appendChild(botonColor(color, (c) => subrayarSeleccion(c)));
+  }
+}
+
+function alSeleccionar(datos) {
+  seleccion = datos;
+  if (datos) {
+    pintarBarraSeleccion();
+    if (capaAbierta($('controles-lector'))) controlesVisibles(false);
+  }
+  $('barra-seleccion').hidden = !datos;
+}
+
+function terminarSeleccion() {
+  actual?.motor?.quitarSeleccion();
+  alSeleccionar(null);
+}
+
+async function subrayarSeleccion(color, { conNota = false } = {}) {
+  const a = actual;
+  const s = seleccion;
+  if (!a?.motor || !s) return;
+  terminarSeleccion();
+  const nuevo = await crearSubrayado(a.id, {
+    cfi: s.cfi, texto: s.texto, color, capitulo: s.capitulo, seccion: s.seccion, porcentaje: s.porcentaje,
+  });
+  registrar(`Subrayado en "${a.titulo}" (${s.capitulo || ''})`);
+  await cargarSubrayados(a);
+  if (conNota) await editarNota(nuevo.id);
+}
+
+async function editarNota(id) {
+  const a = actual;
+  const s = a?.subrayados?.find((x) => x.id === id);
+  if (!s) return;
+  const texto = await pedirTextoLargo(s.nota ? 'Editar nota' : 'Añadir nota', s.nota || '');
+  if (texto === null || actual !== a) return;
+  await cambiarSubrayado(id, { nota: texto || null });
+  await cargarSubrayados(a);
+}
+
+async function alTocarSubrayado(id) {
+  const a = actual;
+  const s = a?.subrayados?.find((x) => x.id === id);
+  if (!s || hojaAbierta()) return;
+  const parrafos = [`«${s.texto}»`];
+  if (s.nota) parrafos.push(`Nota: ${s.nota}`);
+  const eleccion = mostrarTexto(s.capitulo || 'Subrayado', parrafos, [
+    { id: 'nota', texto: s.nota ? 'Editar nota' : 'Añadir nota' },
+    { id: 'borrar', texto: 'Borrar subrayado', destructivo: true },
+  ]);
+  // Colores, encima de las acciones (no en tinta electrónica).
+  if (!enTinta()) {
+    const fila = document.createElement('div');
+    fila.className = 'colores-hoja';
+    for (const color of COLORES_SUBRAYADO) {
+      fila.appendChild(botonColor(color, async (c) => {
+        $('hoja-cancelar').click();
+        if (c === s.color) return;
+        await cambiarSubrayado(id, { color: c });
+        await cargarSubrayados(a);
+      }, color === s.color));
+    }
+    $('hoja-botones').querySelector('.texto-hoja')?.after(fila);
+  }
+  const accion = await eleccion;
+  if (actual !== a) return;
+  if (accion === 'nota') await editarNota(id);
+  else if (accion === 'borrar') {
+    await eliminarAnotacion(id);
+    registrar(`Subrayado borrado en "${a.titulo}"`);
+    await cargarSubrayados(a);
+  }
+}
+
+function pintarListaSubrayados() {
+  const a = actual;
+  const lista = $('lista-subrayados');
+  lista.replaceChildren();
+  const subrayados = ordenarSubrayados(a?.subrayados || []);
+  $('subrayados-vacio').hidden = subrayados.length > 0;
+  $('btn-exportar-subrayados').hidden = subrayados.length === 0;
+  for (const s of subrayados) {
+    const li = document.createElement('li');
+    li.className = 'marcador-fila subrayado-fila';
+    const ir = document.createElement('button');
+    ir.type = 'button';
+    const cabecera = document.createElement('span');
+    cabecera.className = 'resultado-capitulo';
+    if (!enTinta()) {
+      const marca = document.createElement('span');
+      marca.className = 'marca-color';
+      marca.style.background = COLORES[s.color] || COLORES.amarillo;
+      cabecera.appendChild(marca);
+    }
+    const pct = s.porcentaje != null ? `${Math.round(s.porcentaje * 100)} %` : '';
+    cabecera.append([s.capitulo, pct].filter(Boolean).join(', '));
+    const texto = document.createElement('span');
+    texto.className = 'resultado-texto subrayado-texto';
+    texto.textContent = s.texto;
+    ir.append(cabecera, texto);
+    if (s.nota) {
+      const nota = document.createElement('span');
+      nota.className = 'subrayado-nota';
+      nota.textContent = s.nota;
+      ir.appendChild(nota);
+    }
+    ir.addEventListener('click', async () => {
+      cerrarPaneles();
+      controlesVisibles(false);
+      await saltar(s.cfi);
+    });
+    const quitar = document.createElement('button');
+    quitar.type = 'button';
+    quitar.className = 'marcador-quitar';
+    quitar.setAttribute('aria-label', 'Borrar este subrayado');
+    quitar.innerHTML = svgIcono('papelera');
+    quitar.addEventListener('click', async () => {
+      await eliminarAnotacion(s.id);
+      await cargarSubrayados(a);
+      pintarListaSubrayados();
+    });
+    li.append(ir, quitar);
+    lista.appendChild(li);
+  }
+}
+
+async function abrirSubrayados() {
+  await cargarSubrayados();
+  pintarListaSubrayados();
+  abrirPanel('panel-subrayados');
+}
+
 // --- Volver a donde estabas (punto 2) ---
 // Tras un salto (índice, búsqueda, barra, marcador o enlace del libro) aparece
 // un botón para regresar. Después de regresar, el mismo botón permite ir otra
@@ -212,7 +387,9 @@ async function saltar(destino) {
   const a = actual;
   if (!a?.motor) return;
   const volverAntes = a.volver;
-  if (a.info?.cfi) anotarSalto(a, a.info.cfi, a.info);
+  // Recién abierto el libro aún no hay posición pintada: se vuelve a la guardada.
+  const desde = a.info?.cfi || a.ultimoCfi;
+  if (desde) anotarSalto(a, desde, a.info);
   try {
     await a.motor.irA(destino);
   } catch (e) {
@@ -773,7 +950,9 @@ function aplicarPreferencias() {
 // Punto 8.3 del diseño: si la última posición sincronizada de otro dispositivo
 // es más reciente y distinta, se ofrece ir allí. Devuelve el progreso con el
 // que abrir el libro.
-async function decidirPosicion(id, local) {
+// preguntar: false al abrir en un pasaje concreto (subrayado, cita del día):
+// no tiene sentido ofrecer la posición del otro dispositivo.
+async function decidirPosicion(id, local, { preguntar = true } = {}) {
   const remota = (await leerSincronizacion('progresoRemoto'))?.progreso?.[id];
   // Se compara por identificador de dispositivo; las entradas antiguas, sin
   // identificador, por nombre.
@@ -791,7 +970,7 @@ async function decidirPosicion(id, local) {
       ? { ...local, estado: remota.estado || local.estado, fechaTerminado: remota.fechaTerminado ?? null }
       : { ...remota, id };
   }
-  if (!esDeOtro || !masReciente || remota.cfi === local?.cfi) return base;
+  if (!preguntar || !esDeOtro || !masReciente || remota.cfi === local?.cfi) return base;
   // Si se rechaza la posición del otro dispositivo sin tener una propia, se
   // empieza por el principio, pero con su estado (terminado).
   // Sin fecha (provisional): no debe pisar en Drive la posición remota.
@@ -856,7 +1035,9 @@ export async function revisarPosicionRemota() {
   }
 }
 
-export async function abrirPantallaLector(id) {
+// destino: CFI al que saltar tras abrir (queda el botón para volver a donde
+// se iba leyendo).
+export async function abrirPantallaLector(id, { destino = null } = {}) {
   if (actual) await cerrarPantallaLector();
   const miTurno = ++turno;
   const cancelado = () => miTurno !== turno;
@@ -870,7 +1051,7 @@ export async function abrirPantallaLector(id) {
   const enMarcha = sincronizacionEnCurso();
   if (enMarcha) await Promise.race([enMarcha.catch(() => {}), new Promise((r) => setTimeout(r, ESPERA_SINCRONIZACION_MS))]);
   if (cancelado()) throw new AperturaCancelada();
-  const progreso = await decidirPosicion(id, progresoLocal);
+  const progreso = await decidirPosicion(id, progresoLocal, { preguntar: !destino });
   if (cancelado()) throw new AperturaCancelada();
   // La posición remota que había al abrir ya se ha tenido en cuenta.
   const remotaAlAbrir = (await leerSincronizacion('progresoRemoto'))?.progreso?.[id]?.fecha || null;
@@ -893,6 +1074,7 @@ export async function abrirPantallaLector(id) {
   const nuevo = {
     id,
     titulo: libro.titulo,
+    autor: libro.autor || null,
     motor: null,
     sesiones,
     progreso: progreso || null,
@@ -927,6 +1109,12 @@ export async function abrirPantallaLector(id) {
         alSaltarPorEnlace: (cfi, info) => {
           if (actual === nuevo) anotarSalto(nuevo, cfi, info);
         },
+        alSeleccionar: (datos) => {
+          if (actual === nuevo) alSeleccionar(datos);
+        },
+        alTocarSubrayado: (sid) => {
+          if (actual === nuevo) alTocarSubrayado(sid);
+        },
         // Nota al pie (mejora 22): su texto en la hoja, sin salir de la página.
         alTocarNota: async ({ titulo, parrafos, irALaNota }) => {
           if (actual !== nuevo || hojaAbierta()) return;
@@ -957,6 +1145,11 @@ export async function abrirPantallaLector(id) {
   sesiones.iniciar();
   mantenerEncendida();
   cargarMarcadores(nuevo).catch(() => {});
+  cargarSubrayados(nuevo).catch((e) => registrar(`Subrayados: ${e.message}`, 'error'));
+  if (destino && actual === nuevo) {
+    nuevo.repaginandoHasta = Date.now() + MARGEN_REPAGINADO_MS; // el salto no es un avance
+    await saltar(destino);
+  }
 }
 
 export function idLibroAbierto() {
@@ -976,6 +1169,8 @@ export async function cerrarPantallaLector() {
   const cerrado = actual;
   actual = null;
   soltarPantalla();
+  seleccion = null;
+  $('barra-seleccion').hidden = true;
   cerrarPaneles();
   $('controles-lector').hidden = true;
   $('btn-volver-lectura').hidden = true;
@@ -1004,6 +1199,15 @@ export function prepararPantallaLector({ cerrar }) {
   $('btn-volver-lectura').addEventListener('click', volver);
   $('btn-marcadores').addEventListener('click', abrirMarcadores);
   $('btn-cerrar-marcadores').addEventListener('click', cerrarPaneles);
+  $('btn-subrayados').addEventListener('click', abrirSubrayados);
+  $('btn-cerrar-subrayados').addEventListener('click', cerrarPaneles);
+  $('btn-exportar-subrayados').addEventListener('click', () => {
+    const a = actual;
+    if (!a?.subrayados?.length) return;
+    compartirSubrayados({ titulo: a.titulo, autor: a.autor }, a.subrayados).catch((e) => mostrarAviso(e.message));
+  });
+  $('btn-nota-seleccion').addEventListener('click', () => subrayarSeleccion('amarillo', { conNota: true }));
+  $('btn-cancelar-seleccion').addEventListener('click', terminarSeleccion);
   $('barra-libro').addEventListener('change', saltarConBarra);
   // Si se suelta en el mismo valor no hay 'change': se sale del arrastre. Con
   // margen, para no adelantarse al 'change' de una suelta normal.

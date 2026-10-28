@@ -77,6 +77,18 @@ export function mostrarTexto(titulo, parrafos, botones, { textoCancelar = 'Cerra
   return eleccion;
 }
 
+// Pide un texto de varias líneas (por ejemplo, una nota). Devuelve el texto
+// (vacío si se borra) o null si se cancela.
+export async function pedirTextoLargo(titulo, valor, { textoBoton = 'Guardar' } = {}) {
+  const area = document.createElement('textarea');
+  area.className = 'campo-hoja area-hoja';
+  area.rows = 5;
+  area.value = valor ?? '';
+  area.setAttribute('aria-label', titulo);
+  if (!(await mostrarFormulario(titulo, [area], { textoBoton, enfocar: area }))) return null;
+  return area.value.trim();
+}
+
 // Pide un texto o un número en la hoja. Devuelve el valor o null si se cancela.
 export async function pedirValor(titulo, valor, { tipo = 'text', min, max, textoBoton = 'Guardar' } = {}) {
   const campo = document.createElement('input');

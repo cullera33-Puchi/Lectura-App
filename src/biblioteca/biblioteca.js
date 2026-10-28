@@ -449,10 +449,11 @@ async function descargar(promesaToken, libros) {
 
 // Abrir un libro desde la biblioteca o desde "Leyendo ahora". Si está solo en
 // la nube, se descarga primero.
-export function pulsarLibro(libro) {
+// destino: CFI en el que abrirlo (un subrayado de la ficha o la cita del día).
+export function pulsarLibro(libro, destino = null) {
   if (descargando.has(libro.id)) return;
   if (libro.descargado) {
-    alAbrirLibro(libro.id);
+    alAbrirLibro(libro.id, destino);
     return;
   }
   if (libro.noDisponible) {
@@ -470,7 +471,7 @@ export function pulsarLibro(libro) {
     // Si mientras tanto se ha abierto otro libro, no se cambia de libro. Si se
     // ha eliminado durante la descarga, no se abre.
     const actualizado = await leerLibro(libro.id);
-    if (bien && actualizado && !actualizado.eliminado && !lectorAbierto()) alAbrirLibro(libro.id);
+    if (bien && actualizado && !actualizado.eliminado && !lectorAbierto()) alAbrirLibro(libro.id, destino);
   });
 }
 

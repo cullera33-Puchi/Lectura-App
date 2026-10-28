@@ -394,12 +394,16 @@ async function sincronizarAnotaciones(token, raiz, avisos, contenido) {
   }
   // Marcadores añadidos o quitados en el otro dispositivo, para el resumen. Un
   // marcador borrado que este dispositivo no tenía no cuenta.
+  // Los subrayados y notas (mejora 26) se cuentan aparte.
   let recibidos = 0;
   let quitados = 0;
+  let subrayados = 0;
   for (const [id, a] of Object.entries(fusion.anotaciones.anotaciones)) {
     const local = antes[id];
     if ((a.fecha || '') <= (local?.fecha || '')) continue;
-    if (!a.eliminado) recibidos += 1;
+    if (a.tipo === 'subrayado') {
+      if (!a.eliminado || (local && !local.eliminado)) subrayados += 1;
+    } else if (!a.eliminado) recibidos += 1;
     else if (local && !local.eliminado) quitados += 1;
   }
   if (fusion.escribirRemoto || remoto.duplicados.length) {
@@ -417,7 +421,7 @@ async function sincronizarAnotaciones(token, raiz, avisos, contenido) {
     if (!recientes[id] || (a.fecha || '') > (recientes[id].fecha || '')) recientes[id] = a;
   }
   await guardarAnotacionesFusionadas(recientes);
-  return { recibidos, quitados };
+  return { recibidos, quitados, subrayados };
 }
 
 const PORTADAS_A_LA_VEZ = 4;
@@ -603,6 +607,7 @@ async function ejecutar(token, alEstado) {
   resumen.sesiones = sesionesRecibidas;
   resumen.marcadores = marcadoresRecibidos.recibidos;
   resumen.marcadoresQuitados = marcadoresRecibidos.quitados;
+  resumen.subrayados = marcadoresRecibidos.subrayados;
   await guardarSincronizacion('ultima', new Date().toISOString());
 
   // Copia de seguridad del día (solo en la primera sincronización de cada día).
@@ -655,6 +660,7 @@ export function textoResumen(r) {
   if (r.posiciones) partes.push(plural(r.posiciones, 'posición actualizada', 'posiciones actualizadas'));
   if (r.marcadores) partes.push(plural(r.marcadores, 'marcador recibido', 'marcadores recibidos'));
   if (r.marcadoresQuitados) partes.push(plural(r.marcadoresQuitados, 'marcador quitado', 'marcadores quitados'));
+  if (r.subrayados) partes.push(plural(r.subrayados, 'cambio en subrayados y notas', 'cambios en subrayados y notas'));
   const recibido = [r.colecciones && 'colecciones', r.objetivos && 'objetivos', r.quieroLeer && 'Quiero leer'].filter(Boolean);
   if (recibido.length) partes.push(`cambios en ${recibido.join(', ').replace(/, ([^,]*)$/, ' y $1')}`);
   if (r.sesiones) partes.push(plural(r.sesiones, 'sesión de lectura recibida', 'sesiones de lectura recibidas'));

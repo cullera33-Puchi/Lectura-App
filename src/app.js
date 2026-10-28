@@ -112,7 +112,7 @@ function volverDesde(pantalla) {
   if (history.state?.pantalla === pantalla) history.back();
 }
 
-async function abrirLibro(id) {
+async function abrirLibro(id, destino = null) {
   if (abriendo) return; // doble toque en una portada
   abriendo = true;
   scrollAntesDeLeer = window.scrollY;
@@ -121,7 +121,7 @@ async function abrirLibro(id) {
   if (history.state?.capa) history.replaceState({ pantalla: 'lector' }, '');
   else history.pushState({ pantalla: 'lector' }, '');
   try {
-    await abrirPantallaLector(id);
+    await abrirPantallaLector(id, { destino });
   } catch (e) {
     if (!(e instanceof AperturaCancelada)) {
       registrar(e.message, 'error');

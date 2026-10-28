@@ -69,7 +69,7 @@ export function sincronizacionAutomaticaActiva() {
   return preferencias().dispositivo.sincronizacionAutomatica !== false;
 }
 
-const HAY_CAMBIOS = (r) => r.subidos || r.nuevos || r.bajas || r.posiciones || r.marcadores || r.marcadoresQuitados
+const HAY_CAMBIOS = (r) => r.subidos || r.nuevos || r.bajas || r.posiciones || r.marcadores || r.marcadoresQuitados || r.subrayados
   || r.colecciones || r.objetivos || r.quieroLeer || r.avisos.length;
 let ultimaAutomatica = 0;
 

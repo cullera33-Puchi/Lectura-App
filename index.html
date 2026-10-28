@@ -260,6 +260,12 @@
         <button type="button" id="btn-menu-lector" class="boton-redondo" aria-label="Menú del libro"><i data-icono="menu"></i></button>
       </div>
     </div>
+    <!-- Texto seleccionado: subrayar o añadir una nota (mejora 26) -->
+    <div id="barra-seleccion" class="barra-seleccion" role="toolbar" aria-label="Subrayar el texto seleccionado" hidden>
+      <div id="colores-seleccion" class="colores-seleccion"></div>
+      <button type="button" id="btn-nota-seleccion" class="boton-barra"><i data-icono="nota"></i><span>Nota</span></button>
+      <button type="button" id="btn-cancelar-seleccion" class="boton-barra" aria-label="Cancelar la selección"><i data-icono="cerrar"></i></button>
+    </div>
     <div id="fondo-panel" class="fondo" hidden></div>
 
     <div id="panel-menu" class="hoja" role="dialog" aria-label="Menú del libro" hidden>
@@ -269,6 +275,7 @@
         <button type="button" id="btn-indice" class="fila fila-menu"><span>Contenido</span><i data-icono="indice"></i></button>
         <button type="button" id="btn-buscar-libro" class="fila fila-menu"><span>Buscar en el libro</span><i data-icono="buscar"></i></button>
         <button type="button" id="btn-marcadores" class="fila fila-menu"><span>Marcadores</span><i data-icono="marcador"></i></button>
+        <button type="button" id="btn-subrayados" class="fila fila-menu"><span>Subrayados y notas</span><i data-icono="subrayado"></i></button>
         <button type="button" id="btn-aa" class="fila fila-menu"><span>Temas y ajustes</span><span class="icono-aa">Aa</span></button>
         <button type="button" id="btn-sincronizar-lector" class="fila fila-menu boton-sincronizar"><span>Sincronizar</span><span class="indicador" hidden></span><i data-icono="sincronizar"></i></button>
       </div>
@@ -305,6 +312,17 @@
       </div>
       <p id="marcadores-vacio" class="estado-busqueda" hidden>Todavía no hay marcadores. Toca el marcador de arriba a la derecha para guardar la página en la que estás.</p>
       <ol id="lista-marcadores" class="lista-panel"></ol>
+    </div>
+
+    <div id="panel-subrayados" class="hoja hoja-alta" role="dialog" aria-label="Subrayados y notas" hidden>
+      <div class="asa"></div>
+      <div class="hoja-cabecera">
+        <h2>Subrayados y notas</h2>
+        <button type="button" id="btn-exportar-subrayados" class="boton-redondo pequeno" aria-label="Exportar a Markdown"><i data-icono="compartir"></i></button>
+        <button type="button" id="btn-cerrar-subrayados" class="boton-redondo pequeno" aria-label="Cerrar"><i data-icono="cerrar"></i></button>
+      </div>
+      <p id="subrayados-vacio" class="estado-busqueda" hidden>Todavía no hay subrayados. Mantén pulsado el texto para seleccionarlo y elige un color o una nota.</p>
+      <ol id="lista-subrayados" class="lista-panel"></ol>
     </div>
 
     <div id="panel-aa" class="hoja" role="dialog" aria-label="Temas y ajustes" hidden></div>

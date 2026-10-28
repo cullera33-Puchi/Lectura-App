@@ -44,6 +44,11 @@ const ESPERA_CAPITULO_MS = 5000; // todos los recursos de un capítulo
 const URL_FUENTES = new URL('../../fonts/fuentes.css', import.meta.url).href;
 const MAX_RESULTADOS = 300;
 const ESPERA_RESALTADO_MS = 800;
+// Subrayados (mejora 26)
+const ESPERA_PULSACION_LARGA_MS = 350; // a partir de aquí, mover el dedo selecciona texto
+const ESPERA_SELECCION_MS = 450; // la selección se da por terminada
+const MAX_TEXTO_SUBRAYADO = 2000;
+export const COLORES = { amarillo: '#ffd23f', verde: '#7ed957', azul: '#5ab0ff', rosa: '#ff7eb6' };
 const CONTEXTO_FRAGMENTO = 45; // caracteres antes y después de la coincidencia
 
 // Texto sin tildes y en minúsculas, con la posición original de cada carácter,
@@ -604,6 +609,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
       const estilo = c.document.getElementById('lector-ajustes');
       if (estilo) estilo.textContent = css;
     }
+    if (datosSubrayados.length) pintarSubrayados(datosSubrayados); // colores según el tema
     if (repagina) repaginar();
   }
 
@@ -881,6 +887,63 @@ export async function abrirLibro(contenedor, datos, opciones) {
   }
   contenedor.addEventListener('wheel', alGirarRueda, { passive: false });
 
+  // --- Subrayados y notas (mejora 26) ---
+
+  let seleccionActual = null;
+  const haySeleccion = (doc) => {
+    const sel = doc.getSelection?.();
+    return Boolean(sel && !sel.isCollapsed && sel.toString().trim());
+  };
+  function quitarSeleccion() {
+    for (const c of rendition.getContents()) c.window?.getSelection?.()?.removeAllRanges();
+    seleccionActual = null;
+  }
+
+  // Subrayados pintados: id -> { cfi, tipo }.
+  let subrayados = new Map();
+  let datosSubrayados = [];
+  const colorDe = (color) => COLORES[color] || COLORES.amarillo;
+  function estiloSubrayado(color) {
+    if (perfil === 'tinta') {
+      return { tipo: 'underline', estilos: { stroke: temaEfectivo(perfil, ajustes).texto, 'stroke-opacity': '1', 'stroke-width': '2', 'mix-blend-mode': 'normal' } };
+    }
+    const oscuro = temaEfectivo(perfil, ajustes).fondo.toLowerCase() === '#000000';
+    return { tipo: 'highlight', estilos: { fill: colorDe(color), 'fill-opacity': oscuro ? '0.45' : '0.35', 'mix-blend-mode': oscuro ? 'normal' : 'multiply' } };
+  }
+  function pintarSubrayados(lista) {
+    datosSubrayados = lista;
+    for (const [, s] of subrayados) {
+      try { rendition.annotations.remove(s.cfi, s.tipo); } catch { /* ya no estaba */ }
+    }
+    subrayados = new Map();
+    for (const a of lista) {
+      const { tipo, estilos } = estiloSubrayado(a.color);
+      try {
+        rendition.annotations.add(tipo, a.cfi, { id: a.id }, null, `subrayado-${a.color}`, estilos);
+        subrayados.set(a.id, { cfi: a.cfi, tipo });
+      } catch (e) {
+        registrar(`Lector: no se pudo pintar un subrayado (${e.message})`, 'error');
+      }
+    }
+  }
+  // Subrayado bajo un punto de la página (coordenadas del capítulo).
+  function subrayadoEn(contents, x, y) {
+    if (!datosSubrayados.length) return null;
+    const cfi = new ePub.CFI();
+    for (const a of datosSubrayados) {
+      try {
+        if (cfi.parse(a.cfi).spinePos !== contents.sectionIndex) continue;
+        const rango = contents.range(a.cfi);
+        for (const r of rango.getClientRects()) {
+          if (x >= r.left - 2 && x <= r.right + 2 && y >= r.top - 2 && y <= r.bottom + 2) return a.id;
+        }
+      } catch {
+        // CFI que no se puede situar en este capítulo
+      }
+    }
+    return null;
+  }
+
   function instalarGestos(contents) {
     const doc = contents.document;
     doc.addEventListener('wheel', alGirarRueda, { passive: false });
@@ -902,16 +965,27 @@ export async function abrirLibro(contenedor, datos, opciones) {
       gesto = {
         x0: t.screenX,
         y0: t.screenY,
+        cx: t.clientX,
+        cy: t.clientY,
         t0: performance.now(),
         xVisor: xEnVisor(t, contents),
         arrastrando: false,
         movido: false,
+        // Con texto seleccionado, un toque solo quita la selección (mejora 26).
+        habiaSeleccion: haySeleccion(doc),
         muestras: [{ x: t.screenX, t: performance.now() }],
       };
     }, { passive: true });
 
     doc.addEventListener('touchmove', (e) => {
       if (!gesto || e.touches.length !== 1) return;
+      // Pulsación larga o asas de la selección: es una selección de texto, no
+      // un paso de página. Se deja hacer al sistema.
+      if (gesto.seleccionando) return;
+      if (!gesto.arrastrando && (haySeleccion(doc) || performance.now() - gesto.t0 > ESPERA_PULSACION_LARGA_MS)) {
+        gesto.seleccionando = true;
+        return;
+      }
       const t = e.touches[0];
       const dx = t.screenX - gesto.x0;
       const dy = t.screenY - gesto.y0;
@@ -955,9 +1029,17 @@ export async function abrirLibro(contenedor, datos, opciones) {
         else pasar(dx < 0 ? 1 : -1, g.arrastre || 0, alSoltar);
         return;
       }
+      if (g.seleccionando || haySeleccion(doc)) return; // la selección la atiende alSeleccionar
       if (!g.movido && duracion < MAX_DURACION_TOQUE_MS) {
+        if (g.habiaSeleccion) return; // el toque ha quitado la selección
         if (enlaceInterno(e.target)) return; // los enlaces del libro funcionan
         e.preventDefault(); // evita el clic sintético y el zoom por doble toque
+        // Un toque sobre un subrayado lo abre (mejora 26).
+        const tocado = subrayadoEn(contents, g.cx, g.cy);
+        if (tocado) {
+          avisos.alTocarSubrayado?.(tocado);
+          return;
+        }
         actuarPorZona(g.xVisor);
         return;
       }
@@ -967,9 +1049,52 @@ export async function abrirLibro(contenedor, datos, opciones) {
     // Ratón (ordenador). Se ignora el clic que el navegador genera tras un toque.
     doc.addEventListener('click', (e) => {
       if (Date.now() - ultimoToque < VENTANA_CLIC_TRAS_TOQUE_MS) return;
+      if (haySeleccion(doc)) return; // se acaba de seleccionar texto con el ratón
       if (enlaceInterno(e.target)) return;
       if (e.target.closest?.('a[href]')) e.preventDefault(); // externo: no se intenta abrir
+      const tocado = subrayadoEn(contents, e.clientX, e.clientY);
+      if (tocado) {
+        avisos.alTocarSubrayado?.(tocado);
+        return;
+      }
       actuarPorZona(xEnVisor(e, contents));
+    });
+
+    // Selección de texto (mejora 26): cuando deja de cambiar, se avisa con su
+    // rango como CFI y su texto; si se quita, se avisa con null.
+    let esperaSeleccion = null;
+    doc.addEventListener('selectionchange', () => {
+      clearTimeout(esperaSeleccion);
+      esperaSeleccion = setTimeout(() => {
+        if (destruido) return;
+        const sel = doc.getSelection();
+        if (!sel || sel.isCollapsed || !sel.rangeCount) {
+          if (seleccionActual?.contents === contents) {
+            seleccionActual = null;
+            avisos.alSeleccionar?.(null);
+          }
+          return;
+        }
+        const rango = sel.getRangeAt(0);
+        const texto = rango.toString().replace(/\s+/g, ' ').trim();
+        if (!texto) return;
+        let cfi = null;
+        try {
+          cfi = contents.cfiFromRange(rango);
+        } catch {
+          cfi = null;
+        }
+        if (!cfi) return;
+        seleccionActual = { contents };
+        const info = ultimaPosicion ? infoPosicion(ultimaPosicion) : {};
+        avisos.alSeleccionar?.({
+          cfi,
+          texto: texto.slice(0, MAX_TEXTO_SUBRAYADO),
+          seccion: contents.sectionIndex,
+          capitulo: etiquetaCapitulo(contents.sectionIndex) || info.capitulo || null,
+          porcentaje: info.porcentaje ?? null,
+        });
+      }, ESPERA_SELECCION_MS);
     });
 
     doc.addEventListener('keydown', alPulsarTecla);
@@ -1274,6 +1399,8 @@ export async function abrirLibro(contenedor, datos, opciones) {
     irA(destino) {
       return rendition.display(destino);
     },
+    pintarSubrayados,
+    quitarSeleccion,
     destruir: liberar,
   };
 }

@@ -3027,3 +3027,175 @@ body[data-perfil="tinta"] .campo-nota {
 .fila-ordenar .boton-icono {
   flex: none;
 }
+
+/* ---------- Subrayados y notas (mejora 26) ---------- */
+
+.hoja-cabecera h2 {
+  flex: 1;
+}
+
+.hoja-cabecera .boton-redondo + .boton-redondo {
+  margin-left: 8px;
+}
+
+.barra-seleccion {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 16px);
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 28px;
+  background: var(--barra);
+  -webkit-backdrop-filter: var(--desenfoque);
+  backdrop-filter: var(--desenfoque);
+  box-shadow: var(--sombra-flotante);
+}
+
+.barra-seleccion[hidden] {
+  display: none;
+}
+
+.colores-seleccion {
+  display: flex;
+  gap: 6px;
+}
+
+.color-subrayado {
+  width: 36px;
+  height: 36px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.color-subrayado[aria-pressed="true"] {
+  border-color: var(--texto);
+}
+
+.boton-barra {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: var(--acento);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.boton-barra .icono {
+  width: 20px;
+  height: 20px;
+}
+
+body[data-perfil="tinta"] .barra-seleccion {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+  box-shadow: none;
+}
+
+body[data-perfil="tinta"] .boton-barra {
+  color: var(--texto);
+}
+
+.area-hoja {
+  min-height: 120px;
+  font-size: 17px;
+  text-align: left;
+  resize: vertical;
+}
+
+.colores-hoja {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 4px 16px 12px;
+}
+
+.subrayado-fila .marca-color {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.subrayado-fila .subrayado-texto {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.subrayado-fila .subrayado-nota {
+  display: block;
+  margin-top: 4px;
+  font-style: italic;
+  color: var(--texto-2);
+}
+
+/* ---------- Cita del día (mejora 30) ---------- */
+
+.tarjeta-cita {
+  display: block;
+  width: 100%;
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--relleno);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tarjeta-cita blockquote {
+  margin: 0 0 10px;
+  font-family: 'Literata', Georgia, serif;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.tarjeta-cita .cita-origen {
+  display: block;
+  font-size: 14px;
+  color: var(--texto-2);
+}
+
+.tarjeta-cita .subrayado-nota {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--texto-2);
+}
+
+body[data-perfil="tinta"] .tarjeta-cita {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+}
+
+.ficha-subrayado {
+  text-align: left;
+  align-items: flex-start;
+}
+
+.ficha-subrayado .subrayado-texto {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

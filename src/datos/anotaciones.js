@@ -1,6 +1,7 @@
-// Anotaciones de los libros (v4): de momento, marcadores. Se guardan en local
-// como un mapa por id y viajan a Drive en anotaciones.json. Una baja se marca
-// con eliminado: true para que llegue al otro dispositivo.
+// Anotaciones de los libros (v4): marcadores y, desde la mejora 26, subrayados
+// con nota opcional. Se guardan en local como un mapa por id y viajan a Drive
+// en anotaciones.json. Una baja se marca con eliminado: true para que llegue
+// al otro dispositivo.
 
 import { leerAjuste, escribirVarios, leerYEscribir } from './almacen.js';
 import { fechaPosterior } from './reloj.js';
@@ -52,4 +53,30 @@ export async function crearMarcador(libroId, datos) {
 
 export async function eliminarAnotacion(id) {
   await cambiarUna(id, (actual) => (actual ? { ...actual, eliminado: true, fecha: fechaPosterior(actual.fecha) } : null));
+}
+
+// --- Subrayados y notas (mejora 26) ---
+// { id, libroId, tipo: 'subrayado', cfi (rango), texto, color, nota,
+//   capitulo, seccion, porcentaje, fecha, eliminado }
+
+export const COLORES_SUBRAYADO = ['amarillo', 'verde', 'azul', 'rosa'];
+
+const nuevoId = (prefijo) => (crypto.randomUUID ? crypto.randomUUID() : `${prefijo}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+export function crearSubrayado(libroId, datos) {
+  const id = nuevoId('s');
+  return cambiarUna(id, () => ({
+    id, libroId, tipo: 'subrayado', color: 'amarillo', nota: null, ...datos, fecha: new Date().toISOString(), eliminado: false,
+  }));
+}
+
+// Cambia el color o la nota. La fecha es posterior a la anterior (mejora 18).
+export function cambiarSubrayado(id, cambios) {
+  return cambiarUna(id, (actual) => (actual && !actual.eliminado
+    ? { ...actual, ...cambios, fecha: fechaPosterior(actual.fecha) } : null));
+}
+
+// Todos los subrayados vivos, de todos los libros (para la cita del día).
+export async function todosLosSubrayados() {
+  return Object.values(await todasLasAnotaciones()).filter((a) => a.tipo === 'subrayado' && !a.eliminado);
 }
