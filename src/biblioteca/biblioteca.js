@@ -2,7 +2,7 @@
 
 import { listarLibros, eliminarLibro, quitarArchivoLocal, leerLibro } from '../datos/libros.js';
 import { cambiarEstado } from '../datos/progreso.js';
-import { leerAjuste, guardarAjuste } from '../datos/almacen.js';
+import { leerAjuste, guardarAjuste, alEscribir } from '../datos/almacen.js';
 import { listarPendientes, leerSincronizacion } from '../datos/pendientes.js';
 import { perfilActual } from '../datos/preferencias.js';
 import { lectorAbierto } from '../lector/pantalla-lector.js';
@@ -170,6 +170,54 @@ async function crearElementoLibro(libro, enLista) {
   return elemento;
 }
 
+// Mejora 5: filtrar, buscar u ordenar no vuelve a leer la base de datos ni
+// rehace las filas. Los libros leídos se guardan hasta que cambie algo que
+// los afecte, y cada fila se reutiliza mientras sus datos sean los mismos.
+const ALMACENES_DE_LIBROS = ['libros', 'progreso', 'archivos', 'pendientes', 'sincronizacion'];
+let librosEnMemoria = null;
+let cambiosLibros = 0; // si cambia durante una lectura, lo leído ya no vale
+const filas = new Map(); // id -> { elemento, firma }
+
+alEscribir((almacenes) => {
+  if (almacenes.some((a) => ALMACENES_DE_LIBROS.includes(a))) {
+    librosEnMemoria = null;
+    cambiosLibros += 1;
+  }
+  if (almacenes.includes('portadas')) filas.clear(); // portada cambiada
+});
+
+// El año cuenta porque las fechas de otros años lo muestran.
+const firmaDe = (libro, enLista) => JSON.stringify([
+  libro, enLista, vista.grupo?.tipo === 'serie', descargando.has(libro.id), new Date().getFullYear(),
+]);
+
+async function filaDe(libro, enLista) {
+  const firma = firmaDe(libro, enLista);
+  const guardada = filas.get(libro.id);
+  if (guardada?.firma === firma) return guardada.elemento;
+  const elemento = await crearElementoLibro(libro, enLista);
+  filas.set(libro.id, { elemento, firma });
+  return elemento;
+}
+
+// Deja en la lista los elementos dados, en su orden, moviendo solo los que
+// no están en su sitio.
+function colocar(lista, elementos) {
+  let siguiente = lista.firstChild;
+  for (const elemento of elementos) {
+    if (elemento === siguiente) {
+      siguiente = siguiente.nextSibling;
+      continue;
+    }
+    lista.insertBefore(elemento, siguiente);
+  }
+  while (siguiente) {
+    const sobra = siguiente;
+    siguiente = siguiente.nextSibling;
+    sobra.remove();
+  }
+}
+
 function pintarChips() {
   document.querySelectorAll('.chip').forEach((c) => {
     const activo = c.dataset.filtro === vista.filtro;
@@ -200,7 +248,10 @@ async function pintarGrupo(colecciones) {
 // libros: datos ya leídos con librosParaMostrar() (si no, se leen aquí).
 export async function pintarBiblioteca(libros) {
   const enLista = perfilActual() === 'tinta';
-  const [todos, colecciones, quiero] = await Promise.all([libros || librosParaMostrar(), leerColecciones(), leerQuieroLeer()]);
+  const leidos = libros || librosEnMemoria;
+  const antes = cambiosLibros;
+  const [todos, colecciones, quiero] = await Promise.all([leidos || librosParaMostrar(), leerColecciones(), leerQuieroLeer()]);
+  if (!libros && cambiosLibros === antes) librosEnMemoria = todos;
   quieroIds = quiero.ids;
   await pintarGrupo(colecciones);
   const visibles = todos
@@ -212,8 +263,10 @@ export async function pintarBiblioteca(libros) {
   pintarChips();
   const lista = $('lista-libros');
   lista.className = enLista ? 'lista' : 'rejilla';
-  const elementos = await Promise.all(visibles.map((l) => crearElementoLibro(l, enLista)));
-  lista.replaceChildren(...elementos);
+  const elementos = await Promise.all(visibles.map((l) => filaDe(l, enLista)));
+  colocar(lista, elementos);
+  const ids = new Set(todos.map((l) => l.id));
+  for (const id of filas.keys()) if (!ids.has(id)) filas.delete(id);
 
   const vacia = $('biblioteca-vacia');
   vacia.hidden = visibles.length > 0;
