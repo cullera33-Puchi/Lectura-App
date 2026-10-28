@@ -3,9 +3,22 @@
 const DURACION_MS = 4500;
 let temporizador = null;
 
-export function mostrarAviso(texto, duracion = DURACION_MS) {
+// accion: { texto, alPulsar } añade un botón al aviso (por ejemplo,
+// "Actualizar" cuando hay una versión nueva de la app).
+export function mostrarAviso(texto, duracion = DURACION_MS, accion = null) {
   const aviso = document.getElementById('aviso');
   aviso.textContent = texto;
+  if (accion) {
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'aviso-accion';
+    boton.textContent = accion.texto;
+    boton.addEventListener('click', () => {
+      ocultarAviso();
+      accion.alPulsar();
+    });
+    aviso.append(' ', boton);
+  }
   aviso.hidden = false;
   clearTimeout(temporizador);
   temporizador = setTimeout(() => {

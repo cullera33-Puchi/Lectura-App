@@ -172,13 +172,24 @@ for (const tipo of ['pointerdown', 'keydown']) {
   addEventListener(tipo, () => { appTocada = true; }, { capture: true, once: true });
 }
 
+function activarVersionNueva() {
+  if (!versionEnEspera) return;
+  registrar('Se activa la versión nueva de la app');
+  versionEnEspera.postMessage({ tipo: 'activar' });
+  versionEnEspera = null;
+}
+
+// Si ya se está usando la app (en el ordenador, la pestaña rara vez pasa a
+// segundo plano), se ofrece actualizar con un botón, una vez por versión.
+let ofrecidaVersion = null;
+
 function recargarSiProcede() {
   if (!appOciosa()) return;
   if (recargaPendiente) location.reload();
-  else if (versionEnEspera && (document.visibilityState === 'hidden' || !appTocada)) {
-    registrar('Se activa la versión nueva de la app');
-    versionEnEspera.postMessage({ tipo: 'activar' });
-    versionEnEspera = null;
+  else if (versionEnEspera && (document.visibilityState === 'hidden' || !appTocada)) activarVersionNueva();
+  else if (versionEnEspera && ofrecidaVersion !== versionEnEspera) {
+    ofrecidaVersion = versionEnEspera;
+    mostrarAviso('Hay una versión nueva de la app.', 60000, { texto: 'Actualizar', alPulsar: activarVersionNueva });
   }
 }
 
@@ -191,7 +202,7 @@ function vigilarVersionNueva(registro) {
     // Al abrir la app suele haber algo en curso (la sincronización): se
     // reintenta mientras no se toque la app.
     const reintento = setInterval(() => {
-      if (!versionEnEspera || appTocada) clearInterval(reintento);
+      if (!versionEnEspera || ofrecidaVersion === versionEnEspera) clearInterval(reintento);
       else recargarSiProcede();
     }, 2000);
   };

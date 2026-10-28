@@ -1670,6 +1670,26 @@ body[data-perfil="tinta"] .fila-hoja:active {
   color: var(--fondo);
 }
 
+.aviso-accion {
+  pointer-events: auto;
+  margin-left: 8px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--acento);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+body[data-perfil="tinta"] .aviso-accion {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+  color: var(--texto);
+}
+
 .aviso {
   /* Solo informa: deja pasar los toques a lo que hay debajo. */
   pointer-events: none;

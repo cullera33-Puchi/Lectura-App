@@ -110,6 +110,19 @@ const ocultar = (p) => p.evaluate(() => {
   await p.waitForTimeout(1000);
   ok(await version(p) === 'prueba 2' && !(await enEspera(p)), `al abrir la app con una versión nueva publicada, se pone al día (${await version(p)})`);
 
+  // Con la app ya en uso (en el ordenador la pestaña rara vez se oculta): se
+  // ofrece actualizar con un botón.
+  await p.waitForTimeout(2500);
+  await p.click('.pestana[data-pestana=biblioteca]'); await p.waitForTimeout(300);
+  publicar('lector-epub-c9003', 'prueba 3');
+  await p.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
+  await p.waitForSelector('#aviso .aviso-accion', { timeout: 20000 });
+  ok(/versión nueva/.test(await p.textContent('#aviso')) && await version(p) === 'prueba 2', 'con la app en uso se ofrece actualizar sin recargar');
+  const recargada = p.waitForEvent('load', { timeout: 15000 });
+  await p.click('#aviso .aviso-accion');
+  await recargada; await p.waitForTimeout(1500);
+  ok(await version(p) === 'prueba 3', `al pulsar "Actualizar" se pasa a la versión nueva (${await version(p)})`);
+
   // Sin conexión sigue abriendo.
   await ctx.setOffline(true);
   await p.reload();
