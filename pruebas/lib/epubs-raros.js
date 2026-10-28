@@ -43,4 +43,30 @@ async function epubIlustrado(n = 40, tam = 2) {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-module.exports = { epubDanado, epubIlustrado };
+// Notas al pie en varios formatos (mejora 22). c1.xhtml lleva las llamadas
+// al principio, para que estén en la primera página.
+async function epubNotas() {
+  const zip = new JSZip();
+  base(zip, 'Libro con notas',
+    '<item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/><item id="notas" href="notas.xhtml" media-type="application/xhtml+xml"/>',
+    '<itemref idref="c1"/><itemref idref="c2"/><itemref idref="notas"/>',
+    '<li><a href="c1.xhtml">Capítulo 1</a></li><li><a href="c2.xhtml">Capítulo 2</a></li><li><a href="notas.xhtml">Notas</a></li>');
+  const ops = 'xmlns:epub="http://www.idpf.org/2007/ops"';
+  zip.file('OEBPS/c1.xhtml', `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" ${ops}><head><title>Uno</title></head><body>
+<h1>Capítulo 1</h1>
+<p>EPUB 3<a epub:type="noteref" id="r1" href="#n1">1</a>, Calibre<a href="notas.xhtml#ftn2" id="ftnref2"><sup>[2]</sup></a>, Kindle<sup><a href="notas.xhtml#filepos900">3</a></sup>, final<a epub:type="noteref" href="notas.xhtml#en4">4</a>.</p>
+<p>Enlaces normales: <a href="c2.xhtml#cap2">2</a> y <a href="c2.xhtml">véase el capítulo 2</a>.</p>
+${parrafos(20, 'Uno')}
+<aside epub:type="footnote" id="n1"><p><a href="#r1">1</a> Nota en formato EPUB 3.</p></aside>
+</body></html>`);
+  zip.file('OEBPS/c2.xhtml', xhtml('Dos', `<h1 id="cap2">Capítulo 2</h1>${parrafos(10, 'Dos')}`));
+  zip.file('OEBPS/notas.xhtml', `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" ${ops}><head><title>Notas</title></head><body>
+<h1>Notas</h1>
+<p><a href="c1.xhtml#ftnref2" id="ftn2">[2]</a> Nota de Calibre en otro archivo.</p>
+<p><a id="filepos900"></a>3. Nota de una conversión de Kindle.</p>
+<ol><li id="en4" epub:type="endnote"><p>Nota final cuatro.</p><p>Con un segundo párrafo. <a href="c1.xhtml" epub:type="backlink">↩</a></p></li></ol>
+</body></html>`);
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+module.exports = { epubDanado, epubIlustrado, epubNotas };

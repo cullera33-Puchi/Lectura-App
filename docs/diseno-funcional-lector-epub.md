@@ -445,6 +445,7 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.8.8 | Biblioteca más rápida (mejora 5): filtrar, buscar u ordenar no vuelve a leer la base de datos ni rehace las filas; solo se recolocan, y una fila se rehace cuando cambian los datos de su libro. Con 300 libros, volver a la lista completa pasa de unos 420 ms a unos 50 ms |
 | 0.8.9 | Libros dañados y libros grandes (mejora 19): un capítulo con XHTML mal formado (por ejemplo, un `&nbsp;` sin declarar) se lee como HTML; uno que falta en el archivo muestra un aviso y se sigue leyendo. Antes, en la tablet, el lector se quedaba bloqueado. Las imágenes y fuentes se descomprimen al pintar cada capítulo y no todas al abrir: un libro de 80 MB de imágenes abre en un tercio del tiempo y sin ocupar esa memoria. Los plazos de apertura crecen con el tamaño del libro |
 | 0.9.0 | Rebote en el iPhone (mejora 20): al arrastrar, Safari descuenta el desplazamiento de la página del ancho del contenido y, con una sola página cargada por delante (la penúltima del capítulo mientras se carga el siguiente), el lector creía que no había más: frenaba el arrastre y devolvía la página. Ahora mide el ancho de los capítulos cargados. Además, el capítulo siguiente se carga tres páginas antes del final y, si al llegar al final aún no está, se espera a que lo esté en lugar de devolver la página. Reproducido en las pruebas imitando la medida de Safari |
+| 0.9.1 | Notas al pie emergentes (mejora 22): al tocar la llamada de una nota se muestra su texto en una hoja, sin salir de la página, con "Ir a la nota" para el salto de siempre. Reconoce notas EPUB 3 (`epub:type="noteref"`, `footnote`, `endnote`) y ARIA, las de Calibre y las de conversiones de Kindle (llamada corta, en superíndice o con identificador de nota), en el mismo archivo o en otro. Quita el enlace de vuelta y la marca repetida. Si el destino no parece una nota (un título, un texto largo), se salta como siempre |
 
 ### Mejoras pendientes (numeradas)
 
@@ -452,7 +453,6 @@ Del repaso de la app y nuevas funciones. La numeración se mantiene para poder e
 
 | Nº | Mejora | Esfuerzo |
 |---|---|---|
-| 22 | Notas al pie emergentes: al tocar la llamada de una nota, se muestra su texto en una hoja sin salir de la página. Hay que reconocer las notas en los distintos formatos de EPUB (EPUB 3 con `epub:type="noteref"`, Calibre y conversiones de Kindle, notas en otro archivo del libro) y dejar el salto normal cuando no se reconozca | Medio |
 | 23 | Cómics en CBR (y CBZ): importarlos, verlos en la biblioteca con su portada y leerlos página a página, con zoom, doble página en horizontal y sentido de lectura de manga. Es viable con dos decisiones previas: añadir una librería para descomprimir RAR (por ejemplo, libarchive.js en WebAssembly, copiada en `vendor/`, cargada solo al importar) y una excepción a la regla 1, porque un cómic no tiene CFI y la posición sería el número de página. Al importar se convertiría a CBZ para leerlo después con JSZip, que ya está en la app | Alto |
 
 ### Ideas a valorar (sin fecha)

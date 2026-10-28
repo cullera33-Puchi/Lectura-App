@@ -215,6 +215,63 @@ function aplanarIndice(elementos, nivel = 0, lista = []) {
   return lista;
 }
 
+// --- Notas al pie emergentes (mejora 22) ---
+
+const NS_OPS = 'http://www.idpf.org/2007/ops';
+const BLOQUES = 'aside, li, p, div, dd, dt, blockquote, td, section';
+const MAX_TEXTO_NOTA = 3000;
+
+const tiposDe = (el) => `${el.getAttributeNS?.(NS_OPS, 'type') || el.getAttribute?.('epub:type') || ''} ${el.getAttribute?.('role') || ''}`;
+const esTipoNota = (el) => /\b(footnote|endnote|rearnote|note|doc-footnote|doc-endnote)\b/.test(tiposDe(el));
+const pareceNota = (el) => /(^|[\s_-])(foot|end)?notes?($|[\s_-]|\d)|^(fn|ftn|nota?|n)\d|footnote|endnote/i.test(`${el.id || ''} ${el.getAttribute?.('class') || ''}`);
+
+// Texto de la llamada sin corchetes ni paréntesis: "1", "*", "iv".
+const marcaDe = (enlace) => (enlace.textContent || '').replace(/[\s[\]()]/g, '');
+
+// Primera criba, al tocar: el enlace se declara llamada de nota (EPUB 3 o
+// ARIA) o tiene el aspecto de una (texto muy corto: número, asterisco...).
+// Un enlace de índice o una referencia con texto largo sigue saltando.
+function pareceLlamada(enlace) {
+  if (/\b(noteref|doc-noteref)\b/.test(tiposDe(enlace))) return true;
+  const marca = marcaDe(enlace);
+  return marca.length > 0 && marca.length <= 4;
+}
+
+// Texto de la nota a la que apunta el enlace, en párrafos, o null si el
+// destino no parece una nota (entonces se salta como siempre).
+function textoDeNota(enlace, destino) {
+  const declarada = /\b(noteref|doc-noteref)\b/.test(tiposDe(enlace));
+  if (/^h[1-6]$/i.test(destino.localName)) return null;
+  // El contenedor de la nota: el propio destino si es un bloque, o el bloque
+  // que lo contiene (Calibre y Kindle ponen el ancla dentro del párrafo).
+  let nota = null;
+  for (let el = destino; el?.nodeType === 1 && !nota; el = el.parentElement) if (esTipoNota(el)) nota = el;
+  let bloque = nota || (destino.matches?.(BLOQUES) ? destino : destino.closest?.(BLOQUES));
+  if (!bloque || /^(body|html)$/i.test(bloque.localName)) return null;
+  const senales = declarada || esTipoNota(bloque) || pareceNota(destino) || pareceNota(bloque) || pareceNota(enlace)
+    || Boolean(enlace.closest('sup') || enlace.querySelector('sup'));
+  if (!senales) return null;
+  bloque = bloque.cloneNode(true);
+  // Fuera los enlaces de vuelta a la llamada (la marca, "↩"...).
+  for (const a of Array.from(bloque.querySelectorAll('a[href]'))) {
+    const href = a.getAttribute('href') || '';
+    const vuelta = (enlace.id && href.endsWith(`#${enlace.id}`)) || /\b(backlink|doc-backlink)\b/.test(tiposDe(a)) || /^[↩↑⤴^]+$/.test(a.textContent.trim());
+    if (vuelta) a.remove();
+  }
+  const limpio = (t) => t.replace(/\s+/g, ' ').trim();
+  const partes = bloque.querySelectorAll('p, li');
+  let parrafos = (partes.length ? Array.from(partes) : [bloque]).map((e) => limpio(e.textContent)).filter(Boolean);
+  // Sin la marca repetida al principio ("1.", "[1]").
+  const marca = marcaDe(enlace);
+  if (parrafos.length && marca) {
+    const sinMarca = parrafos[0].replace(new RegExp(`^[[(]?${marca.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\])]?\\.?(?=\\s|$)\\s*`), '');
+    if (sinMarca) parrafos[0] = sinMarca;
+  }
+  const largo = parrafos.reduce((t, x) => t + x.length, 0);
+  if (!largo || largo > MAX_TEXTO_NOTA) return null;
+  return parrafos;
+}
+
 // --- Libros dañados y libros grandes (mejora 19) ---
 
 const PAGINA_DANADA = `<?xml version="1.0" encoding="utf-8"?><html xmlns="${NS_XHTML}"><head><title>Parte dañada</title></head><body><p style="margin-top:3em;text-align:center;font-style:italic">Esta parte del libro no se puede mostrar porque el archivo del EPUB está dañado. Pasa página para seguir leyendo.</p></body></html>`;
@@ -838,9 +895,49 @@ export async function abrirLibro(contenedor, datos, opciones) {
     else anterior();
   }
 
+  // Notas al pie (mejora 22): al tocar la llamada de una nota se avisa con su
+  // texto en lugar de saltar. Se intercepta el clic antes de que llegue al
+  // enlace, donde epub.js tiene su salto; si el destino no resulta ser una
+  // nota, se salta como siempre.
+  async function buscarDestino(enlace, contents) {
+    const seccion = libro.spine.get(contents.sectionIndex);
+    if (!seccion) return null;
+    const url = new URL(enlace.getAttribute('href'), `http://libro${seccion.url}`);
+    const id = decodificar(url.hash.slice(1));
+    if (!id) return null;
+    const ruta = decodificar(url.pathname);
+    if (ruta === seccion.url) return contents.document.getElementById(id);
+    const otra = libro.spine.spineItems.find((s) => s.url === ruta);
+    const doc = otra ? (await otra.load(libro.load.bind(libro)), otra.document) : await libro.load(ruta);
+    return doc?.getElementById(id) || null;
+  }
+
+  function instalarNotas(contents) {
+    contents.document.addEventListener('click', (e) => {
+      const enlace = e.target.closest?.('a[href]');
+      if (!enlace || !avisos.alTocarNota || !enlaceInterno(enlace) || !pareceLlamada(enlace)) return;
+      e.preventDefault();
+      e.stopPropagation(); // el salto de epub.js está en el propio enlace
+      const saltar = () => enlace.onclick?.call(enlace, new MouseEvent('click'));
+      buscarDestino(enlace, contents)
+        .then((destino) => (destino ? textoDeNota(enlace, destino) : null))
+        .catch(() => null)
+        .then((parrafos) => {
+          if (destruido) return;
+          if (!parrafos) {
+            saltar();
+            return;
+          }
+          const marca = marcaDe(enlace);
+          avisos.alTocarNota({ titulo: marca && marca.length <= 4 ? `Nota ${marca}` : 'Nota', parrafos, irALaNota: saltar });
+        });
+    }, true);
+  }
+
   rendition.hooks.content.register(instalarEstilos);
   rendition.hooks.content.register(anotarAnclas);
   rendition.hooks.content.register(instalarGestos);
+  rendition.hooks.content.register(instalarNotas);
   // Enlace interno del libro (nota, índice dentro del texto): antes de que
   // epub.js salte, se avisa con la posición de partida para poder volver.
   rendition.hooks.content.register((contents) => {

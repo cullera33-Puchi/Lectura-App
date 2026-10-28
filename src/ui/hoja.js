@@ -9,6 +9,7 @@ const $ = (id) => document.getElementById(id);
 let resolverActual = null;
 
 function cerrar(valor) {
+  $('hoja-cancelar').textContent = 'Cancelar';
   cerrarCapa($('hoja-acciones'));
   cerrarCapa($('fondo-hoja'));
   const resolver = resolverActual;
@@ -20,9 +21,10 @@ function cerrar(valor) {
 // botones: [{ id, texto, destructivo }]. El botón Cancelar va aparte.
 // alPulsar se ejecuta dentro del gesto, antes de cerrar la hoja (necesario si
 // la acción abre la ventana de Google).
-export function mostrarHoja(titulo, botones, { alPulsar } = {}) {
+export function mostrarHoja(titulo, botones, { alPulsar, textoCancelar = 'Cancelar' } = {}) {
   if (resolverActual) cerrar(null);
   $('hoja-titulo').textContent = titulo;
+  $('hoja-cancelar').textContent = textoCancelar;
   const contenedor = $('hoja-botones');
   contenedor.replaceChildren();
   for (const b of botones) {
@@ -58,6 +60,21 @@ export async function mostrarFormulario(titulo, elementos, { textoBoton = 'Guard
   $('hoja-botones').prepend(formulario);
   if (enfocar) setTimeout(() => enfocar.focus(), 50);
   return (await eleccion) === 'guardar';
+}
+
+// Muestra un texto en la hoja (por ejemplo, una nota al pie), con párrafos y
+// desplazamiento si es largo. Devuelve el id del botón pulsado o null.
+export function mostrarTexto(titulo, parrafos, botones, { textoCancelar = 'Cerrar' } = {}) {
+  const eleccion = mostrarHoja(titulo, botones, { textoCancelar });
+  const texto = document.createElement('div');
+  texto.className = 'texto-hoja';
+  for (const parrafo of parrafos) {
+    const p = document.createElement('p');
+    p.textContent = parrafo;
+    texto.appendChild(p);
+  }
+  $('hoja-botones').prepend(texto);
+  return eleccion;
 }
 
 // Pide un texto o un número en la hoja. Devuelve el valor o null si se cancela.

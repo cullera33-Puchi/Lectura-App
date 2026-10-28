@@ -23,7 +23,7 @@ import {
 } from '../ui/temas.js';
 import { registrar } from '../ui/registro.js';
 import { leerSincronizacion } from '../datos/pendientes.js';
-import { mostrarHoja, hojaAbierta } from '../ui/hoja.js';
+import { mostrarHoja, mostrarTexto, hojaAbierta } from '../ui/hoja.js';
 import { sincronizacionEnCurso } from '../sync/sincronizar.js';
 import { cargarRitmo, anotarPagina, reiniciarReferencia, tiempoRestante } from './ritmo.js';
 import {
@@ -902,6 +902,13 @@ export async function abrirPantallaLector(id) {
         },
         alSaltarPorEnlace: (cfi, info) => {
           if (actual === nuevo) anotarSalto(nuevo, cfi, info);
+        },
+        // Nota al pie (mejora 22): su texto en la hoja, sin salir de la página.
+        alTocarNota: async ({ titulo, parrafos, irALaNota }) => {
+          if (actual !== nuevo || hojaAbierta()) return;
+          registrar(`Nota al pie: ${titulo}`);
+          const eleccion = await mostrarTexto(titulo, parrafos, [{ id: 'ir', texto: 'Ir a la nota' }]);
+          if (eleccion === 'ir' && actual === nuevo) irALaNota();
         },
         alGenerarUbicaciones: (json) => guardarUbicaciones(id, json),
         // Repaginar (ajustes o giro de pantalla) no es pasar página.
