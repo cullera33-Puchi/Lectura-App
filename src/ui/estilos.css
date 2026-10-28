@@ -1715,6 +1715,36 @@ body[data-perfil="tinta"] .aviso {
   right: env(safe-area-inset-right);
 }
 
+/* Monitores muy anchos (ordenador): líneas de longitud cómoda. */
+@media (min-width: 1600px) {
+  #visor {
+    left: calc(50% - 750px);
+    right: calc(50% - 750px);
+  }
+}
+
+/* EPUB arrastrados a la ventana (ordenador). */
+body.soltando-archivos::after {
+  content: 'Suelta los EPUB para añadirlos a la biblioteca';
+  position: fixed;
+  inset: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px dashed var(--acento);
+  border-radius: 16px;
+  background: var(--fondo);
+  color: var(--texto);
+  font-size: 20px;
+  pointer-events: none;
+}
+
+body[data-perfil="tinta"].soltando-archivos::after {
+  border: 3px solid var(--texto);
+  border-radius: 0;
+}
+
 #controles-lector {
   opacity: 0;
   transition: opacity 0.2s ease;

@@ -7,7 +7,7 @@ import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from '
 import { resumenRitmo } from '../lector/ritmo.js';
 import { estadoPantalla } from '../lector/pantalla-encendida.js';
 
-export const VERSION_APP = '0.9.3 (formato del editor)';
+export const VERSION_APP = '0.9.4 (ordenador)';
 
 let resultadoPersistencia = 'sin pedir';
 
@@ -34,12 +34,21 @@ export function nombreNavegador(ua = navigator.userAgent) {
   if (/FxiOS\//.test(ua)) return 'Firefox en iOS';
   if (/iPhone|iPad|iPod/.test(ua)) return 'Safari en iOS (WebKit)';
   if (/SamsungBrowser\//.test(ua)) return 'Samsung Internet';
-  if (/EdgA?\//.test(ua)) return 'Edge';
-  if (/Firefox\//.test(ua)) return 'Firefox';
+  if (/EdgA?\//.test(ua)) return `Edge${sistema(ua)}`;
+  if (/Firefox\//.test(ua)) return `Firefox${sistema(ua)}`;
   if (/; wv\)/.test(ua)) return 'WebView de Android';
-  if (/Chrome\//.test(ua)) return /Android/.test(ua) ? 'Chrome o navegador Chromium en Android' : 'Chrome o Chromium';
-  if (/Safari\//.test(ua)) return 'Safari';
+  if (/Chrome\//.test(ua)) return /Android/.test(ua) ? 'Chrome o navegador Chromium en Android' : `Chrome o Chromium${sistema(ua)}`;
+  if (/Safari\//.test(ua)) return `Safari${sistema(ua)}`;
   return 'desconocido';
+}
+
+// Sistema del ordenador (tercer dispositivo).
+function sistema(ua) {
+  if (/Windows/.test(ua)) return ' en Windows';
+  if (/Macintosh/.test(ua)) return ' en macOS';
+  if (/CrOS/.test(ua)) return ' en ChromeOS';
+  if (/Linux/.test(ua)) return ' en Linux';
+  return '';
 }
 
 function formatoBytes(n) {

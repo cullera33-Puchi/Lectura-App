@@ -657,6 +657,40 @@ export async function prepararBiblioteca(opciones) {
   $('btn-buscar').addEventListener('click', () => mostrarBusqueda($('caja-busqueda').hidden));
   $('btn-cerrar-busqueda').addEventListener('click', () => mostrarBusqueda(false));
 
+  // En el ordenador, los EPUB se pueden arrastrar a la ventana.
+  let arrastres = 0;
+  const conArchivos = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+  const quitarAviso = () => {
+    arrastres = 0;
+    document.body.classList.remove('soltando-archivos');
+  };
+  document.addEventListener('dragenter', (e) => {
+    if (!conArchivos(e)) return;
+    arrastres += 1;
+    document.body.classList.add('soltando-archivos');
+  });
+  document.addEventListener('dragleave', (e) => {
+    if (!conArchivos(e)) return;
+    arrastres -= 1;
+    if (arrastres <= 0) quitarAviso();
+  });
+  document.addEventListener('dragover', (e) => {
+    if (conArchivos(e)) e.preventDefault();
+  });
+  document.addEventListener('drop', async (e) => {
+    if (!conArchivos(e)) return;
+    e.preventDefault();
+    quitarAviso();
+    const archivos = Array.from(e.dataTransfer.files || []);
+    const epub = archivos.filter((a) => /\.epub$/i.test(a.name) || a.type === 'application/epub+zip');
+    if (!epub.length) {
+      mostrarMensaje('Solo se pueden añadir archivos EPUB.', true);
+      return;
+    }
+    if (epub.length < archivos.length) mostrarMensaje('Se añaden solo los archivos EPUB.');
+    await importar(epub);
+  });
+
   $('archivo-epub').addEventListener('change', async (e) => {
     const archivos = Array.from(e.target.files || []);
     e.target.value = '';

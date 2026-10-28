@@ -796,8 +796,34 @@ export async function abrirLibro(contenedor, datos, opciones) {
     else avisos.alTocarCentro?.();
   }
 
+  // Rueda del ratón y desplazamiento con el panel táctil (ordenador): una
+  // página por gesto. El panel táctil sigue enviando movimiento un rato al
+  // soltar (inercia): hasta que para, no se pasa otra página.
+  const rueda = { suma: 0, ultima: 0, bloqueada: false };
+  function alGirarRueda(e) {
+    if (e.ctrlKey) return; // zoom del navegador
+    e.preventDefault();
+    const escala = e.deltaMode === 1 ? 16 : 1;
+    const delta = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * escala;
+    const ahora = performance.now();
+    const quieta = ahora - rueda.ultima > 180;
+    rueda.ultima = ahora;
+    if (rueda.bloqueada && !quieta) return;
+    rueda.bloqueada = false;
+    if (quieta) rueda.suma = 0;
+    rueda.suma += delta;
+    if (Math.abs(rueda.suma) < 40) return;
+    const adelante = rueda.suma > 0;
+    rueda.suma = 0;
+    rueda.bloqueada = true;
+    if (adelante) siguiente();
+    else anterior();
+  }
+  contenedor.addEventListener('wheel', alGirarRueda, { passive: false });
+
   function instalarGestos(contents) {
     const doc = contents.document;
+    doc.addEventListener('wheel', alGirarRueda, { passive: false });
     let gesto = null;
 
     // Anula el gesto en curso y, si se estaba arrastrando, recoloca la página.
@@ -994,6 +1020,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
 
   function liberar() {
     destruido = true;
+    contenedor.removeEventListener('wheel', alGirarRueda);
     clearTimeout(generando);
     document.removeEventListener('keydown', alPulsarTecla);
     rendition.destroy();

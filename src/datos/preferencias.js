@@ -4,7 +4,11 @@
 import { leerAjuste, guardarAjuste } from './almacen.js';
 import { ajustesLecturaIniciales } from '../ui/temas.js';
 
-export const NOMBRE_PROPUESTO = { movil: 'iPhone', tinta: 'Note Air 4C' };
+// Ordenador: sin pantalla táctil y sin sistema de móvil (tercer dispositivo).
+export const ES_ORDENADOR = !/Android|iPhone|iPad|iPod/.test(navigator.userAgent)
+  && !(navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches);
+
+export const NOMBRE_PROPUESTO = { movil: ES_ORDENADOR ? 'Ordenador' : 'iPhone', tinta: 'Note Air 4C' };
 
 const estado = {
   dispositivo: null, // { perfil, dispositivo, nombreEditado, bienvenidaCompleta }
