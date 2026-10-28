@@ -18,7 +18,9 @@
 import { cargarEpub } from './librerias.js';
 import { registrar } from '../ui/registro.js';
 import { curvaDesde } from '../ui/paneles.js';
-import { cssLibro, temaEfectivo, proporcionMargenes, cambioRepagina, escalarTamanosFijos } from '../ui/temas.js';
+import {
+  cssLibro, temaEfectivo, proporcionMargenes, cambioRepagina, escalarTamanosFijos, COLORES_SUBRAYADO, colorTinta,
+} from '../ui/temas.js';
 import { MENSAJE_ILEGIBLE } from '../biblioteca/importar.js';
 
 const DURACION_ANIMACION_MS = 260;
@@ -48,7 +50,7 @@ const ESPERA_RESALTADO_MS = 800;
 const ESPERA_PULSACION_LARGA_MS = 350; // a partir de aquí, mover el dedo selecciona texto
 const ESPERA_SELECCION_MS = 450; // la selección se da por terminada
 const MAX_TEXTO_SUBRAYADO = 2000;
-export const COLORES = { amarillo: '#ffd23f', verde: '#7ed957', azul: '#5ab0ff', rosa: '#ff7eb6' };
+export const COLORES = COLORES_SUBRAYADO;
 const CONTEXTO_FRAGMENTO = 45; // caracteres antes y después de la coincidencia
 
 // Texto sin tildes y en minúsculas, con la posición original de cada carácter,
@@ -899,19 +901,47 @@ export async function abrirLibro(contenedor, datos, opciones) {
     seleccionActual = null;
   }
 
-  // Subrayados pintados: id -> { cfi, tipo }.
-  let subrayados = new Map();
+  // Con los resaltados nativos (::highlight, Safari 17.2 y Chrome 105 en
+  // adelante) el color va detrás del texto. Sin ellos, capa de epub.js encima,
+  // tenue para no tapar las letras.
+  const resaltadoNativo = typeof Highlight === 'function' && Boolean(window.CSS?.highlights);
   let datosSubrayados = [];
-  const colorDe = (color) => COLORES[color] || COLORES.amarillo;
+  function resaltarEnCapitulo(contents) {
+    const win = contents.window;
+    if (!win?.CSS?.highlights || typeof win.Highlight !== 'function') return;
+    const grupos = {};
+    const cfi = new ePub.CFI();
+    for (const a of datosSubrayados) {
+      try {
+        if (cfi.parse(a.cfi).spinePos !== contents.sectionIndex) continue;
+        const color = COLORES[a.color] ? a.color : 'amarillo';
+        (grupos[color] ||= new win.Highlight()).add(contents.range(a.cfi));
+      } catch {
+        // CFI que no se puede situar en este capítulo
+      }
+    }
+    for (const color of Object.keys(COLORES)) {
+      if (grupos[color]) win.CSS.highlights.set(`subrayado-${color}`, grupos[color]);
+      else win.CSS.highlights.delete(`subrayado-${color}`);
+    }
+  }
+  if (resaltadoNativo) rendition.hooks.content.register(resaltarEnCapitulo);
+
+  // Subrayados pintados con la capa de epub.js: id -> { cfi, tipo }.
+  let subrayados = new Map();
   function estiloSubrayado(color) {
     if (perfil === 'tinta') {
-      return { tipo: 'underline', estilos: { stroke: temaEfectivo(perfil, ajustes).texto, 'stroke-opacity': '1', 'stroke-width': '2', 'mix-blend-mode': 'normal' } };
+      return { tipo: 'underline', estilos: { stroke: colorTinta(color), 'stroke-opacity': '1', 'stroke-width': '3', 'mix-blend-mode': 'normal' } };
     }
     const oscuro = temaEfectivo(perfil, ajustes).fondo.toLowerCase() === '#000000';
-    return { tipo: 'highlight', estilos: { fill: colorDe(color), 'fill-opacity': oscuro ? '0.45' : '0.35', 'mix-blend-mode': oscuro ? 'normal' : 'multiply' } };
+    return { tipo: 'highlight', estilos: { fill: COLORES[color] || COLORES.amarillo, 'fill-opacity': oscuro ? '0.25' : '0.3', 'mix-blend-mode': oscuro ? 'screen' : 'multiply' } };
   }
   function pintarSubrayados(lista) {
     datosSubrayados = lista;
+    if (resaltadoNativo) {
+      for (const c of rendition.getContents()) resaltarEnCapitulo(c);
+      return;
+    }
     for (const [, s] of subrayados) {
       try { rendition.annotations.remove(s.cfi, s.tipo); } catch { /* ya no estaba */ }
     }
@@ -1320,11 +1350,29 @@ export async function abrirLibro(contenedor, datos, opciones) {
   let resaltado = null;
   function quitarResaltado() {
     if (!resaltado) return;
-    rendition.annotations.remove(resaltado.cfi, resaltado.tipo);
+    if (resaltado.nativo) {
+      for (const c of rendition.getContents()) c.window?.CSS?.highlights?.delete('resultado-busqueda');
+    } else {
+      rendition.annotations.remove(resaltado.cfi, resaltado.tipo);
+    }
     resaltado = null;
   }
   function resaltar(cfi) {
     quitarResaltado();
+    // Con resaltado nativo, detrás del texto (legible con el tema oscuro).
+    if (resaltadoNativo) {
+      try {
+        const posicion = new ePub.CFI().parse(cfi).spinePos;
+        const contents = rendition.getContents().find((c) => c.sectionIndex === posicion);
+        if (contents?.window?.Highlight) {
+          contents.window.CSS.highlights.set('resultado-busqueda', new contents.window.Highlight(contents.range(cfi)));
+          resaltado = { cfi, nativo: true, desde: Date.now() };
+          return;
+        }
+      } catch {
+        // se usa la capa de epub.js
+      }
+    }
     const tipo = perfil === 'tinta' ? 'underline' : 'highlight';
     const estilos = perfil === 'tinta'
       ? { stroke: temaEfectivo(perfil, ajustes).texto, 'stroke-opacity': '1', 'stroke-width': '3', 'mix-blend-mode': 'normal' }

@@ -36,10 +36,12 @@ const { URL_APP, EPUBS: S, ok } = require('../lib/entorno.js');
     await p.click('#lista-busqueda li button'); await p.waitForTimeout(1800);
     await p.touchscreen.tap(195, 330); await p.waitForTimeout(400);
     ok(/Capítulo 4/.test(await p.textContent('#info-capitulo')), `${perfil}: tocar el resultado lleva a su página (${await p.textContent('#info-capitulo')})`);
-    ok(await p.evaluate(() => Boolean(document.querySelector('#visor .resultado-busqueda'))), `${perfil}: la coincidencia queda resaltada`);
+    const resaltada = () => p.evaluate(() => Boolean(document.querySelector('#visor .resultado-busqueda'))
+      || [...document.querySelectorAll('#visor iframe')].some((f) => f.contentWindow?.CSS?.highlights?.get('resultado-busqueda')?.size));
+    ok(await resaltada(), `${perfil}: la coincidencia queda resaltada`);
     await p.touchscreen.tap(195, 330); await p.waitForTimeout(300);
     await p.touchscreen.tap(375, 330); await p.waitForTimeout(1200);
-    ok(await p.evaluate(() => !document.querySelector('#visor .resultado-busqueda')), `${perfil}: al pasar página se quita el resaltado`);
+    ok(!(await resaltada()), `${perfil}: al pasar página se quita el resaltado`);
     await abrirBuscar();
     ok(await p.inputValue('#buscar-en-libro') === '4.10.', `${perfil}: al volver a abrir se conserva la última búsqueda`);
     estado = await buscar('zzzz');

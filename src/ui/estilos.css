@@ -3199,3 +3199,58 @@ body[data-perfil="tinta"] .tarjeta-cita {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Hoja de un subrayado: la nota arriba, a la vista; el pasaje debajo. */
+.nota-hoja {
+  display: block;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--relleno);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nota-etiqueta {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto-2);
+}
+
+.nota-texto {
+  display: block;
+  font-size: 17px;
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+.pasaje-hoja {
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 4px solid var(--acento);
+  font-family: 'Literata', Georgia, serif;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--texto-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+body[data-perfil="tinta"] .nota-hoja {
+  border: 2px solid var(--texto);
+  border-radius: 0;
+  background: var(--fondo);
+}
+
+body[data-perfil="tinta"] .pasaje-hoja,
+body[data-perfil="tinta"] .nota-etiqueta {
+  color: var(--texto);
+}

@@ -107,6 +107,37 @@ export function cambioRepagina(antes, despues) {
   return AJUSTES_QUE_REPAGINAN.some((c) => antes?.[c] !== despues?.[c]);
 }
 
+// --- Subrayados (mejora 26) ---
+// Colores de las muestras. En la tinta electrónica en color se usan tonos más
+// intensos, porque la pantalla los aclara.
+export const COLORES_SUBRAYADO = { amarillo: '#ffd23f', verde: '#7ed957', azul: '#5ab0ff', rosa: '#ff7eb6' };
+const COLORES_TINTA = { amarillo: '#e0a800', verde: '#1f9d3a', azul: '#1a66d6', rosa: '#d6246e' };
+
+const rgba = (hex, alfa) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${alfa})`;
+};
+
+// Subrayados con los resaltados nativos del navegador (::highlight): el color
+// va detrás de las letras, así el texto se lee siempre. En el móvil y el
+// ordenador, fondo de color (más tenue con el tema oscuro, donde el texto es
+// claro). En tinta electrónica, una línea de color gruesa bajo el texto.
+function cssSubrayados(perfil, tema) {
+  const oscuro = tema.fondo.toLowerCase() === '#000000';
+  return Object.keys(COLORES_SUBRAYADO).map((color) => {
+    if (perfil === 'tinta') {
+      return `::highlight(subrayado-${color}) { text-decoration: underline; text-decoration-color: ${COLORES_TINTA[color]}; text-decoration-thickness: 3px; text-underline-offset: 3px; }`;
+    }
+    return `::highlight(subrayado-${color}) { background-color: ${rgba(COLORES_SUBRAYADO[color], oscuro ? 0.32 : 0.42)}; }`;
+  }).concat(perfil === 'tinta'
+    ? `::highlight(resultado-busqueda) { text-decoration: underline; text-decoration-color: ${tema.texto}; text-decoration-thickness: 3px; text-underline-offset: 3px; }`
+    : `::highlight(resultado-busqueda) { background-color: ${rgba('#ffcc33', oscuro ? 0.35 : 0.5)}; }`).join('\n');
+}
+
+export function colorTinta(color) {
+  return COLORES_TINTA[color] || COLORES_TINTA.amarillo;
+}
+
 // Los tamaños fijos del libro (font-size en px o pt) no crecen con el tamaño
 // de "Aa", que se aplica en porcentaje: se multiplican por la escala elegida.
 // A 100 % quedan igual que los puso el editor.
@@ -163,5 +194,6 @@ img, svg {
   max-width: 100% !important;
 }
 ${perfil === 'tinta' ? '*, *::before, *::after { animation: none !important; transition: none !important; }' : ''}
+${cssSubrayados(perfil, tema)}
 `;
 }

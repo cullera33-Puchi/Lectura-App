@@ -1,8 +1,8 @@
 // Mejoras 26 y 27: subrayados en colores y notas. Seleccionar texto muestra la
 // barra; un color subraya; tocar el subrayado permite cambiar el color, añadir
 // una nota o borrarlo; la lista del lector salta al pasaje; se exporta a
-// Markdown y llega al otro dispositivo al sincronizar. En tinta electrónica,
-// subrayado simple.
+// Markdown y llega al otro dispositivo al sincronizar. En tinta electrónica
+// en color, línea de color bajo el texto.
 const fs = require('fs');
 const { chromium, devices } = require('playwright');
 const drive = require('../lib/drive-falso.js');
@@ -40,14 +40,21 @@ const { URL_APP, EPUBS: S, SALIDA, ok } = require('../lib/entorno.js');
     sel.removeAllRanges(); sel.addRange(r);
     return r.toString();
   }, [n, desde, hasta]);
-  const marcas = (p) => p.evaluate(() => [...document.querySelectorAll('#visor [class^="subrayado-"]')].map((g) => g.getAttribute('class')));
-  const centroDe = (p, clase) => p.evaluate((c) => {
-    const g = document.querySelector(`#visor .${c} rect`) || document.querySelector(`#visor .${c} line`);
-    if (!g) return null;
-    const r = g.getBoundingClientRect();
-    return { x: r.left + Math.min(r.width / 2, 30), y: r.top + r.height / 2 };
-  }, clase);
-
+  // Subrayados pintados (resaltados nativos ::highlight de cada capítulo).
+  const marcas = (p) => p.evaluate(() => [...document.querySelectorAll('#visor iframe')].flatMap((f) => {
+    const h = f.contentWindow?.CSS?.highlights;
+    return h ? [...h.keys()].filter((k) => h.get(k).size > 0) : [];
+  }));
+  const centroDe = (p, nombre) => p.evaluate((n) => {
+    for (const f of document.querySelectorAll('#visor iframe')) {
+      const h = f.contentWindow?.CSS?.highlights?.get(n);
+      if (!h || !h.size) continue;
+      const r = [...h][0].getClientRects()[0];
+      const fr = f.getBoundingClientRect();
+      return { x: fr.left + r.left + Math.min(r.width / 2, 30), y: fr.top + r.top + r.height / 2 };
+    }
+    return null;
+  }, nombre);
   const A = await dispositivo('iPhone', 'movil');
   await A.setInputFiles('#archivo-epub', [`${S}/quijote.epub`]); await A.waitForTimeout(1500);
   await A.click('#pantalla-biblioteca button[aria-label="Abrir Don Quijote de prueba"]');
@@ -57,7 +64,7 @@ const { URL_APP, EPUBS: S, SALIDA, ok } = require('../lib/entorno.js');
   await A.waitForTimeout(800);
   ok(await A.isVisible('#barra-seleccion') && (await A.$$('#colores-seleccion .color-subrayado')).length === 4, `movil: al seleccionar "${texto}" sale la barra con 4 colores`);
   await A.click('#colores-seleccion [data-color=verde]'); await A.waitForTimeout(1200);
-  ok(!(await A.isVisible('#barra-seleccion')) && (await marcas(A)).some((c) => /subrayado-verde/.test(c)), `movil: el texto queda subrayado en verde (${(await marcas(A)).join(', ')})`);
+  ok(!(await A.isVisible('#barra-seleccion')) && (await marcas(A)).includes('subrayado-verde'), `movil: el texto queda subrayado en verde (${(await marcas(A)).join(', ')})`);
 
   // Tocar el subrayado: cambiar a rosa y añadir una nota.
   let punto = await centroDe(A, 'subrayado-verde');
@@ -70,6 +77,13 @@ const { URL_APP, EPUBS: S, SALIDA, ok } = require('../lib/entorno.js');
   await A.click('#hoja-botones button:has-text("Añadir nota")'); await A.waitForTimeout(500);
   await A.fill('#hoja-botones textarea', 'Inicio célebre de la novela.');
   await A.click('#hoja-botones button:has-text("Guardar")'); await A.waitForTimeout(800);
+  // Al volver a tocarlo, la nota se ve arriba y se edita tocándola.
+  await A.touchscreen.tap(punto.x, punto.y); await A.waitForTimeout(700);
+  const primero = await A.evaluate(() => document.querySelector('#hoja-botones .texto-hoja')?.firstElementChild?.textContent);
+  ok(/Tu nota\s*Inicio célebre de la novela\./.test(primero || ''), `movil: tocar el subrayado muestra su nota arriba (${primero})`);
+  await A.click('#hoja-botones .nota-hoja'); await A.waitForTimeout(500);
+  ok((await A.inputValue('#hoja-botones textarea')) === 'Inicio célebre de la novela.', 'movil: tocar la nota la abre para editarla');
+  await A.click('#hoja-cancelar'); await A.waitForTimeout(500);
 
   // Segundo subrayado con nota directa desde la barra.
   await seleccionar(A, 1, 0, 25); await A.waitForTimeout(800);
@@ -102,11 +116,15 @@ const { URL_APP, EPUBS: S, SALIDA, ok } = require('../lib/entorno.js');
   await B.click('#pantalla-biblioteca button[aria-label="Abrir Don Quijote de prueba"]');
   await B.waitForSelector('#visor iframe', { timeout: 15000 }); await B.waitForTimeout(2500);
   if (await B.isVisible('#hoja-acciones')) { await B.click('#hoja-botones button:has-text("Ir allí")').catch(() => {}); await B.waitForTimeout(1500); }
-  const enB = await B.evaluate(() => [...document.querySelectorAll('#visor [class^="subrayado-"]')].map((g) => g.tagName + (g.querySelector('line') ? ':linea' : ':relleno')));
-  ok(enB.length >= 1 && enB.every((x) => /linea/.test(x)), `tinta: recibe los subrayados como subrayado simple (${enB.join(', ')})`);
+  const enB = await marcas(B);
+  const estiloB = await B.evaluate(() => {
+    const f = document.querySelector('#visor iframe');
+    return f.contentDocument.getElementById('lector-ajustes').textContent.match(/::highlight\(subrayado-rosa\)[^}]*}/)?.[0] || '';
+  });
+  ok(enB.includes('subrayado-rosa') && /text-decoration: underline/.test(estiloB) && !/background/.test(estiloB), `tinta: recibe el subrayado rosa como línea de color bajo el texto (${enB.join(', ')})`);
   await seleccionar(B, 2, 0, 20); await B.waitForTimeout(800);
-  ok(await B.isVisible('#barra-seleccion') && (await B.$$('#colores-seleccion .color-subrayado')).length === 0 && /Subrayar/.test(await B.textContent('#colores-seleccion')), 'tinta: la barra ofrece "Subrayar" sin colores');
-  await B.click('#colores-seleccion button'); await B.waitForTimeout(800);
+  ok(await B.isVisible('#barra-seleccion') && (await B.$$('#colores-seleccion .color-subrayado')).length === 4, 'tinta: la barra ofrece los 4 colores');
+  await B.click('#colores-seleccion [data-color=azul]'); await B.waitForTimeout(800);
   await B.goBack(); await B.waitForTimeout(800);
   await sincronizar(B);
   await sincronizar(A);

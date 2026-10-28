@@ -22,7 +22,7 @@ import {
   lecturaDeLibro, tieneAjustesPropios, activarAjustesPropios, cambiarLecturaDeLibro, fijarFormatoDeLibro,
 } from '../datos/preferencias.js';
 import {
-  TEMAS, TAMANOS, FUENTES, INTERLINEADOS, MARGENES, JUSTIFICACIONES, idTemaElegido, alCambiarModoSistema,
+  TEMAS, TAMANOS, FUENTES, INTERLINEADOS, MARGENES, JUSTIFICACIONES, idTemaElegido, alCambiarModoSistema, colorTinta,
 } from '../ui/temas.js';
 import { registrar } from '../ui/registro.js';
 import { mantenerEncendida, actividadLectura, soltarPantalla } from './pantalla-encendida.js';
@@ -191,8 +191,9 @@ async function abrirMarcadores() {
 
 // --- Subrayados y notas (mejora 26) ---
 // Mantener pulsado el texto lo selecciona; una barra abajo ofrece los colores
-// (en tinta electrónica, subrayado simple) y "Nota". Tocar un subrayado
-// permite cambiar el color, escribir la nota o borrarlo.
+// y "Nota". Tocar un subrayado muestra su nota y permite cambiar el color,
+// editarla o borrarlo. En la tinta electrónica en color, los colores se
+// pintan como una línea bajo el texto, con tonos más intensos.
 
 const NOMBRES_COLOR = { amarillo: 'Amarillo', verde: 'Verde', azul: 'Azul', rosa: 'Rosa' };
 let seleccion = null;
@@ -204,11 +205,13 @@ async function cargarSubrayados(a = actual) {
   if (actual === a) a.motor.pintarSubrayados(a.subrayados);
 }
 
+const muestraDe = (color) => (enTinta() ? colorTinta(color) : (COLORES[color] || COLORES.amarillo));
+
 function botonColor(color, alElegir, marcado = false) {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'color-subrayado';
-  b.style.background = COLORES[color];
+  b.style.background = muestraDe(color);
   b.dataset.color = color;
   b.setAttribute('aria-label', `Subrayar en ${NOMBRES_COLOR[color].toLowerCase()}`);
   b.setAttribute('aria-pressed', String(marcado));
@@ -219,17 +222,7 @@ function botonColor(color, alElegir, marcado = false) {
 function pintarBarraSeleccion() {
   const caja = $('colores-seleccion');
   caja.replaceChildren();
-  if (enTinta()) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'boton-barra';
-    b.dataset.color = 'amarillo';
-    b.innerHTML = `${svgIcono('subrayado')}<span>Subrayar</span>`;
-    b.addEventListener('click', () => subrayarSeleccion('amarillo'));
-    caja.appendChild(b);
-  } else {
-    for (const color of COLORES_SUBRAYADO) caja.appendChild(botonColor(color, (c) => subrayarSeleccion(c)));
-  }
+  for (const color of COLORES_SUBRAYADO) caja.appendChild(botonColor(color, (c) => subrayarSeleccion(c)));
 }
 
 function alSeleccionar(datos) {
@@ -273,26 +266,43 @@ async function alTocarSubrayado(id) {
   const a = actual;
   const s = a?.subrayados?.find((x) => x.id === id);
   if (!s || hojaAbierta()) return;
-  const parrafos = [`«${s.texto}»`];
-  if (s.nota) parrafos.push(`Nota: ${s.nota}`);
-  const eleccion = mostrarTexto(s.capitulo || 'Subrayado', parrafos, [
+  const eleccion = mostrarTexto(s.capitulo || 'Subrayado', [], [
     { id: 'nota', texto: s.nota ? 'Editar nota' : 'Añadir nota' },
     { id: 'borrar', texto: 'Borrar subrayado', destructivo: true },
   ]);
-  // Colores, encima de las acciones (no en tinta electrónica).
-  if (!enTinta()) {
-    const fila = document.createElement('div');
-    fila.className = 'colores-hoja';
-    for (const color of COLORES_SUBRAYADO) {
-      fila.appendChild(botonColor(color, async (c) => {
-        $('hoja-cancelar').click();
-        if (c === s.color) return;
-        await cambiarSubrayado(id, { color: c });
-        await cargarSubrayados(a);
-      }, color === s.color));
-    }
-    $('hoja-botones').querySelector('.texto-hoja')?.after(fila);
+  // Primero la nota, si la hay, a la vista y sin desplazar; debajo, el pasaje
+  // (recortado a unas líneas). Tocar la nota la edita.
+  const caja = $('hoja-botones').querySelector('.texto-hoja');
+  if (s.nota) {
+    const nota = document.createElement('button');
+    nota.type = 'button';
+    nota.className = 'nota-hoja';
+    const etiqueta = document.createElement('span');
+    etiqueta.className = 'nota-etiqueta';
+    etiqueta.textContent = 'Tu nota';
+    const texto = document.createElement('span');
+    texto.className = 'nota-texto';
+    texto.textContent = s.nota;
+    nota.append(etiqueta, texto);
+    nota.addEventListener('click', () => $('hoja-botones').querySelector('.fila-hoja')?.click());
+    caja.appendChild(nota);
   }
+  const pasaje = document.createElement('blockquote');
+  pasaje.className = 'pasaje-hoja';
+  pasaje.style.borderColor = muestraDe(s.color);
+  pasaje.textContent = s.texto;
+  caja.appendChild(pasaje);
+  const fila = document.createElement('div');
+  fila.className = 'colores-hoja';
+  for (const color of COLORES_SUBRAYADO) {
+    fila.appendChild(botonColor(color, async (c) => {
+      $('hoja-cancelar').click();
+      if (c === s.color) return;
+      await cambiarSubrayado(id, { color: c });
+      await cargarSubrayados(a);
+    }, color === s.color));
+  }
+  caja.after(fila);
   const accion = await eleccion;
   if (actual !== a) return;
   if (accion === 'nota') await editarNota(id);
@@ -317,12 +327,10 @@ function pintarListaSubrayados() {
     ir.type = 'button';
     const cabecera = document.createElement('span');
     cabecera.className = 'resultado-capitulo';
-    if (!enTinta()) {
-      const marca = document.createElement('span');
-      marca.className = 'marca-color';
-      marca.style.background = COLORES[s.color] || COLORES.amarillo;
-      cabecera.appendChild(marca);
-    }
+    const marca = document.createElement('span');
+    marca.className = 'marca-color';
+    marca.style.background = muestraDe(s.color);
+    cabecera.appendChild(marca);
     const pct = s.porcentaje != null ? `${Math.round(s.porcentaje * 100)} %` : '';
     cabecera.append([s.capitulo, pct].filter(Boolean).join(', '));
     const texto = document.createElement('span');

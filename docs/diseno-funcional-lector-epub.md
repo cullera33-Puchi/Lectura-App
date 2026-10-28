@@ -413,7 +413,7 @@ Regla: cada dispositivo solo escribe su propio archivo de sesiones, también al 
 
 Impacto en el diseño: archivo `anotaciones.json` en Drive (ya creado para los marcadores), con cada anotación anclada por un CFI. Se fusiona por identificador de anotación y gana la fecha más reciente. Los borrados se conservan marcados con `eliminado`, igual que los libros. Los subrayados usan el mismo archivo con un rango CFI (0.10.0).
 
-En el perfil Tinta electrónica, los colores de subrayado se sustituirán por subrayado simple, sin grises.
+En el perfil Tinta electrónica (la tablet es de tinta en color), los colores de subrayado se pintan como una línea de color bajo el texto, sin fondo ni grises (0.10.1).
 
 ### Mejoras 0.7
 
@@ -456,6 +456,7 @@ Revisión completa del código en tres partes: lector, sincronización y datos, 
 | 0.9.11 | El registro de Diagnóstico se conserva al recargar la página o reabrir la app (las últimas 150 líneas, en este dispositivo), para no perder lo que pasó antes de copiarlo |
 | 0.9.12 | Libros que no abrían desde la 0.8.9 (visto con un EPUB de Penguin): si una hoja de estilo mencionaba su propio nombre, al prepararla se esperaba a sí misma y el capítulo se quedaba en blanco. Las hojas preparadas y los recursos tal cual van en memorias separadas, así ninguna hoja espera a otra ni a sí misma. Además, si la preparación de un capítulo tarda más de 5 s, se pinta sin sus imágenes y estilos y el registro anota qué faltaba. El aviso de un libro que no termina de pintarse ya no habla de DRM |
 | 0.10.0 | Subrayados y notas (mejoras 26, 27 y 30). Mantener pulsado el texto (o arrastrar con el ratón) lo selecciona y aparece una barra abajo: cuatro colores (amarillo, verde, azul y rosa) y "Nota". En tinta electrónica, "Subrayar" con subrayado simple, sin colores. Tocar un subrayado permite cambiar el color, escribir o editar la nota y borrarlo. Lista "Subrayados y notas" en el menú del lector (salta al pasaje) y en la ficha del libro (abre el libro en el pasaje, con el botón para volver a donde se iba). Exportar a Markdown desde las dos listas: en el iPhone abre el menú Compartir; en el ordenador se descarga el archivo. Cita del día en Inicio: un pasaje subrayado al azar, el mismo todo el día, que abre el libro en ese punto. Se sincronizan en `anotaciones.json` (tipo `subrayado`, con `cfi` de rango, `texto`, `color` y `nota`), fusionados por identificador como los marcadores |
+| 0.10.1 | Subrayados legibles: se pintan con los resaltados nativos del navegador (`::highlight`), con el color detrás de las letras, así el texto se lee con cualquier tema (en el iPhone con el tema oscuro quedaba tapado). En la tinta electrónica en color, los cuatro colores como línea gruesa bajo el texto, con tonos más intensos. Al tocar un subrayado, su nota aparece arriba y a la vista, y tocarla la edita; debajo, el pasaje recortado. El resaltado de la búsqueda usa el mismo sistema. Si el navegador no tiene resaltados nativos, se mantiene la capa de epub.js, más tenue |
 
 ### Mejoras pendientes (numeradas)
 

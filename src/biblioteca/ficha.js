@@ -13,6 +13,7 @@ import { crearPortada, porcentajeDe, textoEstado } from './portadas.js';
 import { abrirFicha, cerrarFicha } from '../ui/ficha.js';
 import { svgIcono } from '../ui/iconos.js';
 import { registrar } from '../ui/registro.js';
+import { COLORES_SUBRAYADO, colorTinta } from '../ui/temas.js';
 import { anotacionesDeLibro } from '../datos/anotaciones.js';
 import { ordenarSubrayados, compartirSubrayados } from '../ui/exportar-subrayados.js';
 
@@ -139,7 +140,6 @@ function seccionValoracion(libro, acciones) {
 }
 
 // acciones: { abrir(libro), editar(libro), cambiado() }, que se ejecutan dentro del toque.
-const COLORES_FICHA = { amarillo: '#ffd23f', verde: '#7ed957', azul: '#5ab0ff', rosa: '#ff7eb6' };
 
 function seccionSubrayados(libro, subrayados, acciones) {
   const caja = el('div', 'grupo ficha-subrayados');
@@ -149,11 +149,9 @@ function seccionSubrayados(libro, subrayados, acciones) {
     fila.type = 'button';
     const texto = el('div', 't-texto');
     const cabeza = el('div', 'resultado-capitulo');
-    if (!tinta) {
-      const marca = el('span', 'marca-color');
-      marca.style.background = COLORES_FICHA[s.color] || COLORES_FICHA.amarillo;
-      cabeza.appendChild(marca);
-    }
+    const marca = el('span', 'marca-color');
+    marca.style.background = tinta ? colorTinta(s.color) : (COLORES_SUBRAYADO[s.color] || COLORES_SUBRAYADO.amarillo);
+    cabeza.appendChild(marca);
     cabeza.append(s.capitulo || 'Sin capítulo');
     texto.append(cabeza, el('div', 'subrayado-texto', s.texto));
     if (s.nota) texto.appendChild(el('div', 'subrayado-nota', s.nota));
