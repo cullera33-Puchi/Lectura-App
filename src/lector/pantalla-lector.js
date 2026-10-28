@@ -22,6 +22,7 @@ import {
   TEMAS, TAMANOS, FUENTES, INTERLINEADOS, MARGENES, JUSTIFICACIONES, idTemaElegido, alCambiarModoSistema,
 } from '../ui/temas.js';
 import { registrar } from '../ui/registro.js';
+import { mantenerEncendida, actividadLectura, soltarPantalla } from './pantalla-encendida.js';
 import { leerSincronizacion } from '../datos/pendientes.js';
 import { mostrarHoja, mostrarTexto, hojaAbierta } from '../ui/hoja.js';
 import { sincronizacionEnCurso } from '../sync/sincronizar.js';
@@ -301,6 +302,7 @@ async function saltarConBarra() {
 async function alCambiarPosicion(info) {
   const a = actual; // la pantalla puede cerrarse durante una escritura
   if (!a) return;
+  actividadLectura();
   a.info = info;
   a.volviendo = false;
   if (!arrastrandoBarra) pintarInfo(a, info);
@@ -892,6 +894,7 @@ export async function abrirPantallaLector(id) {
       avisos: {
         alCambiarPosicion,
         alTocarCentro: () => {
+          actividadLectura();
           if (hayPanelAbierto()) cerrarPaneles();
           else controlesVisibles(!capaAbierta($('controles-lector')));
         },
@@ -931,6 +934,7 @@ export async function abrirPantallaLector(id) {
   }
   nuevo.repaginandoHasta = Date.now() + 500;
   sesiones.iniciar();
+  mantenerEncendida();
   cargarMarcadores(nuevo).catch(() => {});
 }
 
@@ -950,6 +954,7 @@ export async function cerrarPantallaLector() {
   if (!actual) return;
   const cerrado = actual;
   actual = null;
+  soltarPantalla();
   cerrarPaneles();
   $('controles-lector').hidden = true;
   $('btn-volver-lectura').hidden = true;

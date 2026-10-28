@@ -5,8 +5,9 @@ import { CONFIG } from '../../config.js';
 import { leerSincronizacion, contarPendientes } from '../datos/pendientes.js';
 import { sincronizacionAutomaticaActiva, ultimaSincronizacionAutomatica } from './sincronizacion.js';
 import { resumenRitmo } from '../lector/ritmo.js';
+import { estadoPantalla } from '../lector/pantalla-encendida.js';
 
-export const VERSION_APP = '0.9.1 (notas al pie emergentes)';
+export const VERSION_APP = '0.9.2 (pantalla encendida)';
 
 let resultadoPersistencia = 'sin pedir';
 
@@ -122,6 +123,7 @@ export async function datosDiagnostico() {
     ['Cambios pendientes de sincronizar', String(pendientes)],
     ['Última copia de seguridad en Drive', ultimaCopia || 'ninguna'],
     ['Ritmo de lectura', resumenRitmo()],
+    ['Pantalla encendida al leer', estadoPantalla()],
   ];
 }
 
