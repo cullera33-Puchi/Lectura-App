@@ -1272,9 +1272,49 @@ export async function abrirLibro(contenedor, datos, opciones) {
     if (pintado || destruido) return;
     registrar(`Lector: la primera página tarda más de 12 s. Vistas: ${estadoVistas()}. ${pasosPintado.join('; ')}`, 'error');
   }, 12000);
+  // epub.js coloca la página antes de que el capítulo termine de maquetarse:
+  // si el capítulo aún es más estrecho, el desplazamiento queda recortado y,
+  // cuando crece, se ve una página anterior a la guardada (varias, en
+  // capítulos largos). Tras pintar, se espera a que el ancho del capítulo deje
+  // de cambiar y se coloca la página que contiene la posición.
+  async function colocarEnPosicion(cfi) {
+    const m = rendition.manager;
+    const d = contenedorDesplazable();
+    if (typeof cfi !== 'string' || !cfi.startsWith('epubcfi(') || !m?.views || !d) return;
+    let seccion;
+    try {
+      seccion = new ePub.CFI().parse(cfi).spinePos;
+    } catch {
+      return;
+    }
+    const vista = () => m.views.all().find((v) => v.section?.index === seccion);
+    let ancho = -1;
+    for (let i = 0; i < 20 && !destruido; i++) {
+      const actual = vista()?.width?.() || 0;
+      if (actual > 0 && actual === ancho) break;
+      ancho = actual;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const v = vista();
+    if (destruido || !v?.contents) return;
+    let izquierda;
+    try {
+      izquierda = v.locationOf(cfi)?.left;
+    } catch {
+      return;
+    }
+    if (!Number.isFinite(izquierda)) return;
+    const paso = anchoPagina();
+    const destino = v.element.offsetLeft + Math.floor(izquierda / paso) * paso;
+    if (Math.abs(d.scrollLeft - destino) < 2) return;
+    registrar(`Lector: posición recolocada (${Math.round((destino - d.scrollLeft) / paso)} páginas)`);
+    desplazar(d, destino - d.scrollLeft);
+  }
+
   try {
     try {
       await pintar(opciones.cfiInicial || undefined);
+      await colocarEnPosicion(opciones.cfiInicial);
     } catch (e) {
       if (cancelado()) throw e;
       registrar(`No se pudo ir a la posición guardada (${e.message}). Se abre al principio.`, 'error');
@@ -1444,8 +1484,9 @@ export async function abrirLibro(contenedor, datos, opciones) {
       }
       return { cfi, capitulo };
     },
-    irA(destino) {
-      return rendition.display(destino);
+    async irA(destino) {
+      await rendition.display(destino);
+      await colocarEnPosicion(destino);
     },
     pintarSubrayados,
     quitarSeleccion,
