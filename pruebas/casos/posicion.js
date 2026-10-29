@@ -2,7 +2,10 @@
 // la página antes de que el capítulo termine de maquetarse y, en capítulos
 // que no son el primero, se veía una página anterior a la guardada. Se lee
 // unas páginas, se recarga la app sin cerrar el libro y se compara el primer
-// texto visible, en el perfil Móvil y en el de Tinta electrónica.
+// texto visible, en el perfil Móvil y en el de Tinta electrónica. En el
+// iPhone el capítulo puede seguir creciendo después de abrir (fuentes,
+// imágenes): se imita con un estilo que llega 1,5 s después de cargar cada
+// capítulo, y la página debe acabar en el mismo sitio.
 const { chromium, devices } = require('playwright');
 const { URL_APP, EPUBS: S, ok } = require('../lib/entorno.js');
 
@@ -11,8 +14,25 @@ const PAGINAS = [2, 5, 8, 11, 3, 6];
 
 (async () => {
   const b = await chromium.launch();
-  for (const tipo of ['movil', 'tinta']) {
+  for (const [tipo, tarde] of [['movil', false], ['tinta', false], ['movil', true]]) {
     const ctx = await b.newContext({ ...devices['iPhone 13'], viewport: { width: 402, height: 812 }, deviceScaleFactor: 3, serviceWorkers: 'block' });
+    if (tarde) {
+      await ctx.addInitScript(() => {
+        if (window.top !== window) return;
+        setInterval(() => {
+          for (const f of document.querySelectorAll('#visor iframe')) {
+            const doc = f.contentDocument;
+            if (!doc?.body || doc.body.dataset.tarde) continue;
+            doc.body.dataset.tarde = '1';
+            setTimeout(() => {
+              const estilo = doc.createElement('style');
+              estilo.textContent = 'p { margin-bottom: 1.5em !important; }';
+              doc.head.appendChild(estilo);
+            }, 1500);
+          }
+        }, 50);
+      });
+    }
     const p = await ctx.newPage();
     const errores = []; p.on('pageerror', (e) => errores.push(e.message));
     await p.goto(URL_APP); await p.waitForTimeout(700);
@@ -30,7 +50,8 @@ const PAGINAS = [2, 5, 8, 11, 3, 6];
           const r = doc.createRange(); r.selectNodeContents(n);
           for (const x of r.getClientRects()) {
             const izquierda = marco.left + x.left;
-            if (izquierda >= 0 && izquierda < innerWidth - 5 && x.width > 0) return n.nodeValue.trim().slice(0, 40);
+            // Dentro del visor y dentro de su marco (lo que sobresale no se ve).
+            if (izquierda >= 0 && izquierda < innerWidth - 5 && x.left < marco.width && x.width > 0) return n.nodeValue.trim().slice(0, 40);
           }
         }
       }
@@ -58,7 +79,7 @@ const PAGINAS = [2, 5, 8, 11, 3, 6];
       if (!antes || antes !== despues) fallos.push(`${n} páginas: "${antes}" y al reabrir "${despues}"`);
       await p.goBack(); await p.waitForTimeout(800);
     }
-    ok(capitulos.size >= 2 && fallos.length === 0, `${tipo}: al reabrir la app el libro abre en la misma página (${PAGINAS.length} pruebas, ${capitulos.size} capítulos)${fallos.length ? `: ${fallos.join('; ')}` : ''}`);
+    ok(capitulos.size >= 2 && fallos.length === 0, `${tipo}${tarde ? ', con el capítulo creciendo tarde' : ''}: al reabrir la app el libro abre en la misma página (${PAGINAS.length} pruebas, ${capitulos.size} capítulos)${fallos.length ? `: ${fallos.join('; ')}` : ''}`);
     console.log(tipo, 'errores', errores);
     await ctx.close();
   }

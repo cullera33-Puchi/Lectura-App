@@ -36,6 +36,7 @@ const ESPERA_COMPROBACION_MS = 400;
 // Mejora 20: carga del capítulo contiguo en el perfil Móvil.
 const PAGINAS_PRECARGA = 3;
 const ESPERA_CONTIGUO_MS = 1500;
+const VIGILANCIA_POSICION_MS = 8000; // tras abrir, el capítulo aún puede crecer y mover el texto
 // Plazos de apertura y de la primera página. Crecen con el tamaño del libro
 // (mejora 19): un libro muy ilustrado tarda más en la tablet.
 const LIMITE_APERTURA_MS = 20000;
@@ -806,6 +807,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
   // lleva un número: si el usuario ha pasado otra página mientras tanto, la
   // comprobación de este paso ya no vale y se descarta.
   let ultimoPaso = 0;
+  let vigilancia = 0; // turno de la vigilancia de la posición al abrir o saltar
 
   function pasar(direccion, arrastre = 0, velocidad = null) {
     if (direccion !== 0) avisos.alPasarPagina?.();
@@ -1193,6 +1195,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
   // epub.js salte, se avisa con la posición de partida para poder volver.
   rendition.hooks.content.register((contents) => {
     contents.on('linkClicked', () => {
+      vigilancia += 1; // el salto por enlace manda sobre la posición al abrir
       if (ultimaPosicion) avisos.alSaltarPorEnlace?.(ultimaPosicion.start.cfi, infoPosicion(ultimaPosicion));
     });
   });
@@ -1275,40 +1278,70 @@ export async function abrirLibro(contenedor, datos, opciones) {
   // epub.js coloca la página antes de que el capítulo termine de maquetarse:
   // si el capítulo aún es más estrecho, el desplazamiento queda recortado y,
   // cuando crece, se ve una página anterior a la guardada (varias, en
-  // capítulos largos). Tras pintar, se espera a que el ancho del capítulo deje
-  // de cambiar y se coloca la página que contiene la posición.
+  // capítulos largos). Después, en el iPhone el capítulo y los anteriores
+  // pueden seguir creciendo (fuentes, imágenes) y mover el texto. Por eso, tras
+  // pintar, se espera a que el ancho del capítulo deje de cambiar, se coloca la
+  // página que contiene la posición y se vigila unos segundos, hasta que el
+  // usuario pasa página o salta a otro sitio.
+  function paginaDe(cfi, seccion) {
+    const v = rendition.manager?.views?.all().find((x) => x.section?.index === seccion);
+    if (!v?.contents || !v.element) return null;
+    let izquierda;
+    try {
+      izquierda = v.locationOf(cfi)?.left;
+    } catch {
+      return null;
+    }
+    if (!Number.isFinite(izquierda)) return null;
+    const paso = anchoPagina();
+    return v.element.offsetLeft + Math.floor(izquierda / paso) * paso;
+  }
+
+  // Coloca la página que contiene cfi si no es la que se ve. Devuelve si la ha movido.
+  function recolocar(cfi, seccion, motivo) {
+    const d = contenedorDesplazable();
+    const destino = paginaDe(cfi, seccion);
+    if (!d || destino == null || Math.abs(d.scrollLeft - destino) < 2) return false;
+    // Durante un arrastre o una animación las vistas están desplazadas: no se toca.
+    if (vistas().some((v) => v.style.transform)) return false;
+    const paso = anchoPagina();
+    registrar(`Lector: posición recolocada ${motivo} (${Math.round((destino - d.scrollLeft) / paso)} páginas)`);
+    avisos.alRepaginar?.(); // no es un paso de página
+    desplazar(d, destino - d.scrollLeft);
+    return true;
+  }
+
   async function colocarEnPosicion(cfi) {
     const m = rendition.manager;
-    const d = contenedorDesplazable();
-    if (typeof cfi !== 'string' || !cfi.startsWith('epubcfi(') || !m?.views || !d) return;
+    const turno = ++vigilancia;
+    if (typeof cfi !== 'string' || !cfi.startsWith('epubcfi(') || !m?.views || !contenedorDesplazable()) return;
     let seccion;
     try {
       seccion = new ePub.CFI().parse(cfi).spinePos;
     } catch {
       return;
     }
-    const vista = () => m.views.all().find((v) => v.section?.index === seccion);
-    let ancho = -1;
-    for (let i = 0; i < 20 && !destruido; i++) {
-      const actual = vista()?.width?.() || 0;
-      if (actual > 0 && actual === ancho) break;
-      ancho = actual;
+    const vigente = () => !destruido && turno === vigilancia;
+    const ancho = () => m.views.all().find((v) => v.section?.index === seccion)?.width?.() || 0;
+    let anterior = -1;
+    for (let i = 0; i < 20 && vigente(); i++) {
+      const actual = ancho();
+      if (actual > 0 && actual === anterior) break;
+      anterior = actual;
       await new Promise((r) => setTimeout(r, 100));
     }
-    const v = vista();
-    if (destruido || !v?.contents) return;
-    let izquierda;
-    try {
-      izquierda = v.locationOf(cfi)?.left;
-    } catch {
-      return;
-    }
-    if (!Number.isFinite(izquierda)) return;
-    const paso = anchoPagina();
-    const destino = v.element.offsetLeft + Math.floor(izquierda / paso) * paso;
-    if (Math.abs(d.scrollLeft - destino) < 2) return;
-    registrar(`Lector: posición recolocada (${Math.round((destino - d.scrollLeft) / paso)} páginas)`);
-    desplazar(d, destino - d.scrollLeft);
+    if (!vigente()) return;
+    recolocar(cfi, seccion, 'al abrir');
+    // Vigilancia en segundo plano: no retrasa la apertura.
+    const paso = ultimoPaso;
+    const hasta = performance.now() + VIGILANCIA_POSICION_MS;
+    (async () => {
+      while (performance.now() < hasta) {
+        await new Promise((r) => setTimeout(r, 250));
+        if (!vigente() || ultimoPaso !== paso) return;
+        recolocar(cfi, seccion, 'tras maquetarse el capítulo');
+      }
+    })();
   }
 
   try {
@@ -1485,6 +1518,7 @@ export async function abrirLibro(contenedor, datos, opciones) {
       return { cfi, capitulo };
     },
     async irA(destino) {
+      vigilancia += 1; // la vigilancia de la posición anterior ya no vale
       await rendition.display(destino);
       await colocarEnPosicion(destino);
     },

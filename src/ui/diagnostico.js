@@ -8,7 +8,7 @@ import { resumenRitmo } from '../lector/ritmo.js';
 import { estadoPantalla } from '../lector/pantalla-encendida.js';
 import { resumenPruebaGuiada } from './prueba-guiada.js';
 
-export const VERSION_APP = '0.10.2 (posición al reabrir)';
+export const VERSION_APP = '0.10.3 (posición al reabrir, iPhone)';
 
 let resultadoPersistencia = 'sin pedir';
 
