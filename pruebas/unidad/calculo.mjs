@@ -37,3 +37,8 @@ const dm = c.detalleMes({
 ok(Math.round(dm.ms / 60000) === 65 && dm.dias === 3 && dm.paginas === 23, `detalle del mes: totales (${Math.round(dm.ms / 60000)} min, ${dm.dias} días)`);
 ok(dm.libros.map((l) => l.libroId).join() === 'a,b,c' && Math.round(dm.libros[0].ms / 60000) === 50 && dm.libros[1].terminado && !dm.libros[0].terminado, 'detalle del mes: libros por tiempo y terminados');
 ok(dm.terminados === 2 && dm.dispositivos.length === 2 && dm.nombre === 'octubre', 'detalle del mes: terminados, dispositivos y nombre');
+
+// Eje vertical de los gráficos: marcas redondas, como mucho cuatro.
+const eje = (min) => c.escalaEje(min * 60000).marcas.map((m) => m / 60000).join(',');
+ok(eje(65) === '30,60,90' && eje(12) === '5,10,15' && eje(400) === '120,240,360,480' && eje(127) === '60,120,180', `eje de duraciones: ${eje(65)} | ${eje(12)} | ${eje(400)} | ${eje(127)}`);
+ok(c.escalaEje(3, 'cantidad').marcas.join(',') === '1,2,3' && c.escalaEje(7, 'cantidad').marcas.join(',') === '2,4,6,8' && c.escalaEje(0) === null, 'eje de libros y gráfico vacío');

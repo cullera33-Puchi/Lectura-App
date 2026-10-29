@@ -5,7 +5,7 @@
 import { obtenerEstadisticas } from './datos.js';
 import { mostrarResumenAnual } from './resumen.js';
 import { mostrarDetalleMes } from './mes.js';
-import { formatoDuracion } from './calculo.js';
+import { formatoDuracion, escalaEje } from './calculo.js';
 import { fijarObjetivo, fijarMetaDiaria } from '../datos/colecciones.js';
 import { pedirNumero } from '../ui/hoja.js';
 import { registrar } from '../ui/registro.js';
@@ -31,16 +31,41 @@ function cabecera(texto) {
   return el('h2', 'cabecera-grupo', texto);
 }
 
-// Gráfico de barras de una serie. Tocar una barra muestra su valor en la línea
-// de detalle; sin tocar, la línea muestra el resumen. alPulsar(d): además,
-// abre el detalle de esa barra (los meses).
-function graficoBarras(datos, { resumen, formato, alPulsar }) {
+// Marca del eje: corta para que quepa a la izquierda ("1 h 30" en vez de
+// "1 h 30 min").
+function etiquetaEje(valor, tipo) {
+  if (tipo !== 'duracion') return String(valor);
+  const minutos = Math.round(valor / 60000);
+  if (minutos < 60) return `${minutos} min`;
+  const m = minutos % 60;
+  return m ? `${Math.floor(minutos / 60)} h ${m}` : `${minutos / 60} h`;
+}
+
+// Gráfico de barras de una serie, con un eje vertical de marcas redondas y
+// líneas de guía. Tocar una barra muestra su valor en la línea de detalle;
+// sin tocar, la línea muestra el resumen. alPulsar(d): además, abre el
+// detalle de esa barra (los meses). tipo: 'duracion' (ms) o 'cantidad'.
+function graficoBarras(datos, { resumen, formato, alPulsar, tipo = 'duracion' }) {
   const grafico = el('div', 'grafico');
   const detalle = el('p', 'grafico-detalle', resumen);
+  const cuerpo = el('div', 'grafico-cuerpo');
+  const eje = el('div', 'grafico-eje');
+  eje.setAttribute('aria-hidden', 'true');
   const barras = el('div', 'grafico-barras');
   const etiquetas = el('div', 'grafico-etiquetas');
   const maximo = Math.max(...datos.map((d) => d.valor), 0);
+  const escala = escalaEje(maximo, tipo);
+  const tope = escala?.tope || maximo;
   if (maximo > 0) detalle.dataset.maximo = `Máximo: ${formato(maximo)}`;
+  for (const marca of escala?.marcas || []) {
+    const altura = `${(marca / tope) * 100}%`;
+    const texto = el('span', '', etiquetaEje(marca, tipo));
+    texto.style.bottom = altura;
+    eje.appendChild(texto);
+    const linea = el('span', 'grafico-guia');
+    linea.style.bottom = altura;
+    barras.appendChild(linea);
+  }
   let seleccionada = null;
 
   datos.forEach((d) => {
@@ -51,7 +76,7 @@ function graficoBarras(datos, { resumen, formato, alPulsar }) {
     barra.type = 'button';
     barra.setAttribute('aria-label', `${d.descripcion}: ${formato(d.valor)}`);
     const relleno = el('span');
-    relleno.style.height = maximo ? `${Math.max(d.valor ? 3 : 0, (d.valor / maximo) * 100)}%` : '0';
+    relleno.style.height = tope ? `${Math.max(d.valor ? 3 : 0, (d.valor / tope) * 100)}%` : '0';
     barra.appendChild(relleno);
     barra.addEventListener('click', () => {
       seleccionada?.classList.remove('seleccionada');
@@ -68,7 +93,8 @@ function graficoBarras(datos, { resumen, formato, alPulsar }) {
     barras.appendChild(barra);
     etiquetas.appendChild(el('span', '', d.etiqueta));
   });
-  grafico.append(detalle, barras, etiquetas);
+  cuerpo.append(eje, barras, el('span'), etiquetas);
+  grafico.append(detalle, cuerpo);
   return grafico;
 }
 
@@ -220,7 +246,7 @@ export async function pintarEstadisticas() {
   anio.appendChild(el('p', 'grafico-titulo', 'Libros terminados por mes'));
   anio.appendChild(graficoBarras(e.meses.map((m, i) => ({
     etiqueta: m.etiqueta, valor: m.terminados, futuro: m.futuro, descripcion: m.nombre, mes: i,
-  })), { resumen: 'Toca un mes para ver sus libros.', formato: (n) => plural(n, 'libro', 'libros'), alPulsar: verMes }));
+  })), { resumen: 'Toca un mes para ver sus libros.', formato: (n) => plural(n, 'libro', 'libros'), alPulsar: verMes, tipo: 'cantidad' }));
   anio.appendChild(botonResumen(e.anio));
   partes.push(anio);
 

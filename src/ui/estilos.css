@@ -2215,7 +2215,32 @@ body[data-perfil="tinta"] .muestra[aria-pressed="true"] .m-caja {
   color: var(--texto-2);
 }
 
+.grafico-cuerpo {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 6px;
+  /* La marca más alta sobresale media línea por encima de las barras. */
+  padding-top: 8px;
+}
+
+/* Eje vertical: marcas redondas centradas en su línea de guía. */
+.grafico-eje {
+  position: relative;
+  width: 3.4em;
+  font-size: 11px;
+  color: var(--texto-2);
+}
+
+.grafico-eje span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  white-space: nowrap;
+  line-height: 1;
+}
+
 .grafico-barras {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 4px;
@@ -2223,13 +2248,25 @@ body[data-perfil="tinta"] .muestra[aria-pressed="true"] .m-caja {
   border-bottom: 1px solid var(--separador);
 }
 
+.grafico-guia {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed var(--separador);
+  pointer-events: none;
+}
+
 .barra {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   padding: 0 2px;
+  background: transparent;
 }
 
 .barra span {
@@ -2377,6 +2414,14 @@ body[data-perfil="tinta"] .resumen-pie {
 body[data-perfil="tinta"] .grafico-barras {
   border-bottom: 2px solid var(--texto);
   height: 140px;
+}
+
+body[data-perfil="tinta"] .grafico-eje {
+  color: var(--texto);
+}
+
+body[data-perfil="tinta"] .grafico-guia {
+  border-top-color: var(--texto);
 }
 
 body[data-perfil="tinta"] .barra span {

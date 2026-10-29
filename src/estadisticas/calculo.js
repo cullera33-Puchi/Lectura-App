@@ -151,6 +151,23 @@ export function formatoDuracion(ms) {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
+// Escala del eje vertical de un gráfico: marcas redondas (15 min, 1 h, 2 h;
+// 1, 2, 5 libros), como mucho cuatro. El tope es la última marca, para que las
+// barras se lean contra las líneas de guía.
+const PASOS_MINUTOS = [5, 10, 15, 30, 60, 120, 180, 300, 600, 1200, 1800, 3000, 6000];
+const PASOS_CANTIDAD = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+const MARCAS_MAXIMAS = 4;
+
+export function escalaEje(maximo, tipo = 'duracion') {
+  if (!(maximo > 0)) return null;
+  const unidad = tipo === 'duracion' ? 60000 : 1;
+  const pasos = (tipo === 'duracion' ? PASOS_MINUTOS : PASOS_CANTIDAD).map((p) => p * unidad);
+  const paso = pasos.find((p) => Math.ceil(maximo / p) <= MARCAS_MAXIMAS)
+    || Math.ceil(maximo / MARCAS_MAXIMAS / pasos.at(-1)) * pasos.at(-1);
+  const n = Math.ceil(maximo / paso);
+  return { tope: n * paso, marcas: Array.from({ length: n }, (_, i) => (i + 1) * paso) };
+}
+
 // Lectura de un libro: tiempo, páginas, sesiones, primera y última fecha y
 // reparto por dispositivo.
 export function resumenLibro(sesiones) {
