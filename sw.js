@@ -7,7 +7,7 @@
 //   sincronización, ni importación) y entonces se recarga.
 // Solo gestiona archivos de la propia app; Google y Drive van siempre a la red.
 
-const CACHE = 'lector-epub-c57';
+const CACHE = 'lector-epub-c58';
 const PREFIJO = 'lector-epub-';
 const ARCHIVOS = [
   './',
@@ -48,6 +48,7 @@ const ARCHIVOS = [
   'src/sync/drive.js',
   'src/sync/fusion.js',
   'src/sync/google.js',
+  'src/sync/identidad.js',
   'src/sync/sincronizar.js',
   'src/ui/actividad.js',
   'src/ui/ajustes.js',

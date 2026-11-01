@@ -36,8 +36,9 @@ async function terminar() {
   alTerminar();
 }
 
-// En una instalación nueva, con dispositivos ya conocidos en Drive, se ofrece
-// seguir como uno de ellos (por ejemplo, tras cambiar la dirección de la app).
+// En una instalación nueva, si Drive ya conoce un dispositivo con el mismo
+// nombre, se ofrece seguir como él (por ejemplo, tras cambiar la dirección de
+// la app). Con otro nombre es un dispositivo nuevo y no se pregunta.
 async function ofrecerIdentidadAnterior(token) {
   if ((await listarSesiones()).length) return;
   let anteriores;
@@ -47,10 +48,12 @@ async function ofrecerIdentidadAnterior(token) {
     registrar(`No se pudieron leer los dispositivos de Drive: ${e.message}`, 'error');
     return;
   }
+  const nombre = ($('bienvenida-nombre').value.trim() || NOMBRE_PROPUESTO[tipoDispositivo()]).toLocaleLowerCase('es');
+  anteriores = anteriores.filter((d) => d.nombre.trim().toLocaleLowerCase('es') === nombre);
   if (!anteriores.length) return;
   const fecha = (iso) => new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
   const eleccion = await mostrarHoja(
-    'Drive ya tiene estadísticas de estos dispositivos. Si este es uno de ellos, por ejemplo porque has cambiado la dirección de la app, elígelo para seguir como el mismo dispositivo. No elijas uno que siga usando la app en otra dirección.',
+    `Drive ya tiene estadísticas de un dispositivo llamado "${anteriores[0].nombre}". Si es este, por ejemplo porque has cambiado la dirección de la app, elígelo para seguir como el mismo dispositivo. No lo elijas si ese dispositivo sigue usando la app en otra dirección.`,
     anteriores.map((d) => ({ id: d.id, texto: `${d.nombre}, última lectura el ${fecha(d.ultima)}` })),
     { textoCancelar: 'Es un dispositivo nuevo' },
   );

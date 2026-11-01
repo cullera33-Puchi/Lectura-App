@@ -1,6 +1,6 @@
 // Seguir como un dispositivo anterior: al estrenar la app en otra dirección
-// el navegador empieza sin datos. Con dispositivos ya conocidos en Drive, la
-// bienvenida ofrece seguir como uno de ellos; se reutiliza su identificador,
+// el navegador empieza sin datos. Si Drive ya conoce un dispositivo con el
+// mismo nombre, la bienvenida ofrece seguir como él; se reutiliza su identificador,
 // se traen sus sesiones y no aparece dos veces en "Por dispositivo". Elegir
 // "Es un dispositivo nuevo" crea su propio archivo de sesiones.
 const { chromium, devices } = require('playwright');
@@ -59,11 +59,10 @@ const { URL_APP, EPUBS: S, ok } = require('../lib/entorno.js');
   const filas = await C.$$eval('.fila-dispositivo', (fs) => fs.map((f) => f.textContent));
   ok(filas.length === 1 && /iPhone/.test(filas[0]) && /1 h/.test(filas[0]), `"Por dispositivo" muestra el iPhone una sola vez: ${filas.join(' | ')}`);
 
-  // Una tablet de verdad nueva: crea su propio archivo.
+  // Una tablet nueva, con otro nombre: no se pregunta y crea su propio archivo.
   const D = await abrir('Note Air 4C', 'tinta');
-  await D.waitForSelector('#hoja-acciones:not([hidden])', { timeout: 15000 });
-  await D.click('#hoja-cancelar');
   await esperarSincronizado(D);
+  ok(!(await D.isVisible('#hoja-acciones')), 'con otro nombre no se pregunta');
   ok(await id(D) !== idA && await locales(D) === 0, 'la tablet nueva tiene su propio identificador y no hereda sesiones');
   await D.evaluate(async () => {
     const a = await import('/src/datos/almacen.js');
@@ -73,6 +72,12 @@ const { URL_APP, EPUBS: S, ok } = require('../lib/entorno.js');
   });
   await sincronizar(D);
   ok(archivosSesiones() === 2, `la tablet escribe su propio archivo (${archivosSesiones()} archivos de sesiones)`);
+  // Otro iPhone que elige "Es un dispositivo nuevo": también tiene su archivo.
+  const E = await abrir('iphone', 'movil');
+  await E.waitForSelector('#hoja-acciones:not([hidden])', { timeout: 15000 });
+  await E.click('#hoja-cancelar');
+  await esperarSincronizado(E);
+  ok(await id(E) !== idA && await locales(E) === 0, 'con el mismo nombre se pregunta, y "Es un dispositivo nuevo" no hereda nada');
   console.log('errores', errores);
   await b.close();
 })();
