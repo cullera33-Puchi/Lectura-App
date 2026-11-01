@@ -27,8 +27,14 @@ Las pruebas automáticas están en `pruebas/`. Ver `pruebas/README.md`. Solo se 
 
 1. Google Cloud: proyecto con la API de Google Drive activada y pantalla de consentimiento con el permiso `drive.file`. En modo Prueba, con la cuenta del usuario como usuario de prueba.
 2. ID de cliente OAuth de tipo "Aplicación web":
-   - Orígenes de JavaScript autorizados: `https://<usuario>.github.io` y `http://localhost:8080`.
+   - Orígenes de JavaScript autorizados: la dirección donde se publica la app (por ejemplo `https://lector-epub.pages.dev` en Cloudflare Pages) y `http://localhost:8080`. Al cambiar de dirección se añade la nueva en el mismo ID de cliente: con otro ID, la app no vería los archivos que ya creó en Drive (permiso `drive.file`).
 3. Copiar el ID de cliente en `config.js`.
+
+## Publicación
+
+La app no tiene paso de compilación: se publica la raíz del repositorio tal cual. En Cloudflare Pages, conectado al repositorio de GitHub: rama `main`, sin comando de compilación y con `/` como carpeta de salida. Cloudflare Web Analytics debe quedar desactivado: añade un script de un servicio externo.
+
+Al cambiar de dirección, cada dispositivo empieza sin datos locales y los recupera de Drive. En la bienvenida, si Drive ya tiene estadísticas de otros dispositivos, la app ofrece seguir como uno de ellos para no duplicarlo en las estadísticas.
 
 ## Desarrollo local
 

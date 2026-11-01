@@ -35,7 +35,7 @@ import {
   guardarPortadaDescargada, guardarArchivoDescargado, idsConPortada, idsDescargados, volverASubir,
 } from '../datos/libros.js';
 import { listarProgresos } from '../datos/progreso.js';
-import { sesionesParaExportar } from '../datos/sesiones.js';
+import { sesionesParaExportar, restaurarSesiones } from '../datos/sesiones.js';
 import {
   leerColecciones, leerObjetivos, guardarColeccionesFusionadas, guardarObjetivosFusionados,
 } from '../datos/colecciones.js';
@@ -344,6 +344,12 @@ async function sincronizarSesiones(token, raiz, avisos, contenido) {
     }
   }
   const fusion = fusionarSesiones(locales, remoto);
+  // Sesiones propias que están en Drive y no aquí: el dispositivo ha seguido
+  // como uno anterior (nueva dirección de la app). Se traen para las estadísticas.
+  if (fusion.sesiones.length > locales.length) {
+    const traidas = await restaurarSesiones(remoto.sesiones, nombreDispositivo());
+    if (traidas) registrar(`Sesiones de este dispositivo recuperadas de Drive: ${traidas}`);
+  }
   if (fusion.escribirRemoto || legibles.length !== 1) {
     const datos = { version: VERSION_SESIONES, dispositivoId: propio, dispositivo: nombreDispositivo(), sesiones: fusion.sesiones };
     await escribirJson(token, raiz, legibles[0] || null, nombrePropio, datos);
